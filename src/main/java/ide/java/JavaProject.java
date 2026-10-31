@@ -341,6 +341,10 @@ public final class JavaProject implements Program {
     public void rename(ElementId id, String name) {
         requireIdentifier(name);
         var element = graph().element(id);
+        if (element.kind().isType()) {
+            renameType(element, name);
+            return;
+        }
         var uses = usesOf(element.qualified());
         var node = declaration(element);
         switch (node) {
@@ -358,6 +362,64 @@ public final class JavaProject implements Program {
         uses.forEach(use -> use.setName(name));
         transfer(element.qualified(), owner + name + rest);
         changed();
+    }
+
+    /**
+     * Renames a type: its declaration and constructors, every use (declared types, {@code new}, static receivers),
+     * single-type imports of it, and its file when it is a top-level type named like the file. Done as text edits on
+     * the name tokens: the printer does not reflect renamed types inside field declarations.
+     */
+    private void renameType(Element type, String name) {
+        var dot = type.qualified().lastIndexOf('.');
+        var renamed = type.qualified().substring(0, dot + 1) + name;
+        if (ids.containsKey(renamed)) throw new PrimitiveRejected("projection.duplicate", renamed + " already exists");
+        var g = graph();
+        var names = new ArrayList<Node>();
+        var targets = new ArrayList<ElementId>(List.of(type.id()));
+        g.children(type.id()).stream().filter(e -> e.kind() == Kind.CONSTRUCTOR).forEach(c -> targets.add(c.id()));
+        for (var target : targets) {
+            for (var ref : g.referencesTo(target)) {
+                switch (referenceNodes.get(ref.id())) {
+                    case ClassOrInterfaceType t -> names.add(t.getName());
+                    case ObjectCreationExpr creation -> names.add(creation.getType().getName());
+                    case NameExpr receiver -> names.add(receiver);
+                    case Node other -> throw new IllegalStateException("unexpected type use " + other);
+                }
+            }
+        }
+        var declaration = typeDeclaration(type.qualified());
+        declaration.getConstructors().forEach(c -> names.add(c.getName()));
+        names.add(declaration.getName());
+        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
+        var seen = new java.util.HashSet<String>();
+        for (var node : names) {
+            var path = pathOf(node.findCompilationUnit().orElseThrow());
+            if (seen.add(path + node.getRange().orElseThrow())) {
+                edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(node, name));
+            }
+        }
+        units.forEach((path, cu) -> cu.getImports().stream()
+                .filter(i -> !i.isAsterisk() && !i.isStatic() && i.getNameAsString().equals(type.qualified()))
+                .forEach(i -> edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(i.getName(), renamed))));
+        var oldPath = type.attribute("file");
+        applyEdits(edits);
+        if (oldPath != null && oldPath.endsWith("/" + type.name() + ".java")) {
+            var newPath = oldPath.substring(0, oldPath.length() - (type.name() + ".java").length()) + name + ".java";
+            units.put(newPath, units.remove(oldPath));
+            parsedText.put(newPath, parsedText.remove(oldPath));
+            invalidate();
+        }
+        transfer(type.qualified(), renamed);
+        renameConstructorAddresses(renamed, type.name(), name);
+    }
+
+    /** Addresses under the renamed type whose parameter types name the type itself. */
+    private void renameConstructorAddresses(String type, String oldName, String newName) {
+        for (var address : List.copyOf(ids.keySet())) {
+            if (!address.startsWith(type + "#")) continue;
+            var fixed = address.replaceAll("\\b" + java.util.regex.Pattern.quote(oldName) + "\\b", newName);
+            if (!fixed.equals(address)) transfer(address, fixed);
+        }
     }
 
     /** Expressions anywhere in the workspace that use the element at {@code address}, from the current graph. */
