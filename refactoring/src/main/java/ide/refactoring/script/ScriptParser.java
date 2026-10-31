@@ -33,6 +33,13 @@ public final class ScriptParser {
         return scripts;
     }
 
+    /** How many of {@code lines} a block of statements takes, up to (not including) the {@code end} that closes it. */
+    public static int blockLength(List<String> lines) {
+        var parser = new ScriptParser(String.join("\n", lines));
+        parser.block("end");
+        return parser.next;
+    }
+
     private boolean skipBlank() {
         while (next < lines.size() && (lines.get(next).isEmpty() || lines.get(next).startsWith("# "))) next++;
         return next < lines.size();

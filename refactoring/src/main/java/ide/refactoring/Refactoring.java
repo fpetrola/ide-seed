@@ -21,6 +21,6 @@ public interface Refactoring {
         return "composite";
     }
 
-    /** Applies the change; returns the id of the element it produced, if any (else null). */
-    String apply(Ctx ctx, Args args);
+    /** Applies the change in a run; returns the id of the element it produced or worked on, if any (else null). */
+    String apply(Run run, Args args);
 }

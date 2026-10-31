@@ -18,9 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static ide.engine.Programs.RULES;
 import static ide.engine.Programs.id;
 import static ide.engine.Programs.reference;
+import static ide.projection.kit.MemoryProjection.PRIVATE_TO_TOP_LEVEL;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Each view alone: what it sees between the program a change meant to leave and the program it left. */
@@ -28,7 +28,7 @@ class ViewsTest {
 
     @Test
     void bindingSeesAUseThatNowBindsSomethingElseOrNothing() {
-        var projection = MemoryProjection.builder().rules(RULES)
+        var projection = MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
                 .type("a.A").field("a.A", "x", "int")
                 .type("a.B").field("a.B", "x", "int")
                 .type("a.C").field("a.C", "a", "a.A").method("a.C", "m", "int").use("a.C#m()", "a.A#x", Mode.READ)
@@ -46,7 +46,7 @@ class ViewsTest {
 
     @Test
     void accessSeesWhatCannotBeReachedNowButNotWhatCouldNotBefore() {
-        var projection = MemoryProjection.builder().rules(RULES)
+        var projection = MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
                 .type("a.A").field("a.A", "x", "int").field("a.A", "y", "int").fact("a.A#y", Fact.VISIBILITY, "private")
                 .type("a.B").method("a.B", "m", "int").use("a.B#m()", "a.A#x", Mode.READ).use("a.B#m()", "a.A#y", Mode.READ)
                 .build();
@@ -61,7 +61,7 @@ class ViewsTest {
 
     @Test
     void dispatchSeesOverridesGainedAndLost() {
-        var projection = MemoryProjection.builder().rules(RULES)
+        var projection = MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
                 .type("a.A").method("a.A", "m", "void")
                 .type("a.B").extend("a.B", "a.A").method("a.B", "m", "void")
                 .type("a.C").extend("a.C", "a.A")

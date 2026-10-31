@@ -12,10 +12,10 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.stream.IntStream;
 
-import static ide.engine.Programs.RULES;
 import static ide.engine.Programs.id;
 import static ide.engine.Programs.open;
 import static ide.engine.Programs.remedy;
+import static ide.projection.kit.MemoryProjection.PRIVATE_TO_TOP_LEVEL;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The repairer searches remedies' plans from saved points, one violation per round, within its caps. */
@@ -27,7 +27,7 @@ class RepairerTest {
     /** B#n() reads two private fields of B, and is moved to A: two access violations. */
     @BeforeEach
     void twoInaccessibleReads() {
-        projection = MemoryProjection.builder().rules(RULES)
+        projection = MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
                 .type("a.A").type("a.B")
                 .field("a.B", "x", "int").fact("a.B#x", Fact.VISIBILITY, "private")
                 .field("a.B", "z", "int").fact("a.B#z", Fact.VISIBILITY, "private")
@@ -56,7 +56,7 @@ class RepairerTest {
 
     @Test
     void plansThatDoNotHelpAreUndoneUntilTheBranchCap() {
-        Remedy useless = (violation, p, rules) -> IntStream.range(0, 20).mapToObj(i -> new Plan("useless " + i, List.of(),
+        Remedy useless = (violation, p) -> IntStream.range(0, 20).mapToObj(i -> new Plan("useless " + i, List.of(),
                 (target, answers) -> target.apply(new Primitive.Set(violation.target(), "static", "true")))).toList();
 
         var outcome = new Repairer(List.of(useless)).stabilize(before, true, projection);
@@ -69,7 +69,7 @@ class RepairerTest {
 
     @Test
     void aPlanWithQuestionsIsNeverAppliedAutomatically() {
-        Remedy asking = (violation, p, rules) -> List.of(new Plan("ask", List.of(new Plan.Ask("v", "which visibility?", "package")),
+        Remedy asking = (violation, p) -> List.of(new Plan("ask", List.of(new Plan.Ask("v", "which visibility?", "package")),
                 (target, answers) -> target.apply(new Primitive.Set(violation.target(), "visibility", answers.get("v")))));
 
         var outcome = new Repairer(List.of(asking)).stabilize(before, true, projection);

@@ -1,13 +1,13 @@
 package ide.knowledge;
 
-import ide.refactoring.Refactoring;
+import ide.refactoring.Library;
 import ide.refactoring.script.Script;
+import ide.refactoring.script.ScriptParser;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * <pre>
@@ -29,7 +29,7 @@ final class KnowledgeParser {
     private KnowledgeParser() {
     }
 
-    static Knowledge parse(String text, Function<String, Refactoring> library) {
+    static Knowledge parse(String text, Library library) {
         var lines = text.lines().map(String::stripTrailing).toList();
         var goals = new ArrayList<Knowledge.Goal>();
         var effects = new ArrayList<Knowledge.Effect>();
@@ -63,14 +63,10 @@ final class KnowledgeParser {
                         var in = clause.indexOf(" in ");
                         forVariable = clause.substring(4, in).strip();
                         forItems = clause.substring(in + 4);
-                    } else if (clause.equals("do")) {
-                        var depth = 0;
-                        for (i++; depth > 0 || !lines.get(i).strip().equals("end"); i++) {
-                            var stmt = lines.get(i).strip();
-                            if (stmt.startsWith("for ") || stmt.startsWith("if ")) depth++;
-                            if (stmt.equals("end")) depth--;
-                            body.append(stmt).append('\n');
-                        }
+                    } else if (clause.equals("do")) { // the script language knows where its block ends
+                        var length = ScriptParser.blockLength(lines.subList(i + 1, lines.size()));
+                        lines.subList(i + 1, i + 1 + length).forEach(stmt -> body.append(stmt.strip()).append('\n'));
+                        i += length + 1;
                     } else if (!clause.isEmpty()) {
                         throw new IllegalArgumentException("knowledge: unexpected clause in effect " + name + ": " + clause);
                     }

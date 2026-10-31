@@ -5,21 +5,19 @@ import ide.engine.QuickFix;
 import ide.engine.Remedy;
 import ide.engine.Trace;
 import ide.engine.Violation;
-import ide.core.Param;
 import ide.projection.Diagnostic;
-import ide.projection.LanguageRules;
 import ide.projection.Projection;
 import ide.refactoring.Args;
-import ide.refactoring.Ctx;
-import ide.refactoring.Refactoring;
+import ide.refactoring.Library;
+import ide.refactoring.Run;
 import ide.refactoring.script.Script;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
  * Declarative knowledge: goals say what must hold for a violation or diagnostic to go away, effects say what
@@ -45,35 +43,35 @@ public final class Knowledge implements Remedy, QuickFix {
 
     private final List<Goal> goals;
     private final List<Effect> effects;
-    private final Function<String, Refactoring> library;
+    private final Library library;
 
-    Knowledge(List<Goal> goals, List<Effect> effects, Function<String, Refactoring> library) {
+    Knowledge(List<Goal> goals, List<Effect> effects, Library library) {
         this.goals = List.copyOf(goals);
         this.effects = List.copyOf(effects);
         this.library = library;
     }
 
-    public static Knowledge parse(String text, Function<String, Refactoring> library) {
+    public static Knowledge parse(String text, Library library) {
         return KnowledgeParser.parse(text, library);
     }
 
     @Override
-    public List<Plan> plans(Violation violation, Projection projection, LanguageRules rules) {
+    public List<Plan> plans(Violation violation, Projection projection) {
         var facts = new HashMap<String, Object>();
         if (violation.site() != null) facts.put("site", violation.site().value());
         if (violation.target() != null) facts.put("target", violation.target().value());
         facts.putAll(violation.facts());
-        return search(violation.code(), facts, projection, rules).plans();
+        return search(violation.code(), facts, projection).plans();
     }
 
     @Override
-    public List<Plan> plans(Diagnostic diagnostic, Projection projection, LanguageRules rules) {
+    public List<Plan> plans(Diagnostic diagnostic, Projection projection) {
         return search(diagnostic.code(), Map.of("symbol", diagnostic.symbol(), "path", diagnostic.path(),
-                "line", String.valueOf(diagnostic.line())), projection, rules).plans();
+                "line", String.valueOf(diagnostic.line())), projection).plans();
     }
 
     /** The search for a code with the facts that came with it: each goal a question, each effect tried an answer or dropped. */
-    public Search search(String code, Map<String, Object> facts, Projection projection, LanguageRules rules) {
+    public Search search(String code, Map<String, Object> facts, Projection projection) {
         var trace = new Trace();
         var candidates = new ArrayList<Map.Entry<Integer, Plan>>();
         for (var goal : goals) {
@@ -86,24 +84,24 @@ public final class Knowledge implements Remedy, QuickFix {
                 for (var i = 0; i < effect.makes().args().size(); i++) {
                     env.put(effect.makes().args().get(i), facts.get(goal.needs().args().get(i)));
                 }
-                var ctx = ctx(projection, rules);
+                var run = Run.on(projection, library);
                 try {
-                    if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), ctx, env))) {
+                    if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), run, env))) {
                         trace.add(Trace.Kind.DROPPED, effect.name() + ": " + effect.when());
                         continue;
                     }
-                    var items = effect.forVariable() == null ? java.util.Collections.singletonList(null)
-                            : Script.list(Script.evaluate(effect.forItems(), ctx, env));
+                    var items = effect.forVariable() == null ? Collections.singletonList(null)
+                            : Script.list(Script.evaluate(effect.forItems(), run, env));
                     var rank = 0;
                     for (var item : items) {
                         var variables = new LinkedHashMap<>(env);
                         if (effect.forVariable() != null) variables.put(effect.forVariable(), item);
-                        var title = Script.render(effect.title(), ctx, variables);
+                        var title = Script.render(effect.title(), run, variables);
                         trace.add(Trace.Kind.ANSWER, title);
                         var asks = effect.asks().stream().map(a -> new Plan.Ask(a.name(), a.question(),
-                                Script.render(a.defaultAnswer(), ctx, variables))).toList();
+                                Script.render(a.defaultAnswer(), run, variables))).toList();
                         candidates.add(Map.entry(effect.cost() * 100 + rank++, new Plan(title, asks,
-                                (p, answers) -> run(effect, asks, p, rules, variables, answers))));
+                                (p, answers) -> run(effect, asks, p, variables, answers))));
                     }
                 } catch (RuntimeException inapplicable) { // e.g. the facts name elements that no longer exist
                     trace.add(Trace.Kind.DROPPED, effect.name() + ": " + inapplicable.getMessage());
@@ -115,46 +113,11 @@ public final class Knowledge implements Remedy, QuickFix {
         return new Search(trace, candidates.stream().map(Map.Entry::getValue).toList());
     }
 
-    private void run(Effect effect, List<Plan.Ask> asks, Projection projection, LanguageRules rules,
-                     Map<String, Object> variables, Map<String, String> answers) {
+    private void run(Effect effect, List<Plan.Ask> asks, Projection projection, Map<String, Object> variables,
+                     Map<String, String> answers) {
         var args = new HashMap<String, Object>();
         effect.body().params().forEach(p -> args.put(p.name(), variables.get(p.name())));
         asks.forEach(ask -> args.put(ask.name(), answers.getOrDefault(ask.name(), ask.defaultAnswer())));
-        effect.body().apply(ctx(projection, rules), new Args(args));
-    }
-
-    private Ctx ctx(Projection projection, LanguageRules rules) {
-        return new Ctx() {
-            @Override
-            public Projection projection() {
-                return projection;
-            }
-
-            @Override
-            public String call(String refactoring, Map<String, ?> args) {
-                return library.apply(refactoring).apply(this, new Args(args));
-            }
-
-            @Override
-            public LanguageRules rules() {
-                return rules;
-            }
-
-            @Override
-            public void oblige(String assumption) {
-                // remedies run inside the repairer; what they assume is not tracked yet
-            }
-
-            @Override
-            public boolean attempt(String label, Runnable body) {
-                body.run(); // effects are judged as a whole by the repairer
-                return true;
-            }
-
-            @Override
-            public List<Param> params(String refactoring) {
-                return library.apply(refactoring).params();
-            }
-        };
+        effect.body().apply(Run.on(projection, library), new Args(args));
     }
 }

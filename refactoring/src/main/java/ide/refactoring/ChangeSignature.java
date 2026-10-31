@@ -37,35 +37,35 @@ public final class ChangeSignature implements Refactoring {
     }
 
     @Override
-    public String apply(Ctx ctx, Args args) {
-        var projection = ctx.projection();
+    public String apply(Run run, Args args) {
+        var projection = run.projection();
         var method = args.element("method", projection.program()).id();
         var items = parse(args.text("parameters"));
         for (var item : items) {
-            if (param(ctx, method, item.name()) != null) continue;
+            if (param(run, method, item.name()) != null) continue;
             if (item.type() == null || item.defaultValue() == null) {
                 throw new IllegalArgumentException("new parameter needs name:type=default: " + item.name());
             }
             projection.apply(new Primitive.Create(Kind.PARAM, method, item.name(), Map.of(Fact.TYPE, item.type()), item.defaultValue()));
         }
         for (var i = 0; i < items.size(); i++) { // each kept parameter goes before the one now at its place
-            var wanted = param(ctx, method, items.get(i).name());
-            var there = params(ctx, method).get(i);
+            var wanted = param(run, method, items.get(i).name());
+            var there = params(run, method).get(i);
             if (!there.equals(wanted)) projection.apply(new Primitive.Move(wanted.id(), method, there.id()));
         }
         var kept = items.stream().map(Item::name).toList();
-        for (var param : params(ctx, method)) {
+        for (var param : params(run, method)) {
             if (!kept.contains(param.name())) projection.apply(new Primitive.Delete(param.id()));
         }
         return method.value();
     }
 
-    private static List<Element> params(Ctx ctx, ElementId method) {
-        return ctx.projection().program().children(method).stream().filter(p -> p.kind() == Kind.PARAM).toList();
+    private static List<Element> params(Run run, ElementId method) {
+        return run.program().children(method).stream().filter(p -> p.kind() == Kind.PARAM).toList();
     }
 
-    private static Element param(Ctx ctx, ElementId method, String name) {
-        return ctx.projection().program().children(method).stream()
+    private static Element param(Run run, ElementId method, String name) {
+        return run.program().children(method).stream()
                 .filter(p -> p.kind() == Kind.PARAM && p.name().equals(name)).findFirst().orElse(null);
     }
 

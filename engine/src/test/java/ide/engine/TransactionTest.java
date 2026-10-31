@@ -16,10 +16,10 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Optional;
 
-import static ide.engine.Programs.RULES;
 import static ide.engine.Programs.id;
 import static ide.engine.Programs.reference;
 import static ide.engine.Programs.remedy;
+import static ide.projection.kit.MemoryProjection.PRIVATE_TO_TOP_LEVEL;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** A transaction knows only what each change declares: it expects that, reports anything else, keeps the pins. */
@@ -27,7 +27,7 @@ class TransactionTest {
 
     /** package a: class A; class B extends A { private int x; int y; int n() reads x } */
     private static MemoryProjection program() {
-        return MemoryProjection.builder().rules(RULES)
+        return MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
                 .type("a.A")
                 .type("a.B").extend("a.B", "a.A")
                 .field("a.B", "x", "int").fact("a.B#x", Fact.VISIBILITY, "private")
@@ -84,20 +84,55 @@ class TransactionTest {
     }
 
     @Test
-    void backReturnsToAMarkAndAbortToTheStart() {
+    void anAttemptThatIsRefusedOrDoesNotVerifyIsUndoneAndTheRestGoesOn() {
+        var projection = program();
+        var start = projection.program();
+        var y = id(start, "a.B#y");
+        var tx = new Transaction(projection);
+        var repairer = new Repairer(List.of());
+
+        tx.apply(new Primitive.Rename(y, "z"));
+        var refused = tx.attempt("rename onto x", () -> tx.apply(new Primitive.Rename(y, "x")), repairer);
+        var unverified = tx.attempt("move x up", () -> tx.apply(new Primitive.Move(id(start, "a.B#x"), id(start, "a.A"), null)), repairer);
+        var kept = tx.attempt("add w", () -> tx.apply(new Primitive.Create(ide.program.Kind.FIELD, id(start, "a.A"), "w")), repairer);
+
+        assertThat(List.of(refused, unverified, kept)).containsExactly(false, false, true);
+        assertThat(projection.program().find("a.A#w")).isPresent();
+        assertThat(projection.program().find("a.B#x")).isPresent();
+        assertThat(tx.commit(repairer).steps()).contains(
+                ". try rename onto x", "X rename onto x: projection.duplicate a.B#x already exists",
+                ". try move x up", "  ' move a.B#x -> a.A",
+                "X move x up: access.insufficient a.B#n() cannot access private a.A#x",
+                ". try add w", "  ' create FIELD a.A#w");
+    }
+
+    @Test
+    void abortReturnsToTheStart() {
         var projection = program();
         var start = projection.program();
         var tx = new Transaction(projection);
 
         tx.apply(new Primitive.Rename(id(start, "a.B#y"), "z"));
-        var mark = tx.mark();
-        var afterRename = projection.program();
         tx.apply(new Primitive.Create(ide.program.Kind.FIELD, id(start, "a.A"), "w"));
-        tx.back(mark);
-        assertThat(projection.program().outline()).isEqualTo(afterRename.outline());
-
         tx.abort(null);
+
         assertThat(projection.program().elements()).containsExactlyElementsOf(start.elements());
+    }
+
+    @Test
+    void restoringAPointOfTheTransactionForgetsWhatWasDeclaredSince() {
+        var projection = program();
+        var p = projection.program();
+        var tx = new Transaction(projection);
+
+        var point = tx.snapshot();
+        tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
+        tx.restore(point); // as a plan applied to the transaction does when one of its attempts is refused
+        var result = tx.commit(new Repairer(List.of()));
+
+        assertThat(result.applied()).isTrue();
+        assertThat(projection.program().referencesFrom(id(p, "a.B#n()"))).extracting(Reference::target)
+                .containsExactly(id(p, "a.B#x"));
     }
 
     /** A driver that applies primitives but declares nothing about them. */

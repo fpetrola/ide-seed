@@ -3,8 +3,8 @@ package ide.refactoring.script;
 import ide.core.Param;
 import ide.projection.PrimitiveRejected;
 import ide.refactoring.Args;
-import ide.refactoring.Ctx;
 import ide.refactoring.Refactoring;
+import ide.refactoring.Run;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -30,13 +30,13 @@ public final class Script implements Refactoring {
     }
 
     /** Evaluates an expression with the given variables. */
-    public static Object evaluate(String expression, Ctx ctx, Map<String, Object> variables) {
-        return new Script("expression", "", List.of(), List.of()).eval(ScriptParser.expression(expression), ctx, variables);
+    public static Object evaluate(String expression, Run run, Map<String, Object> variables) {
+        return new Script("expression", "", List.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
     }
 
     /** Interpolates {@code ${expr}} in a text with the given variables. */
-    public static String render(String text, Ctx ctx, Map<String, Object> variables) {
-        return String.valueOf(new Script("text", "", List.of(), List.of()).interpolate(text, ctx, variables));
+    public static String render(String text, Run run, Map<String, Object> variables) {
+        return String.valueOf(new Script("text", "", List.of(), List.of()).interpolate(text, run, variables));
     }
 
     public static boolean truthy(Object value) {
@@ -80,9 +80,9 @@ public final class Script implements Refactoring {
     }
 
     @Override
-    public String apply(Ctx ctx, Args args) {
+    public String apply(Run run, Args args) {
         var env = new HashMap<String, Object>();
-        var graph = ctx.projection().program();
+        var graph = run.program();
         for (var param : params) {
             Object value = switch (param.type()) {
                 case "element" -> args.element(param.name(), graph).id().value();
@@ -92,40 +92,40 @@ public final class Script implements Refactoring {
             env.put(param.name(), value);
         }
         try {
-            run(body, ctx, env);
+            run(body, run, env);
             return null;
         } catch (Returned returned) {
             return returned.value;
         }
     }
 
-    private void run(List<Stmt> statements, Ctx ctx, Map<String, Object> env) {
+    private void run(List<Stmt> statements, Run run, Map<String, Object> env) {
         for (var statement : statements) {
             switch (statement) {
-                case Stmt.Let let -> env.put(let.variable(), eval(let.value(), ctx, env));
+                case Stmt.Let let -> env.put(let.variable(), eval(let.value(), run, env));
                 case Stmt.Call call -> {
-                    var result = ctx.call(call.refactoring(), bind(call, ctx, env));
+                    var result = run.call(call.refactoring(), bind(call, run, env));
                     if (call.variable() != null) env.put(call.variable(), result);
                 }
                 case Stmt.For loop -> {
-                    for (var item : ScriptFunctions.list(eval(loop.items(), ctx, env))) {
+                    for (var item : ScriptFunctions.list(eval(loop.items(), run, env))) {
                         env.put(loop.variable(), item);
-                        run(loop.body(), ctx, env);
+                        run(loop.body(), run, env);
                     }
                 }
                 case Stmt.If branch ->
-                        run(ScriptFunctions.truthy(eval(branch.condition(), ctx, env)) ? branch.then() : branch.otherwise(), ctx, env);
-                case Stmt.Try attempt -> ctx.attempt(interpolate(attempt.label(), ctx, env).toString(),
-                        () -> run(attempt.body(), ctx, env));
+                        run(ScriptFunctions.truthy(eval(branch.condition(), run, env)) ? branch.then() : branch.otherwise(), run, env);
+                case Stmt.Try attempt -> run.attempt(interpolate(attempt.label(), run, env).toString(),
+                        () -> run(attempt.body(), run, env));
                 case Stmt.Require require -> {
-                    if (!ScriptFunctions.truthy(eval(require.condition(), ctx, env))) {
-                        throw new PrimitiveRejected("refactoring.precondition", interpolate(require.message(), ctx, env).toString());
+                    if (!ScriptFunctions.truthy(eval(require.condition(), run, env))) {
+                        throw new PrimitiveRejected("refactoring.precondition", interpolate(require.message(), run, env).toString());
                     }
                 }
-                case Stmt.Oblige oblige -> ctx.oblige(interpolate(oblige.assumption(), ctx, env).toString());
-                case Stmt.Fail fail -> throw new PrimitiveRejected("refactoring.failed", interpolate(fail.message(), ctx, env).toString());
+                case Stmt.Oblige oblige -> run.oblige(interpolate(oblige.assumption(), run, env).toString());
+                case Stmt.Fail fail -> throw new PrimitiveRejected("refactoring.failed", interpolate(fail.message(), run, env).toString());
                 case Stmt.Return ret -> {
-                    var value = interpolate(ret.value(), ctx, env);
+                    var value = interpolate(ret.value(), run, env);
                     throw new Returned(value == null ? null : value.toString());
                 }
             }
@@ -133,42 +133,42 @@ public final class Script implements Refactoring {
     }
 
     /** Positional arguments follow the callee's declared parameters; {@code name=value} binds by name. */
-    private Map<String, Object> bind(Stmt.Call call, Ctx ctx, Map<String, Object> env) {
-        var declared = ctx.params(call.refactoring());
+    private Map<String, Object> bind(Stmt.Call call, Run run, Map<String, Object> env) {
+        var declared = run.params(call.refactoring());
         var bound = new LinkedHashMap<String, Object>();
         var position = 0;
         for (var raw : call.args()) {
             var eq = raw.indexOf('=');
             if (eq > 0 && !raw.startsWith("${") && raw.substring(0, eq).chars().allMatch(c -> Character.isLetterOrDigit(c) || c == '-')) {
-                bound.put(raw.substring(0, eq), interpolate(raw.substring(eq + 1), ctx, env));
+                bound.put(raw.substring(0, eq), interpolate(raw.substring(eq + 1), run, env));
             } else {
                 if (position >= declared.size()) throw new IllegalArgumentException("too many arguments for " + call.refactoring());
-                bound.put(declared.get(position++).name(), interpolate(raw, ctx, env));
+                bound.put(declared.get(position++).name(), interpolate(raw, run, env));
             }
         }
         return bound;
     }
 
     /** Text with {@code ${expr}}; an argument that is exactly one {@code ${expr}} keeps the value (e.g. a list). */
-    Object interpolate(String text, Ctx ctx, Map<String, Object> env) {
+    Object interpolate(String text, Run run, Map<String, Object> env) {
         var whole = INTERPOLATION.matcher(text);
-        if (whole.matches()) return eval(ScriptParser.expression(whole.group(1)), ctx, env);
+        if (whole.matches()) return eval(ScriptParser.expression(whole.group(1)), run, env);
         return INTERPOLATION.matcher(text).replaceAll(m ->
-                java.util.regex.Matcher.quoteReplacement(String.valueOf(eval(ScriptParser.expression(m.group(1)), ctx, env))));
+                java.util.regex.Matcher.quoteReplacement(String.valueOf(eval(ScriptParser.expression(m.group(1)), run, env))));
     }
 
-    Object eval(Expr expr, Ctx ctx, Map<String, Object> env) {
-        var functions = new ScriptFunctions(ctx.projection().program(), ctx.rules());
+    Object eval(Expr expr, Run run, Map<String, Object> env) {
+        var functions = new ScriptFunctions(run.program(), run.rules());
         return switch (expr) {
             case Expr.Str s -> s.value();
             case Expr.Var v -> {
                 if (!env.containsKey(v.name())) throw new IllegalArgumentException("script " + id + ": unknown variable " + v.name());
                 yield env.get(v.name());
             }
-            case Expr.Fn f -> functions.call(f.name(), f.args().stream().map(a -> eval(a, ctx, env)).toList());
+            case Expr.Fn f -> functions.call(f.name(), f.args().stream().map(a -> eval(a, run, env)).toList());
             case Expr.Pipe p -> {
-                var items = ScriptFunctions.list(eval(p.source(), ctx, env));
-                var arg = p.arg() == null ? null : eval(p.arg(), ctx, env);
+                var items = ScriptFunctions.list(eval(p.source(), run, env));
+                var arg = p.arg() == null ? null : eval(p.arg(), run, env);
                 yield items.stream().filter(item -> functions.filter(p.filter(), item, arg)).toList();
             }
         };

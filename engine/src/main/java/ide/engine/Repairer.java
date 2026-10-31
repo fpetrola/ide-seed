@@ -59,7 +59,7 @@ public final class Repairer {
             if (violations.isEmpty()) return new Outcome(repairs, List.of(), search);
             var target = violations.getFirst();
             search.open(Trace.Kind.QUESTION, target.code() + " " + target.detail());
-            var plans = remedies.stream().flatMap(r -> r.plans(target, projection, projection.rules()).stream())
+            var plans = remedies.stream().flatMap(r -> r.plans(target, projection).stream())
                     .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
             String kept = null;
             if (plans.isEmpty()) search.add(Trace.Kind.NOTE, "(no plan)");

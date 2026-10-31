@@ -2,6 +2,7 @@ package ide.projection.kit;
 
 import ide.program.Change;
 import ide.program.ElementId;
+import ide.program.Fact;
 import ide.program.Mode;
 import ide.program.Primitive;
 import ide.program.Program;
@@ -40,6 +41,25 @@ public final class MemoryProjection implements Projection {
         @Override
         public List<String> visibilities() {
             return List.of("private", "package", "protected", "public");
+        }
+    };
+
+    /** Like {@link #OPEN}, except that a private member is accessible from its own top-level type only. */
+    public static final LanguageRules PRIVATE_TO_TOP_LEVEL = new LanguageRules() {
+        @Override
+        public boolean accessible(Program program, ElementId site, ElementId target) {
+            return !"private".equals(program.element(target).fact(Fact.VISIBILITY))
+                    || program.topLevel(site).id().equals(program.topLevel(target).id());
+        }
+
+        @Override
+        public List<String> importCandidates(Program program, String simpleName) {
+            return List.of();
+        }
+
+        @Override
+        public List<String> visibilities() {
+            return OPEN.visibilities();
         }
     };
 

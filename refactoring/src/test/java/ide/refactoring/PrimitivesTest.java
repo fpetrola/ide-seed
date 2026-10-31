@@ -3,12 +3,9 @@ package ide.refactoring;
 import ide.core.Param;
 import ide.program.ElementId;
 import ide.program.Fact;
-import ide.projection.LanguageRules;
-import ide.projection.Projection;
 import ide.projection.kit.MemoryProjection;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,50 +33,15 @@ class PrimitivesTest {
     @Test
     void aPrimitiveAppliesToTheProjectionAndAnswersTheElement() {
         var projection = MemoryProjection.builder().type("a.A").type("a.B").field("a.A", "x", "int").build();
-        var ctx = ctx(projection);
+        var run = Run.on(projection, Library.standard());
 
-        var created = primitive("create").apply(ctx, new Args(Map.of("kind", "METHOD", "parent", "a.B", "name", "get",
+        var created = primitive("create").apply(run, new Args(Map.of("kind", "METHOD", "parent", "a.B", "name", "get",
                 "facts", "type=int; visibility=public")));
-        var moved = primitive("move").apply(ctx, new Args(Map.of("element", "a.A#x", "parent", "a.B")));
+        var moved = primitive("move").apply(run, new Args(Map.of("element", "a.A#x", "parent", "a.B")));
 
         var program = projection.program();
         assertThat(program.element(new ElementId(created)).qualified()).isEqualTo("a.B#get()");
         assertThat(program.element(new ElementId(created)).fact(Fact.VISIBILITY)).isEqualTo("public");
         assertThat(program.element(new ElementId(moved)).qualified()).isEqualTo("a.B#x");
-    }
-
-    /** Just enough of a running refactoring: the projection to change. */
-    private static Ctx ctx(Projection projection) {
-        return new Ctx() {
-            @Override
-            public Projection projection() {
-                return projection;
-            }
-
-            @Override
-            public String call(String refactoring, Map<String, ?> args) {
-                return primitive(refactoring).apply(this, new Args(args));
-            }
-
-            @Override
-            public boolean attempt(String label, Runnable body) {
-                body.run();
-                return true;
-            }
-
-            @Override
-            public void oblige(String assumption) {
-            }
-
-            @Override
-            public LanguageRules rules() {
-                return projection.rules();
-            }
-
-            @Override
-            public List<Param> params(String refactoring) {
-                return primitive(refactoring).params();
-            }
-        };
     }
 }

@@ -16,10 +16,8 @@ import ide.projection.LanguageRules;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 import ide.java.JavaProjection;
-import ide.refactoring.Args;
-import ide.refactoring.Ctx;
 import ide.refactoring.Library;
-import ide.refactoring.Refactoring;
+import ide.refactoring.Run;
 import ide.core.Param;
 
 import java.nio.file.Path;
@@ -32,7 +30,7 @@ public final class Workspace {
     private final JavaProjection project;
     private final LanguageRules rules;
     private final Library library = Library.standard();
-    private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), library::get);
+    private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), library);
     private final Repairer repairer;
     private final List<QuickFix> quickFixes = List.of(knowledge);
 
@@ -170,7 +168,7 @@ public final class Workspace {
     public List<String> expand(String refactoring, Map<String, ?> args) {
         var tx = new Transaction(project);
         try {
-            ctx(tx).call(refactoring, args);
+            Run.in(tx, repairer, library).call(refactoring, args);
         } catch (PrimitiveRejected rejected) {
             tx.discarded(rejected.code() + " " + rejected.getMessage());
         }
@@ -248,10 +246,9 @@ public final class Workspace {
     /** Runs a refactoring naively in a transaction, then verifies and repairs; rolls back if violations remain. */
     public Result invoke(String refactoring, Map<String, ?> args) {
         var tx = new Transaction(project);
-        var ctx = ctx(tx);
         Result result;
         try {
-            ctx.call(refactoring, args);
+            Run.in(tx, repairer, library).call(refactoring, args);
             result = tx.commit(repairer);
         } catch (PrimitiveRejected rejected) {
             result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
@@ -357,7 +354,7 @@ public final class Workspace {
     /** Titles of the fixes offered for the diagnostics on a line. */
     public List<String> fixes(String path, int line) {
         return diagnosticsAt(path, line).stream()
-                .flatMap(d -> quickFixes.stream().flatMap(f -> f.plans(d, project, rules).stream()))
+                .flatMap(d -> quickFixes.stream().flatMap(f -> f.plans(d, project).stream()))
                 .map(Plan::title).distinct().toList();
     }
 
@@ -370,7 +367,7 @@ public final class Workspace {
     private Map.Entry<Diagnostic, Plan> plan(String path, int line, String title) {
         for (var diagnostic : diagnosticsAt(path, line)) {
             for (var quickFix : quickFixes) {
-                for (var plan : quickFix.plans(diagnostic, project, rules)) {
+                for (var plan : quickFix.plans(diagnostic, project)) {
                     if (plan.title().equals(title)) return Map.entry(diagnostic, plan);
                 }
             }
@@ -408,73 +405,12 @@ public final class Workspace {
         for (var d : diagnosticsAt(path, line)) {
             trace.add(ide.engine.Trace.Kind.NOTE, d.code() + " " + d.symbol());
             trace.append(knowledge.search(d.code(), Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())),
-                    project, rules).trace());
+                    project).trace());
         }
         return trace;
     }
 
     private List<Diagnostic> diagnosticsAt(String path, int line) {
         return project.diagnostics().stream().filter(d -> d.path().equals(path) && d.line() == line).toList();
-    }
-
-    /** What refactorings see inside {@code tx}. */
-    private Ctx ctx(Transaction tx) {
-        return new Ctx() {
-            @Override
-            public Projection projection() {
-                return tx;
-            }
-
-            @Override
-            public String call(String id, Map<String, ?> callArgs) {
-                var refactoring = refactoring(id);
-                if (refactoring.level().equals("primitive")) return refactoring.apply(this, new Args(callArgs));
-                tx.enter(id);
-                try {
-                    return refactoring.apply(this, new Args(callArgs));
-                } finally {
-                    tx.exit();
-                }
-            }
-
-            @Override
-            public List<Param> params(String id) {
-                return refactoring(id).params();
-            }
-
-            @Override
-            public LanguageRules rules() {
-                return rules;
-            }
-
-            @Override
-            public void oblige(String assumption) {
-                tx.oblige(assumption);
-            }
-
-            @Override
-            public boolean attempt(String label, Runnable body) {
-                var mark = tx.mark();
-                tx.enter("try " + label);
-                String failure;
-                try {
-                    body.run();
-                    var left = tx.check(repairer);
-                    failure = left == null ? null : left.code() + " " + left.detail();
-                } catch (PrimitiveRejected rejected) {
-                    failure = rejected.code() + " " + rejected.getMessage();
-                } finally {
-                    tx.exit();
-                }
-                if (failure == null) return true;
-                tx.back(mark);
-                tx.discarded(label + ": " + failure);
-                return false;
-            }
-        };
-    }
-
-    private Refactoring refactoring(String id) {
-        return library.get(id);
     }
 }

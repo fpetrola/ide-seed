@@ -18,6 +18,11 @@
             <groupId>ide</groupId>
             <artifactId>ide-projection</artifactId>
         </dependency>
+        <!-- a refactoring runs inside a verified transaction -->
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-engine</artifactId>
+        </dependency>
         <!-- refactorings are tested alone, over a projection with no language -->
         <dependency>
             <groupId>ide</groupId>

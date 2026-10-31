@@ -5,6 +5,8 @@ import ide.program.Primitive;
 import ide.program.Program;
 import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
+import ide.projection.LanguageRules;
+import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 
 import java.util.LinkedHashSet;
@@ -46,22 +48,36 @@ public final class Transaction implements Projection {
         return Result.aborted(outcome.violations(), trace, search);
     }
 
-    /** A point inside the transaction to come back to: the projection's state and the baseline's expectations. */
-    public record Mark(Snapshot snapshot, Program baseline) {
+    /**
+     * Runs part of the change as an attempt: if it is refused, or what it leaves does not verify (after repairs), all
+     * it did is undone and the attempt is recorded as dropped, with why; the transaction goes on. Answers whether it
+     * stayed.
+     */
+    public boolean attempt(String label, Runnable body, Repairer repairer) {
+        var point = snapshot();
+        enter("try " + label);
+        String failure;
+        try {
+            body.run();
+            var left = check(repairer);
+            failure = left == null ? null : left.code() + " " + left.detail();
+        } catch (PrimitiveRejected refused) {
+            failure = refused.code() + " " + refused.getMessage();
+        } finally {
+            exit();
+        }
+        if (failure == null) return true;
+        restore(point); // the steps stay: they show what was attempted
+        trace.add(Trace.Kind.DROPPED, label + ": " + failure);
+        return false;
     }
 
-    public Mark mark() {
-        return new Mark(projection.snapshot(), baseline);
-    }
-
-    /** Undoes everything since the mark, keeping the steps that were logged (they show what was attempted). */
-    public void back(Mark mark) {
-        projection.restore(mark.snapshot());
-        baseline = mark.baseline();
+    /** A point inside the transaction: the projection's state, and what the changes until then declared. */
+    private record Point(Snapshot projection, Program baseline, Set<Change.Pin> pinned) implements Snapshot {
     }
 
     /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
-    public Violation check(Repairer repairer) {
+    private Violation check(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());
@@ -143,18 +159,23 @@ public final class Transaction implements Projection {
         return projection.program();
     }
 
+    /** A point to come back to; coming back also forgets what the changes since then expected and pinned. */
     @Override
     public Snapshot snapshot() {
-        return projection.snapshot();
+        return new Point(projection.snapshot(), baseline, Set.copyOf(pinned));
     }
 
     @Override
     public void restore(Snapshot snapshot) {
-        projection.restore(snapshot);
+        var point = (Point) snapshot;
+        projection.restore(point.projection());
+        baseline = point.baseline();
+        pinned.clear();
+        pinned.addAll(point.pinned());
     }
 
     @Override
-    public ide.projection.LanguageRules rules() {
+    public LanguageRules rules() {
         return projection.rules();
     }
 

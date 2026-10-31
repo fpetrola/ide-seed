@@ -56,11 +56,11 @@ public final class Primitives {
             }
 
             @Override
-            public String apply(Ctx ctx, Args args) {
-                var program = ctx.projection().program();
+            public String apply(Run run, Args args) {
+                var program = run.program();
                 var values = new Object[components.length];
                 for (var i = 0; i < components.length; i++) values[i] = value(components[i], args, program);
-                var change = ctx.projection().apply(construct(constructor, values));
+                var change = run.projection().apply(construct(constructor, values));
                 if (change.produced() != null) return change.produced().value();
                 return Arrays.stream(values).filter(ElementId.class::isInstance).map(v -> ((ElementId) v).value())
                         .findFirst().orElse(null);
