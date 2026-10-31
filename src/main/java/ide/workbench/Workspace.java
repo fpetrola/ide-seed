@@ -17,6 +17,7 @@ import ide.java.JavaProject;
 import ide.java.JavaRules;
 import ide.refactor.Args;
 import ide.refactor.Ctx;
+import ide.refactor.ChangeSignature;
 import ide.refactor.Primitives;
 import ide.refactor.Refactoring;
 import ide.refactor.script.ScriptParser;
@@ -41,6 +42,7 @@ public final class Workspace {
     private Workspace(JavaProject project) {
         this.project = project;
         Primitives.all().forEach(this::register);
+        register(new ChangeSignature());
         try (var catalog = Workspace.class.getResourceAsStream("/ide/refactor/standard.ref")) {
             define(new String(catalog.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {

@@ -112,6 +112,11 @@ public final class ProgramGraph {
         return family;
     }
 
+    /** Direct children of an element, in declaration order. */
+    public List<Element> children(ElementId parent) {
+        return elements.values().stream().filter(e -> parent.equals(e.parent())).toList();
+    }
+
     /** Fields then methods of a type, in declaration order. */
     public List<Element> members(ElementId type) {
         var fields = elements.values().stream().filter(e -> type.equals(e.parent()) && e.kind() == Kind.FIELD);

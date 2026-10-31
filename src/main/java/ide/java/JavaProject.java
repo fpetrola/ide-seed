@@ -184,7 +184,13 @@ public final class JavaProject implements Program {
                 yield idOf(owner.qualified() + "#" + name + "()", Kind.METHOD);
             }
             case PARAM -> {
-                var method = editMethod(owner, m -> m.addParameter("Object", name));
+                // calls get a placeholder argument until the parameter's default is set
+                var calls = callsTo(owner.qualified());
+                var marker = new NameExpr(defaultMarker(owner.name(), name));
+                var method = editMethod(owner, m -> {
+                    m.addParameter("Object", name);
+                    calls.forEach(call -> call.addArgument(marker.clone()));
+                });
                 yield idOf(method + "/" + name, Kind.PARAM);
             }
             default -> throw new IllegalArgumentException("unsupported create: " + kind);
@@ -288,6 +294,10 @@ public final class JavaProject implements Program {
     public void delete(ElementId id) {
         var g = graph();
         var element = g.element(id);
+        if (element.kind() == Kind.PARAM) {
+            deleteParam(element);
+            return;
+        }
         var uses = g.referencesTo(id).stream().map(r -> g.element(r.site()).qualified()).distinct().toList();
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", element.qualified() + " is used by " + uses);
         var node = declaration(element);
@@ -346,9 +356,117 @@ public final class JavaProject implements Program {
             case "type" -> setType(id, value);
             case "body" -> setBody(id, value);
             case "import" -> addImport(id, value);
+            case "default" -> setDefault(id, value);
+            case "order" -> setOrder(id, Integer.parseInt(value));
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
         changed();
+    }
+
+    private static String defaultMarker(String method, String param) {
+        return "__ide_default_" + method + "_" + param + "__";
+    }
+
+    /** Calls anywhere in the workspace that resolve to the method at {@code address}. */
+    private List<MethodCallExpr> callsTo(String address) {
+        var calls = new ArrayList<MethodCallExpr>();
+        for (var cu : units.values()) {
+            for (var call : cu.findAll(MethodCallExpr.class)) if (address.equals(resolveMethod(call))) calls.add(call);
+        }
+        return calls;
+    }
+
+    /** The argument the calls pass for a parameter created in this transaction. */
+    private void setDefault(ElementId id, String value) {
+        var param = graph().element(id);
+        var marker = defaultMarker(graph().element(param.parent()).name(), param.name());
+        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
+        units.forEach((path, cu) -> cu.findAll(NameExpr.class, n -> n.getNameAsString().equals(marker))
+                .forEach(n -> edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(n, value))));
+        applyEdits(edits);
+    }
+
+    /** Moves a parameter to position {@code index}, in the declaration and in every call. */
+    private void setOrder(ElementId id, int index) {
+        var param = graph().element(id);
+        var method = graph().element(param.parent());
+        var declaration = (MethodDeclaration) declaration(method);
+        var from = declaration.getParameters().indexOf(declaration.getParameterByName(param.name()).orElseThrow());
+        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
+        reorder(edits, declaration.getParameters(), from, index);
+        for (var call : callsTo(method.qualified())) reorder(edits, call.getArguments(), from, index);
+        var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
+        names.add(index, names.remove(from));
+        applyEdits(edits);
+        retransferMethod(method, names);
+    }
+
+    /** Removes a parameter the body does not use, and the matching argument from every call. */
+    private void deleteParam(Element param) {
+        var method = graph().element(param.parent());
+        var declaration = (MethodDeclaration) declaration(method);
+        var used = declaration.findAll(NameExpr.class, n -> n.getNameAsString().equals(param.name())).stream()
+                .anyMatch(n -> {
+                    try {
+                        var decl = n.resolve();
+                        return decl.isParameter();
+                    } catch (RuntimeException unresolved) {
+                        return false;
+                    }
+                });
+        if (used) throw new PrimitiveRejected("delete.referenced", param.qualified() + " is used in the body of " + method.qualified());
+        var index = declaration.getParameters().indexOf(declaration.getParameterByName(param.name()).orElseThrow());
+        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
+        remove(edits, declaration.getParameters(), index);
+        for (var call : callsTo(method.qualified())) remove(edits, call.getArguments(), index);
+        var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
+        names.remove(index);
+        applyEdits(edits);
+        ids.remove(param.qualified());
+        retransferMethod(method, names);
+    }
+
+    private void reorder(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, int from, int to) {
+        var texts = new ArrayList<>(items.stream().map(n -> LexicalPreservingPrinter.print(n)).toList());
+        texts.add(to, texts.remove(from));
+        rewriteList(edits, items, texts);
+    }
+
+    private void remove(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, int index) {
+        var texts = new ArrayList<>(items.stream().map(n -> LexicalPreservingPrinter.print(n)).toList());
+        texts.remove(index);
+        rewriteList(edits, items, texts);
+    }
+
+    /** Replaces the text from the first item to the last with {@code texts} joined by ", ". */
+    private void rewriteList(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, List<String> texts) {
+        var first = items.getFirst().orElseThrow();
+        var last = items.getLast().orElseThrow();
+        var span = new NameExpr("span");
+        span.setRange(new com.github.javaparser.Range(first.getBegin().orElseThrow(), last.getEnd().orElseThrow()));
+        var path = pathOf(first.findCompilationUnit().orElseThrow());
+        edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(span, String.join(", ", texts)));
+    }
+
+    /** Applies text replacements per unit, last position first so earlier positions stay valid; re-parses. */
+    private void applyEdits(Map<String, List<Map.Entry<Node, String>>> edits) {
+        edits.forEach((path, list) -> {
+            var code = source(path);
+            var sorted = new ArrayList<>(list);
+            sorted.sort(Comparator.comparing((Map.Entry<Node, String> e) -> e.getKey().getBegin().orElseThrow()).reversed());
+            for (var edit : sorted) code = Text.replace(code, edit.getKey(), edit.getValue());
+            units.put(path, parse(code));
+        });
+        invalidate();
+    }
+
+    /** After a parameter list change, carries the method's identity to the address of its new declaration. */
+    private void retransferMethod(Element method, List<String> parameterNames) {
+        var owner = method.qualified().substring(0, method.qualified().indexOf('#'));
+        var declaration = typeDeclaration(owner).getMethodsByName(method.name()).stream()
+                .filter(m -> m.getParameters().stream().map(p -> p.getNameAsString()).toList().equals(parameterNames))
+                .findFirst().orElseThrow();
+        transfer(method.qualified(), methodAddress(owner, declaration));
     }
 
     /** Adds an import to the unit of a top-level type. */
