@@ -208,3 +208,21 @@ refactoring collapse-hierarchy "Merges a class into its superclass: its members 
   end
   delete ${type}
 end
+
+refactoring redirect-uses "Points every use of an element at another of the same kind"
+  param from : element(FIELD,METHOD) "the element whose uses move"
+  param to : element(FIELD,METHOD) "the element they use instead"
+  for r in refs(from)
+    retarget ${r} ${to}
+  end
+  return ${to}
+end
+
+refactoring merge-duplicate "Keeps one of two methods with the same body: uses of the other go to it, the other goes"
+  param keep : element(METHOD) "the method to keep"
+  param duplicate : element(METHOD) "the method to drop"
+  require eq(body(keep), body(duplicate)) "${qualified(keep)} and ${qualified(duplicate)} have different bodies"
+  redirect-uses ${duplicate} ${keep}
+  delete ${duplicate}
+  return ${keep}
+end

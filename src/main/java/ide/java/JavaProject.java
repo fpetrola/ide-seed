@@ -844,6 +844,15 @@ public final class JavaProject implements Program {
         var node = (Expression) referenceNodes.get(refId);
         if (node.isObjectCreationExpr() && !ref.mode().equals("new")) throw new IllegalStateException(ref.toString());
         var target = graph().element(targetId);
+        if (target.kind() == graph().element(ref.target()).kind()) { // same kind: the use just names the other one
+            switch (referenceNodes.get(refId)) {
+                case MethodReferenceExpr reference -> reference.setIdentifier(target.name());
+                case NodeWithSimpleName<?> named -> named.setName(target.name());
+                default -> throw new IllegalStateException("cannot rename the use " + refId);
+            }
+            changed();
+            return;
+        }
         if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
         var scope = node.isFieldAccessExpr() ? node.asFieldAccessExpr().getScope() : null;
         if (node.isObjectCreationExpr()) scope = null;
@@ -929,6 +938,7 @@ public final class JavaProject implements Program {
                     var methodId = idOf(address, Kind.METHOD);
                     var methodAttributes = new HashMap<>(attributes(method));
                     methodAttributes.put("type", method.getType().asString());
+                    method.getBody().ifPresent(b -> methodAttributes.put("body", b.toString().replaceAll("\\s+", " ")));
                     if (kindOf(type) == Kind.INTERFACE && method.getAccessSpecifier().asString().isEmpty()) {
                         methodAttributes.put("visibility", "public"); // interface members are implicitly public
                     }
