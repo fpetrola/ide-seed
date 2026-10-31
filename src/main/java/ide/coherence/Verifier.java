@@ -37,13 +37,14 @@ public final class Verifier {
                 && !rules.accessible(after, ref.site(), ref.target())) {
             return inaccessible(ref, after);
         }
-        var site = baseline.element(ref.site()).qualified();
-        return new Violation("binding.unresolved", site + " no longer binds to " + baseline.element(ref.target()).qualified());
+        var site = (after.contains(ref.site()) ? after : baseline).element(ref.site()).qualified();
+        return new Violation("binding.unresolved", ref.site(), ref.target(),
+                site + " no longer binds to " + baseline.element(ref.target()).qualified());
     }
 
     private static Violation inaccessible(Reference ref, ProgramGraph graph) {
         var target = graph.element(ref.target());
-        return new Violation("access.insufficient", graph.element(ref.site()).qualified()
+        return new Violation("access.insufficient", ref.site(), ref.target(), graph.element(ref.site()).qualified()
                 + " cannot access " + target.attribute("visibility") + " " + target.qualified());
     }
 }

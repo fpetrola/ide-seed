@@ -6,7 +6,10 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.Modifier;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -20,6 +23,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeS
 import ide.graph.Element;
 import ide.graph.ElementId;
 import ide.graph.Kind;
+import ide.graph.Program;
 import ide.graph.ProgramGraph;
 import ide.graph.Reference;
 
@@ -28,6 +32,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -35,11 +40,14 @@ import java.util.stream.Collectors;
  * Java sources in memory, edited with lexical preservation, projected to a {@link ProgramGraph}.
  * Identity is kept in {@code ids} (address → id): parsing never decides identity, primitives transfer it.
  */
-public final class JavaProject {
+public final class JavaProject implements Program {
 
     /** Everything needed to roll back: source text and identity. */
     public record Snapshot(Map<String, String> sources, Map<String, ElementId> ids, int nextId) {
     }
+
+    private static final Set<Modifier.Keyword> ACCESS =
+            Set.of(Modifier.Keyword.PUBLIC, Modifier.Keyword.PROTECTED, Modifier.Keyword.PRIVATE);
 
     private final JavaParser parser;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
@@ -76,6 +84,7 @@ public final class JavaProject {
         graph = null;
     }
 
+    @Override
     public ProgramGraph graph() {
         if (graph == null) graph = buildGraph();
         return graph;
@@ -84,6 +93,7 @@ public final class JavaProject {
     // ---- primitives
 
     /** Moves a member into another type, keeping its identity. */
+    @Override
     public void move(ElementId member, ElementId newParent) {
         var g = graph();
         var element = g.element(member);
@@ -93,6 +103,16 @@ public final class JavaProject {
         node.remove();
         insertMember(typeDeclaration(target.qualified()), text);
         transfer(element.qualified(), target.qualified() + "#" + element.name());
+    }
+
+    /** Changes an attribute of an element; only {@code visibility} so far. */
+    @Override
+    public void set(ElementId id, String attribute, String value) {
+        if (!attribute.equals("visibility")) throw new IllegalArgumentException("unsupported attribute: " + attribute);
+        var modifiers = ((NodeWithModifiers<?>) declaration(graph().element(id))).getModifiers();
+        modifiers.removeIf(m -> ACCESS.contains(m.getKeyword()));
+        if (!value.equals("package")) modifiers.addFirst(new Modifier(Modifier.Keyword.valueOf(value.toUpperCase())));
+        changed();
     }
 
     // ---- projection: graph from AST
@@ -147,11 +167,15 @@ public final class JavaProject {
         }
     }
 
+    /** The innermost member (method or field) containing the node, else its type. */
     private ElementId siteOf(Node node) {
-        var method = node.findAncestor(MethodDeclaration.class);
         var type = node.findAncestor(ClassOrInterfaceDeclaration.class).orElseThrow();
         var typeName = type.getFullyQualifiedName().orElseThrow();
-        return method.map(m -> ids.get(methodAddress(typeName, m))).orElseGet(() -> ids.get(typeName));
+        var method = node.findAncestor(MethodDeclaration.class);
+        if (method.isPresent()) return ids.get(methodAddress(typeName, method.get()));
+        var field = node.findAncestor(VariableDeclarator.class).filter(v -> v.getParentNode()
+                .filter(FieldDeclaration.class::isInstance).isPresent());
+        return field.map(v -> ids.get(typeName + "#" + v.getNameAsString())).orElseGet(() -> ids.get(typeName));
     }
 
     private static String methodAddress(String typeName, MethodDeclaration method) {
@@ -214,7 +238,11 @@ public final class JavaProject {
 
     private void load(String path, String code) {
         units.put(path, LexicalPreservingPrinter.setup(parser.parse(code).getResult().orElseThrow()));
-        JavaParserFacade.clearInstances(); // resolution caches point into replaced ASTs
+        changed();
+    }
+
+    private void changed() {
+        JavaParserFacade.clearInstances(); // resolution caches point into replaced or edited ASTs
         graph = null;
     }
 

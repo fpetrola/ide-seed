@@ -1,18 +1,20 @@
 package ide.workbench;
 
 import ide.coherence.Result;
-import ide.coherence.Verifier;
+import ide.coherence.OpenVisibility;
+import ide.coherence.Repairer;
 import ide.graph.ElementId;
 import ide.java.JavaProject;
 import ide.java.JavaRules;
 
+import java.util.List;
 import java.util.Map;
 
 /** Entry point: invokes capabilities as transactions over a Java project. */
 public final class Workspace {
 
     private final JavaProject project;
-    private final Verifier verifier = new Verifier(new JavaRules());
+    private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility()));
 
     private Workspace(JavaProject project) {
         this.project = project;
@@ -31,10 +33,10 @@ public final class Workspace {
         var snapshot = project.snapshot();
         var baseline = project.graph();
         pullUpField(args.get("field"));
-        var violations = verifier.verify(baseline, project.graph());
-        if (violations.isEmpty()) return Result.ok();
+        var outcome = repairer.stabilize(baseline, project);
+        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs());
         project.restore(snapshot);
-        return Result.aborted(violations);
+        return Result.aborted(outcome.violations());
     }
 
     /** Naive: just moves the field to the superclass; the verifier judges the outcome. */

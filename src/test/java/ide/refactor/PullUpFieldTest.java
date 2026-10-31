@@ -59,7 +59,43 @@ class PullUpFieldTest {
     }
 
     @Test
-    void pullUpPrivateFieldUsedInSubclassAbortsWithAccessViolation() {
+    void pullUpPrivateFieldUsedInSubclassOpensMinimalVisibility() {
+        var ws = Workspace.of(Map.of(
+                "a/A.java", """
+                        package a;
+
+                        public class A {
+                        }
+                        """,
+                "a/B.java", """
+                        package a;
+
+                        public class B extends A {
+
+                            private int x;
+
+                            int get() {
+                                return x;
+                            }
+                        }
+                        """));
+
+        var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(result.repairs()).containsExactly("open-visibility a.A#x private -> package");
+        assertThat(ws.source("a/A.java")).isEqualTo("""
+                package a;
+
+                public class A {
+
+                    int x;
+                }
+                """);
+    }
+
+    @Test
+    void pullUpFieldWhoseInitializerNeedsSubclassStateAborts() {
         var a = """
                 package a;
 
@@ -71,11 +107,8 @@ class PullUpFieldTest {
 
                 public class B extends A {
 
-                    private int x;
-
-                    int get() {
-                        return x;
-                    }
+                    private int y = 1;
+                    protected int x = y;
                 }
                 """;
         var ws = Workspace.of(Map.of("a/A.java", a, "a/B.java", b));
@@ -85,8 +118,8 @@ class PullUpFieldTest {
         assertThat(result.applied()).isFalse();
         assertThat(result.violations())
                 .extracting(Violation::code)
-                .containsExactly("access.insufficient");
-        assertThat(result.violations().getFirst().detail()).contains("a.B", "x");
+                .containsExactly("binding.unresolved");
+        assertThat(result.violations().getFirst().detail()).contains("a.A#x", "a.B#y");
         assertThat(ws.source("a/A.java")).isEqualTo(a);
         assertThat(ws.source("a/B.java")).isEqualTo(b);
     }
