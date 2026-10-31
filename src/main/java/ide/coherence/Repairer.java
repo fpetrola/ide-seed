@@ -40,6 +40,15 @@ public final class Repairer {
      *                 (the compiler view runs once the graph views are clean, it is the slowest)
      */
     public Outcome stabilize(ProgramGraph baseline, boolean compiled, Program program) {
+        return stabilize(baseline, compiled, program, Map.of());
+    }
+
+    /**
+     * @param pinned what the transaction changed on purpose, per element: "parent", "name" and/or "visibility".
+     *               A plan that changes a pinned aspect would undo the refactoring's intent, so it is undone instead.
+     */
+    public Outcome stabilize(ProgramGraph baseline, boolean compiled, Program program,
+                             Map<ide.graph.ElementId, java.util.Set<String>> pinned) {
         var repairs = new ArrayList<String>();
         var search = new ArrayList<String>();
         var branches = 0;
@@ -58,11 +67,17 @@ public final class Repairer {
                     return new Outcome(repairs, violations, search);
                 }
                 var saved = program.checkpoint();
+                var intent = state(program.graph(), pinned);
                 try {
                     plan.apply(program);
                 } catch (RuntimeException failed) {
                     program.rollback(saved);
                     search.add("  X " + plan.title() + ": " + String.valueOf(failed.getMessage()).lines().findFirst().orElse(""));
+                    continue;
+                }
+                if (!state(program.graph(), pinned).equals(intent)) {
+                    program.rollback(saved);
+                    search.add("  X " + plan.title() + ": would undo what the refactoring did");
                     continue;
                 }
                 if (!same(target, verify(baseline, compiled, program))) {
@@ -77,6 +92,23 @@ public final class Repairer {
             repairs.add(kept);
         }
         return new Outcome(repairs, verify(baseline, compiled, program), search);
+    }
+
+    private static Map<String, String> state(ProgramGraph graph, Map<ide.graph.ElementId, java.util.Set<String>> pinned) {
+        var state = new java.util.HashMap<String, String>();
+        pinned.forEach((id, aspects) -> {
+            if (!graph.contains(id)) return;
+            var e = graph.element(id);
+            for (var aspect : aspects) {
+                var value = switch (aspect) {
+                    case "parent" -> String.valueOf(e.parent());
+                    case "name" -> e.name();
+                    default -> e.attribute(aspect);
+                };
+                state.put(id + "." + aspect, value);
+            }
+        });
+        return state;
     }
 
     private List<Violation> verify(ProgramGraph baseline, boolean compiled, Program program) {

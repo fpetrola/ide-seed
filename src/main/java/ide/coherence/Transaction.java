@@ -7,6 +7,7 @@ import ide.graph.ProgramGraph;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A program under change. Primitives pass through; intended rebindings ({@link #retarget}) are folded into the
@@ -20,6 +21,8 @@ public final class Transaction implements Program {
     private final boolean compiled;
     private final List<String> steps = new ArrayList<>();
     private final List<String> search = new ArrayList<>();
+    /** Elements the refactoring changed on purpose; repairs may not undo that. */
+    private final Map<ElementId, java.util.Set<String>> pinned = new java.util.HashMap<>();
     private int depth;
 
     public Transaction(Program program) {
@@ -31,7 +34,7 @@ public final class Transaction implements Program {
 
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else rolls back. */
     public Result commit(Repairer repairer) {
-        var outcome = repairer.stabilize(baseline, compiled, program);
+        var outcome = repairer.stabilize(baseline, compiled, program, pinned);
         outcome.repairs().forEach(repair -> steps.add("! " + repair));
         search.addAll(outcome.search());
         if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps, search);
@@ -55,7 +58,7 @@ public final class Transaction implements Program {
 
     /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
     public Violation check(Repairer repairer) {
-        var outcome = repairer.stabilize(baseline, compiled, program);
+        var outcome = repairer.stabilize(baseline, compiled, program, pinned);
         outcome.repairs().forEach(repair -> log("! " + repair));
         search.addAll(outcome.search());
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
@@ -85,6 +88,10 @@ public final class Transaction implements Program {
 
     public void exit() {
         depth--;
+    }
+
+    private void pin(ElementId element, String... aspects) {
+        pinned.computeIfAbsent(element, e -> new java.util.HashSet<>()).addAll(List.of(aspects));
     }
 
     private void log(String step) {
@@ -123,6 +130,7 @@ public final class Transaction implements Program {
     @Override
     public ElementId create(Kind kind, ElementId parent, String name) {
         var id = program.create(kind, parent, name);
+        pin(id, "parent", "name");
         log("' create " + kind + " " + name(id));
         return id;
     }
@@ -131,6 +139,7 @@ public final class Transaction implements Program {
     public void move(ElementId member, ElementId newParent, ElementId before) {
         var from = name(member);
         program.move(member, newParent, before);
+        pin(member, "parent");
         log("' move " + from + " -> " + name(newParent));
     }
 
@@ -157,6 +166,7 @@ public final class Transaction implements Program {
     public void rename(ElementId element, String name) {
         var from = name(element);
         program.rename(element, name);
+        pin(element, "name");
         log("' rename " + from + " -> " + name);
     }
 
@@ -165,6 +175,7 @@ public final class Transaction implements Program {
         var oldSuperclass = attribute.equals("superclass")
                 ? program.graph().find(String.valueOf(program.graph().element(element).attribute("superclass"))) : null;
         program.set(element, attribute, value);
+        if (attribute.equals("visibility")) pin(element, "visibility");
         if (oldSuperclass != null && oldSuperclass.isPresent()) { // an intended rebinding of the extends clause
             program.graph().find(value).ifPresent(to -> baseline = baseline.retargeted(element, oldSuperclass.get().id(), to.id()));
         }

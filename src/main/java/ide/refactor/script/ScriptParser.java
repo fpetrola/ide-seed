@@ -189,6 +189,11 @@ public final class ScriptParser {
         private Expr term() {
             skipSpaces();
             if (peek() == '"') return new Expr.Str(string());
+            if (Character.isDigit(peek())) {
+                var start = pos;
+                while (pos < text.length() && Character.isDigit(text.charAt(pos))) pos++;
+                return new Expr.Str(text.substring(start, pos)); // numbers are text; eq compares them as such
+            }
             var name = identifier();
             if (peek() == '(') {
                 pos++;
@@ -208,7 +213,7 @@ public final class ScriptParser {
 
         private boolean atTermStart() {
             var c = peek();
-            return c == '"' || Character.isJavaIdentifierStart(c);
+            return c == '"' || Character.isDigit(c) || Character.isJavaIdentifierStart(c);
         }
 
         String remainingString() {

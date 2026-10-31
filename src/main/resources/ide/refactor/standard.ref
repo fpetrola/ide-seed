@@ -180,3 +180,11 @@ refactoring extract-method "Moves a run of statements into a new private method 
   m := extract ${method} ${lines} ${name}
   return ${m}
 end
+
+refactoring push-down-member "Moves a member into the only subclass of its type"
+  param member : element(FIELD,METHOD) "the member to push down"
+  let subs = subclasses(owner(member))
+  require eq(count(subs), 1) "${qualified(owner(member))} must have exactly one subclass"
+  move ${member} ${first(subs)}
+  return ${member}
+end
