@@ -148,6 +148,21 @@ class ProgramTest {
     }
 
     @Test
+    void aLinkExpectsTheDeclarationToBindItsNewTarget() {
+        var p = program();
+
+        assertThat(new Primitive.Link(B, Mode.EXTENDS, I).intent(p, null).expectations())
+                .containsExactly(new Change.Retargeted(B, A, I));
+        assertThat(new Primitive.Link(B_X, Mode.DECLARED, B).intent(p, null).expectations())
+                .containsExactly(new Change.Retargeted(B_X, A, B));
+        assertThat(new Primitive.Link(A, Mode.EXTENDS, B).intent(p, null)).isEqualTo(Change.NONE); // A extended nothing
+        assertThat(new Primitive.Link(A, Mode.IMPLEMENTS, I).intent(p, null)).isEqualTo(Change.NONE); // one more interface
+        assertThat(new Primitive.Link(B, Mode.EXTENDS, A).intent(p, null)).isEqualTo(Change.NONE); // already so
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new Primitive.Link(B, Mode.CALL, A))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void outlineIsTheProgramWithoutIds() {
         assertThat(program().outline()).containsExactly(
                 "CLASS a.A", "CLASS a.B", "FIELD a.B#x", "INTERFACE a.I",

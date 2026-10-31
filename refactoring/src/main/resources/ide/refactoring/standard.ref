@@ -60,10 +60,10 @@ refactoring extract-superclass "Creates a class between a type and its superclas
   param name : text "name of the new superclass"
   param fields : elements(FIELD) "fields to pull up"
   base := create CLASS ${owner(type)} ${name}
-  if nonempty(superclass(type))
-    set ${base} superclass ${superclass(type)}
+  if nonempty(attr(type, "superclass"))
+    set ${base} superclass ${attr(type, "superclass")}
   end
-  set ${type} superclass ${qualified(base)}
+  link ${type} extends ${base}
   for f in fields
     pull-up-field ${f}
   end
@@ -152,7 +152,7 @@ refactoring extract-interface "Creates an interface with some methods of a type,
   for m in methods
     copy-signature ${m} ${i}
   end
-  set ${type} implements ${qualified(i)}
+  link ${type} implements ${i}
   return ${i}
 end
 
@@ -230,7 +230,7 @@ end
 refactoring generalize-declared-type "Declares a field or parameter with one of its supertypes"
   param element : element(FIELD,PARAM) "the field or parameter"
   param type : element(CLASS,INTERFACE) "the supertype to declare it with"
-  set ${element} type ${qualified(type)}
+  link ${element} declared ${type}
   return ${element}
 end
 

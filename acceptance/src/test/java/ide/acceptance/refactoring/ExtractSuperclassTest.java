@@ -11,6 +11,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ExtractSuperclassTest {
 
     @Test
+    void theNewSuperclassTakesOverASuperclassFromOutsideTheWorkspace() {
+        var ws = Workspace.of(Map.of("a/B.java", """
+                package a;
+
+                import java.util.ArrayList;
+
+                public class B extends ArrayList<String> {
+                    protected int x;
+                }
+                """));
+
+        var result = ws.invoke("extract-superclass", Map.of("type", "a.B", "name", "Base", "fields", List.of("a.B#x")));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Base.java")).contains("import java.util.ArrayList;", "public class Base extends ArrayList<String> {");
+        assertThat(ws.source("a/B.java")).contains("public class B extends Base {");
+        assertThat(ws.diagnostics()).isEmpty();
+    }
+
+    @Test
     void extractsSuperclassWithSelectedFieldsComposingPullUps() {
         var ws = Workspace.of(Map.of(
                 "a/B.java", """

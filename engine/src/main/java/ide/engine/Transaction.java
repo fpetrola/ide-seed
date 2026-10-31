@@ -131,6 +131,8 @@ public final class Transaction implements Projection {
             case Primitive.Move m -> "move " + before.element(m.element()).qualified() + " -> " + after.element(m.parent()).qualified();
             case Primitive.Rename r -> "rename " + before.element(r.element()).qualified() + " -> " + r.name();
             case Primitive.Set s -> "set " + after.element(s.element()).qualified() + " " + s.attribute() + " = " + s.value();
+            case Primitive.Link l -> "link " + after.element(l.element()).qualified() + " " + l.mode().label()
+                    + " " + after.element(l.target()).qualified();
             case Primitive.Retarget r -> "retarget " + r.reference() + " " + before.reference(r.reference()).name()
                     + " -> " + after.element(r.target()).qualified();
             case Primitive.Extract e -> "extract " + before.element(e.method()).qualified() + " " + e.fragment()

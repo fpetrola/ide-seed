@@ -78,6 +78,10 @@ final class GraphReader {
                         .map(t -> ids.get(new Address.Type(qualifiedOf((TypeDeclaration<?>) t)))).orElse(pkg);
                 var typeFacts = new HashMap<>(attributes(type));
                 if (type.isTopLevelType()) typeFacts.put(Fact.FILE, unit.getKey());
+                if (type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration c && !c.isInterface()
+                        && c.getExtendedTypes().isNonEmpty()) {
+                    typeFacts.put(Fact.SUPERCLASS, c.getExtendedTypes(0).asString());
+                }
                 elements.add(new Element(typeId, kindOf(type), type.getNameAsString(), parent, new Address.Type(typeName), typeName,
                         Map.copyOf(typeFacts)));
                 for (var field : type.getFields()) {

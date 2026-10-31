@@ -30,7 +30,7 @@ class StepsTest {
         assertThat(result.steps()).containsExactly(
                 ". extract-superclass",
                 "  ' create CLASS a.Base",
-                "  ' set a.B superclass = a.Base",
+                "  ' link a.B extends a.Base",
                 "  . pull-up-field",
                 "    ' move a.B#x -> a.Base",
                 "! open-visibility a.Base#x private -> package");

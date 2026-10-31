@@ -2,6 +2,7 @@ package ide.refactoring;
 
 import ide.core.Param;
 import ide.program.Kind;
+import ide.program.Mode;
 import ide.program.Primitive;
 
 import java.util.List;
@@ -45,6 +46,14 @@ public final class Primitives {
                         Param.of("attribute", "text"), Param.of("value", "text")), (ctx, args) -> {
                     var element = args.element("element", ctx.projection().program()).id();
                     ctx.projection().apply(new Primitive.Set(element, args.text("attribute"), args.text("value")));
+                    return element.value();
+                }),
+                primitive("link", "Makes a declaration name a workspace type: extends, implements or declared",
+                        List.of(Param.of("element", "element"), Param.of("mode", "choice", "EXTENDS", "IMPLEMENTS", "DECLARED"),
+                                Param.of("target", "element", "CLASS", "INTERFACE", "ENUM")), (ctx, args) -> {
+                    var program = ctx.projection().program();
+                    var element = args.element("element", program).id();
+                    ctx.projection().apply(new Primitive.Link(element, Mode.of(args.text("mode")), args.element("target", program).id()));
                     return element.value();
                 }),
                 primitive("extract", "Moves statements into a new method", List.of(Param.of("from", "element", "METHOD"),

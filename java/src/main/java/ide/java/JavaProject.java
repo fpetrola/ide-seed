@@ -200,8 +200,7 @@ public final class JavaProject implements Projection {
 
     /**
      * Applies a primitive as minimal text edits and answers its change: what the primitive means (its intent),
-     * plus what only the Java text tells (which uses an extract moved; which link a set of a superclass or a
-     * declared type changed).
+     * plus what only the Java text tells (which uses an extract moved).
      */
     @Override
     public Change apply(Primitive primitive) {
@@ -221,14 +220,12 @@ public final class JavaProject implements Projection {
                 yield r.intent(before, null);
             }
             case Primitive.Set set -> {
-                var oldLink = link(before, set.element(), set.attribute());
                 set(set.element(), set.attribute(), set.value());
-                var change = set.intent(before, null);
-                var newLink = link(program(), set.element(), set.attribute());
-                if (oldLink.isPresent() && newLink.isPresent() && !oldLink.get().equals(newLink.get())) {
-                    change = change.expect(new Change.Retargeted(set.element(), oldLink.get(), newLink.get()));
-                }
-                yield change;
+                yield set.intent(before, null);
+            }
+            case Primitive.Link link -> {
+                link(link.element(), link.mode(), before.element(link.target()).qualified());
+                yield link.intent(before, null);
             }
             case Primitive.Retarget r -> {
                 retarget(r.reference(), r.target());
@@ -249,14 +246,15 @@ public final class JavaProject implements Projection {
         };
     }
 
-    /** The workspace type an attribute links to: the superclass, or the declared type. */
-    private static Optional<ElementId> link(Program program, ElementId element, String attribute) {
-        var linked = switch (attribute) {
-            case "superclass" -> program.superclass(element);
-            case "type" -> program.declaredType(element);
-            default -> Optional.<Element>empty();
-        };
-        return linked.map(Element::id);
+    /** Makes a declaration name a workspace type: the extends clause, one more interface, or the declared type. */
+    private void link(ElementId element, Mode mode, String type) {
+        switch (mode) {
+            case EXTENDS -> setSuperclass(element, type);
+            case IMPLEMENTS -> addImplements(element, type);
+            case DECLARED -> setType(element, type);
+            default -> throw new IllegalArgumentException("not a link: " + mode);
+        }
+        changed();
     }
 
     /**
@@ -561,7 +559,6 @@ public final class JavaProject implements Projection {
             case "initializer" -> ((FieldDeclaration) declaration(program().element(id))).getVariables().stream()
                     .filter(v -> v.getNameAsString().equals(program().element(id).name()))
                     .forEach(v -> v.setInitializer(parser.parseExpression(value).getResult().orElseThrow()));
-            case "implements" -> addImplements(id, value);
             case "order" -> setOrder(id, Integer.parseInt(value));
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
@@ -735,15 +732,16 @@ public final class JavaProject implements Projection {
         return matcher.replaceAll(m -> program().element(new ElementId(m.group(1))).name());
     }
 
-    /** Sets the superclass by its qualified name, written as a simple name when in the same package. */
+    /** Writes the extends clause: a qualified name of the same package as a simple name, any other text as it is. */
     private void setSuperclass(ElementId id, String superclass) {
         var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id).qualified());
         var pkg = type.findCompilationUnit().flatMap(CompilationUnit::getPackageDeclaration)
                 .map(p -> p.getNameAsString() + ".").orElse("");
         var name = superclass.startsWith(pkg) && superclass.indexOf('.', pkg.length()) < 0
                 ? superclass.substring(pkg.length()) : superclass;
-        if (type.getExtendedTypes().isEmpty()) type.addExtendedType(name);
-        else type.getExtendedTypes(0).setName(name);
+        var written = parser.parseClassOrInterfaceType(name).getResult().orElseThrow();
+        if (type.getExtendedTypes().isEmpty()) type.addExtendedType(written);
+        else type.getExtendedTypes(0).replace(written); // the whole type: its arguments belonged to the old one
     }
 
     /**

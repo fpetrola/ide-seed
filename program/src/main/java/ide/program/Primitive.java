@@ -22,6 +22,16 @@ public sealed interface Primitive {
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
             case Set s -> Fact.VISIBILITY.label().equals(s.attribute())
                     ? Change.NONE.pin(s.element(), Change.Aspect.VISIBILITY) : Change.NONE;
+            case Link l -> {
+                var old = switch (l.mode()) {
+                    case EXTENDS -> before.superclass(l.element());
+                    case DECLARED -> before.declaredType(l.element());
+                    default -> java.util.Optional.<Element>empty(); // implements adds one more
+                };
+                yield old.filter(o -> !o.id().equals(l.target()))
+                        .map(o -> Change.NONE.expect(new Change.Retargeted(l.element(), o.id(), l.target())))
+                        .orElse(Change.NONE);
+            }
             case Retarget r -> {
                 var reference = before.reference(r.reference());
                 yield Change.NONE.expect(new Change.Retargeted(reference.site(), reference.target(), r.target()));
@@ -50,8 +60,21 @@ public sealed interface Primitive {
     record Rename(ElementId element, String name) implements Primitive {
     }
 
-    /** Sets an attribute of an element: a fact, or one only the projection knows. */
+    /**
+     * Sets an attribute of an element as text: a fact (a declared type or a superclass as written, a visibility, a
+     * body), or one only the projection knows. To make a declaration name another workspace type, use {@link Link}.
+     */
     record Set(ElementId element, String attribute, String value) implements Primitive {
+    }
+
+    /**
+     * Makes a declaration name a workspace type: the class it extends, one more interface it implements, or the type
+     * a field, parameter or method is declared with.
+     */
+    record Link(ElementId element, Mode mode, ElementId target) implements Primitive {
+        public Link {
+            if (!mode.isLink()) throw new IllegalArgumentException("not a link: " + mode);
+        }
     }
 
     /** Points one reference at another target, changing the shape of the use as needed. */
