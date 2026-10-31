@@ -21,6 +21,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -296,6 +297,15 @@ public final class JavaProject implements Program {
                 needed.add(resolved);
             }
         }
+        var usingUnits = new java.util.HashSet<CompilationUnit>(); // any use: declared types, new, static receivers
+        for (var ref : graph().referencesTo(type.id())) {
+            referenceNodes.get(ref.id()).findCompilationUnit().ifPresent(usingUnits::add);
+        }
+        for (var constructor : graph().children(type.id()).stream().filter(e -> e.kind() == Kind.CONSTRUCTOR).toList()) {
+            for (var ref : graph().referencesTo(constructor.id())) {
+                referenceNodes.get(ref.id()).findCompilationUnit().ifPresent(usingUnits::add);
+            }
+        }
         var edits = new LinkedHashMap<String, String>();
         for (var entry : units.entrySet()) {
             var path = entry.getKey();
@@ -304,7 +314,7 @@ public final class JavaProject implements Program {
             var unitPackage = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
             var imported = cu.getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic()
                     && i.getNameAsString().equals(type.qualified())).findFirst();
-            var uses = cu.findAll(ClassOrInterfaceType.class).stream().anyMatch(t -> type.qualified().equals(resolveType(t)));
+            var uses = usingUnits.contains(cu);
             var code = source(path);
             if (imported.isPresent() && unitPackage.equals(pkg.qualified())) edits.put(path, Imports.remove(code, cu, imported.get()));
             else if (imported.isPresent()) edits.put(path, Imports.replace(code, imported.get(), newQualified));
@@ -379,6 +389,7 @@ public final class JavaProject implements Program {
             throw new PrimitiveRejected("projection.duplicate", owner + name + rest + " already exists");
         }
         uses.forEach(use -> use.setName(name));
+        methodReferencesTo(element).forEach(reference -> reference.setIdentifier(name));
         transfer(element.qualified(), owner + name + rest);
         changed();
     }
@@ -439,6 +450,15 @@ public final class JavaProject implements Program {
             var fixed = address.replaceAll("\\b" + java.util.regex.Pattern.quote(oldName) + "\\b", newName);
             if (!fixed.equals(address)) transfer(address, fixed);
         }
+    }
+
+    private List<MethodReferenceExpr> methodReferencesTo(Element element) {
+        var g = graph();
+        var references = new ArrayList<MethodReferenceExpr>();
+        for (var ref : g.referencesTo(element.id())) {
+            if (referenceNodes.get(ref.id()) instanceof MethodReferenceExpr reference) references.add(reference);
+        }
+        return references;
     }
 
     /** Expressions anywhere in the workspace that use the element at {@code address}, from the current graph. */
@@ -868,16 +888,21 @@ public final class JavaProject implements Program {
                     addParams(elements, method, address, methodId);
                 }
             }
+        }
+        // references only once every element has its id: a use may point into a unit processed later
+        for (var cu : units.values()) {
             var uses = new ArrayList<Node>();
             uses.addAll(fieldUses(cu));
             uses.addAll(cu.findAll(MethodCallExpr.class));
             uses.addAll(cu.findAll(ClassOrInterfaceType.class));
             uses.addAll(cu.findAll(ObjectCreationExpr.class));
+            uses.addAll(cu.findAll(MethodReferenceExpr.class));
             uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
             for (var use : uses) {
                 var target = switch (use) {
                     case MethodCallExpr call -> resolveMethod(call);
                     case ObjectCreationExpr creation -> resolveConstructor(creation);
+                    case MethodReferenceExpr reference -> resolveMethodReference(reference);
                     case ClassOrInterfaceType type -> resolveType(type);
                     default -> {
                         var field = resolveField((Expression) use);
@@ -902,6 +927,7 @@ public final class JavaProject implements Program {
         var id = site + "@" + ordinal;
         nodes.put(id, use);
         var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
+                : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                 : ((NodeWithSimpleName<?>) use).getNameAsString();
         var mode = use instanceof NameExpr && !target.contains("#") ? "type" : modeOf(use);
         references.add(new Reference(id, site, ids.get(target), name, mode));
@@ -941,7 +967,7 @@ public final class JavaProject implements Program {
     }
 
     private static String modeOf(Node use) {
-        if (use instanceof MethodCallExpr) return "call";
+        if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr) return "call";
         if (use instanceof ObjectCreationExpr) return "new";
         if (use instanceof ClassOrInterfaceType) return "type";
         var parent = use.getParentNode().orElseThrow();
@@ -958,7 +984,50 @@ public final class JavaProject implements Program {
     }
 
     /** Address of the method the call resolves to, or null if unresolvable. */
-    private static String resolveMethod(MethodCallExpr call) {
+    private String resolveMethod(MethodCallExpr call) {
+        var resolved = resolveMethodStrictly(call);
+        return resolved != null ? resolved : resolveThroughBounds(call);
+    }
+
+    /**
+     * For a receiver typed by a type variable ({@code T extends Item}), which the solver does not resolve: the one
+     * workspace method of that name and arity in the variable's bounds.
+     */
+    private String resolveThroughBounds(MethodCallExpr call) {
+        try {
+            if (call.getScope().isEmpty()) return null;
+            var type = call.getScope().get().calculateResolvedType();
+            if (!type.isTypeVariable()) return null;
+            var candidates = new ArrayList<String>();
+            for (var bound : type.asTypeParameter().getBounds()) {
+                var owner = bound.getType().asReferenceType().getQualifiedName();
+                var prefix = owner + "#" + call.getNameAsString() + "(";
+                for (var address : ids.keySet()) {
+                    if (!address.startsWith(prefix) || address.contains("/")) continue;
+                    var params = address.substring(prefix.length(), address.length() - 1);
+                    var arity = params.isEmpty() ? 0 : params.split(",").length;
+                    if (arity == call.getArguments().size()) candidates.add(address);
+                }
+            }
+            return candidates.size() == 1 ? candidates.getFirst() : null;
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
+    /** Address of a method reference's method ({@code Book::code}), or null. */
+    private static String resolveMethodReference(MethodReferenceExpr reference) {
+        try {
+            var method = reference.resolve();
+            var params = new ArrayList<String>();
+            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(simple(method.getParam(i).getType().describe()));
+            return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
+    private static String resolveMethodStrictly(MethodCallExpr call) {
         try {
             var method = call.resolve();
             var params = new ArrayList<String>();

@@ -167,8 +167,8 @@ class MoveTypeTest {
         var result = ws.invoke("move-type", Map.of("type", "a.Status", "package", "b"));
 
         assertThat(result.violations()).isEmpty();
-        // the projection only follows declared types; javac reports the receiver and knowledge deduces the import
-        assertThat(result.repairs()).containsExactly("import b.Status");
+        // the receiver Status.PAID is a type reference too, so the projection adds the import itself
+        assertThat(result.repairs()).isEmpty();
         assertThat(ws.source("a/Order.java")).contains("import b.Status;");
         assertThat(ws.diagnostics()).isEmpty();
     }

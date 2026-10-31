@@ -5,6 +5,7 @@ refactoring generate-getter "public T getX() { return x; } for a field x of type
   param field : element(FIELD) "the field to read"
   getter := create METHOD ${owner(field)} get${cap(name(field))}
   set ${getter} visibility public
+  set ${getter} static ${attr(field, "static")}
   set ${getter} type ${type(field)}
   set ${getter} body "return #{${field}};"
   return ${getter}
@@ -14,9 +15,14 @@ refactoring generate-setter "public void setX(T x) { this.x = x; } for a field x
   param field : element(FIELD) "the field to write"
   setter := create METHOD ${owner(field)} set${cap(name(field))}
   set ${setter} visibility public
+  set ${setter} static ${attr(field, "static")}
   p := create PARAM ${setter} ${name(field)}
   set ${p} type ${type(field)}
-  set ${setter} body "this.#{${field}} = #{${p}};"
+  if eq(attr(field, "static"), "true")
+    set ${setter} body "#{${owner(field)}}.#{${field}} = #{${p}};"
+  else
+    set ${setter} body "this.#{${field}} = #{${p}};"
+  end
   return ${setter}
 end
 
