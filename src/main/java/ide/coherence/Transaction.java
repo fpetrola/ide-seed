@@ -17,6 +17,7 @@ public final class Transaction implements Program {
     private final Program program;
     private final Object checkpoint;
     private ProgramGraph baseline;
+    private final boolean compiled;
     private final List<String> steps = new ArrayList<>();
     private int depth;
 
@@ -24,11 +25,12 @@ public final class Transaction implements Program {
         this.program = program;
         this.checkpoint = program.checkpoint();
         this.baseline = program.graph();
+        this.compiled = program.diagnostics().isEmpty();
     }
 
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else rolls back. */
     public Result commit(Repairer repairer) {
-        var outcome = repairer.stabilize(baseline, program);
+        var outcome = repairer.stabilize(baseline, compiled, program);
         outcome.repairs().forEach(repair -> steps.add("! " + repair));
         if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps);
         program.rollback(checkpoint);

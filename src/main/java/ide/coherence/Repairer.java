@@ -6,6 +6,7 @@ import ide.graph.ProgramGraph;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Verifies and, while violations remain, takes the first one and tries its plans cheapest first from a saved
@@ -31,11 +32,15 @@ public final class Repairer {
         this.remedies = List.copyOf(remedies);
     }
 
-    public Outcome stabilize(ProgramGraph baseline, Program program) {
+    /**
+     * @param compiled whether the program compiled before the transaction; only then is it held to compile after
+     *                 (the compiler view runs once the graph views are clean, it is the slowest)
+     */
+    public Outcome stabilize(ProgramGraph baseline, boolean compiled, Program program) {
         var repairs = new ArrayList<String>();
         var branches = 0;
         for (var round = 0; round < MAX_ROUNDS; round++) {
-            var violations = verifier.verify(baseline, program.graph());
+            var violations = verify(baseline, compiled, program);
             if (violations.isEmpty()) return new Outcome(repairs, List.of());
             var target = violations.getFirst();
             var plans = remedies.stream().flatMap(r -> r.plans(target, program, rules).stream()).toList();
@@ -49,7 +54,7 @@ public final class Repairer {
                     program.rollback(saved);
                     continue;
                 }
-                if (!same(target, verifier.verify(baseline, program.graph()))) {
+                if (!same(target, verify(baseline, compiled, program))) {
                     kept = plan.title();
                     break;
                 }
@@ -58,12 +63,21 @@ public final class Repairer {
             if (kept == null) return new Outcome(repairs, violations);
             repairs.add(kept);
         }
-        return new Outcome(repairs, verifier.verify(baseline, program.graph()));
+        return new Outcome(repairs, verify(baseline, compiled, program));
+    }
+
+    private List<Violation> verify(ProgramGraph baseline, boolean compiled, Program program) {
+        var violations = verifier.verify(baseline, program.graph());
+        if (!violations.isEmpty() || !compiled) return violations;
+        return program.diagnostics().stream().map(d -> new Violation(d.code(), null, null,
+                d.path() + ":" + d.line() + ": " + d.message(),
+                Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())))).toList();
     }
 
     /** Whether the violation is still among {@code violations} (same code, site and target). */
     private static boolean same(Violation violation, List<Violation> violations) {
         return violations.stream().anyMatch(v -> v.code().equals(violation.code())
-                && java.util.Objects.equals(v.site(), violation.site()) && java.util.Objects.equals(v.target(), violation.target()));
+                && java.util.Objects.equals(v.site(), violation.site()) && java.util.Objects.equals(v.target(), violation.target())
+                && v.facts().equals(violation.facts()));
     }
 }

@@ -61,6 +61,7 @@ public final class Knowledge implements Remedy, QuickFix {
         var facts = new HashMap<String, Object>();
         if (violation.site() != null) facts.put("site", violation.site().value());
         if (violation.target() != null) facts.put("target", violation.target().value());
+        facts.putAll(violation.facts());
         return search(violation.code(), facts, program, rules).plans();
     }
 
