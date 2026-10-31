@@ -12,7 +12,9 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
@@ -115,7 +117,8 @@ public final class JavaProject implements Program {
         var text = LexicalPreservingPrinter.print(node).strip();
         node.remove();
         insertMember(typeDeclaration(target.qualified()), text);
-        transfer(element.qualified(), target.qualified() + "#" + element.name());
+        var signature = element.qualified().substring(element.qualified().indexOf('#'));
+        transfer(element.qualified(), target.qualified() + signature);
     }
 
     /** Changes an attribute of an element: {@code visibility} of a member, {@code superclass} of a class. */
@@ -181,12 +184,27 @@ public final class JavaProject implements Program {
                             method.getNameAsString(), typeId, address, attributes(method)));
                 }
             }
-            for (var expr : fieldUses(cu)) {
-                var target = resolveField(expr);
-                if (target != null) references.add(new Reference(siteOf(expr), ids.get(target)));
-            }
+            for (var expr : fieldUses(cu)) addReference(references, expr, resolveField(expr));
+            for (var call : cu.findAll(MethodCallExpr.class)) addReference(references, call, resolveMethod(call));
         }
         return new ProgramGraph(elements, references);
+    }
+
+    /** Records a use of a workspace element; uses of JDK elements and unresolved ones are not tracked yet. */
+    private void addReference(List<Reference> references, Node site, String target) {
+        if (target != null && ids.containsKey(target)) references.add(new Reference(siteOf(site), ids.get(target)));
+    }
+
+    /** Address of the method the call resolves to, or null if unresolvable. */
+    private static String resolveMethod(MethodCallExpr call) {
+        try {
+            var method = call.resolve();
+            var params = new ArrayList<String>();
+            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(method.getParam(i).getType().describe());
+            return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
     }
 
     private static List<Expression> fieldUses(CompilationUnit cu) {
@@ -218,9 +236,18 @@ public final class JavaProject implements Program {
         return field.map(v -> ids.get(typeName + "#" + v.getNameAsString())).orElseGet(() -> ids.get(typeName));
     }
 
+    /** {@code a.B#m(int,java.lang.String)}: parameter types resolved, so declarations and calls agree. */
     private static String methodAddress(String typeName, MethodDeclaration method) {
         return typeName + "#" + method.getNameAsString() + method.getParameters().stream()
-                .map(p -> p.getType().asString()).collect(Collectors.joining(",", "(", ")"));
+                .map(p -> describe(p.getType())).collect(Collectors.joining(",", "(", ")"));
+    }
+
+    private static String describe(Type type) {
+        try {
+            return type.resolve().describe();
+        } catch (RuntimeException unresolved) {
+            return type.asString();
+        }
     }
 
     private static Map<String, String> typeAttributes(ClassOrInterfaceDeclaration type) {

@@ -62,6 +62,28 @@ public final class ProgramGraph {
         return false;
     }
 
+    /** The method that {@code method} overrides: the nearest one with the same signature up the superclass chain. */
+    public Optional<Element> overridden(Element method) {
+        var signature = signature(method);
+        var type = Optional.ofNullable(element(method.parent()).attribute("superclass")).flatMap(this::find);
+        for (; type.isPresent(); type = Optional.ofNullable(type.get().attribute("superclass")).flatMap(this::find)) {
+            var owner = type.get().id();
+            var match = elements.values().stream()
+                    .filter(e -> e.kind() == Kind.METHOD && owner.equals(e.parent()) && signature(e).equals(signature))
+                    .findFirst();
+            if (match.isPresent()) return match;
+        }
+        return Optional.empty();
+    }
+
+    public List<Element> methods() {
+        return elements.values().stream().filter(e -> e.kind() == Kind.METHOD).toList();
+    }
+
+    private static String signature(Element method) {
+        return method.qualified().substring(method.qualified().indexOf('#'));
+    }
+
     /** The outermost type enclosing (or equal to) the element. */
     public Element topLevel(ElementId id) {
         var element = element(id);

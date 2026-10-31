@@ -9,7 +9,7 @@ import ide.java.JavaRules;
 import ide.refactor.Args;
 import ide.refactor.Ctx;
 import ide.refactor.ExtractSuperclass;
-import ide.refactor.PullUpField;
+import ide.refactor.PullUp;
 import ide.refactor.Refactoring;
 
 import java.util.List;
@@ -23,7 +23,7 @@ public final class Workspace {
 
     private final JavaProject project;
     private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility()));
-    private final Map<String, Refactoring> refactorings = Stream.of(new PullUpField(), new ExtractSuperclass())
+    private final Map<String, Refactoring> refactorings = Stream.of(PullUp.field(), PullUp.method(), new ExtractSuperclass())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
 
     private Workspace(JavaProject project) {

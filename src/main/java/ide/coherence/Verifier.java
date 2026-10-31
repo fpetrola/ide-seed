@@ -1,5 +1,6 @@
 package ide.coherence;
 
+import ide.graph.ElementId;
 import ide.graph.LanguageRules;
 import ide.graph.ProgramGraph;
 import ide.graph.Reference;
@@ -7,6 +8,7 @@ import ide.graph.Reference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Compares the graph after a transaction against its baseline and reports broken invariants. */
 public final class Verifier {
@@ -28,7 +30,30 @@ public final class Verifier {
         for (var ref : after.references()) {
             if (!rules.accessible(after, ref.site(), ref.target())) violations.add(inaccessible(ref, after));
         }
+        violations.addAll(dispatch(baseline, after));
         return violations;
+    }
+
+    /** Overriding must be the same before and after: no override lost, none gained. */
+    private static List<Violation> dispatch(ProgramGraph baseline, ProgramGraph after) {
+        var before = overrides(baseline);
+        var now = overrides(after);
+        var violations = new ArrayList<Violation>();
+        now.forEach((method, overridden) -> {
+            if (!overridden.equals(before.get(method))) violations.add(new Violation("dispatch.new-override", method, overridden,
+                    after.element(method).qualified() + " would override " + after.element(overridden).qualified()));
+        });
+        before.forEach((method, overridden) -> {
+            if (!now.containsKey(method)) violations.add(new Violation("dispatch.lost-override", method, overridden,
+                    baseline.element(method).qualified() + " no longer overrides " + baseline.element(overridden).qualified()));
+        });
+        return violations;
+    }
+
+    private static Map<ElementId, ElementId> overrides(ProgramGraph graph) {
+        var overrides = new HashMap<ElementId, ElementId>();
+        for (var method : graph.methods()) graph.overridden(method).ifPresent(o -> overrides.put(method.id(), o.id()));
+        return overrides;
     }
 
     /** A baseline reference that no longer binds to the same element. */
