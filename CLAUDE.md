@@ -30,7 +30,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   CompletionContext, PrimitiveRejected.
 - `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
-  with a Builder; the stand-in for a driver in the tests of engine and refactoring).
+  with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,
+  refactoring and knowledge).
 - `java` (projection, JavaParser) — the Java driver, in layers that only know the ones below (LayersTest):
   `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses),
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
@@ -38,15 +39,20 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The AST is never edited. Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
-- `engine` (projection) — Transaction (intercepts `apply`, folds each declared Change into the baseline, pins),
+- `engine` (projection) — Transaction (intercepts `apply`, folds each declared Change into the baseline, pins;
+  `attempt` undoes what is refused or does not verify; a point restores the baseline and pins too),
   Verifier (a list of Views compared through a Comparison: BindingView, AccessView, DispatchView, and CompilerView,
   costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
   only place that writes sigils), Result, Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
-- `refactoring` (projection) — Refactoring/Ctx/Args, Primitives (read off the Primitive records: nothing registered
-  by hand), ChangeSignature (the only Java composite); the `.ref`
-  language in `ide.refactoring.script`; the catalog `refactoring/src/main/resources/ide/refactoring/standard.ref`.
+- `refactoring` (projection, engine) — Refactoring (`apply(Run, Args)` answers an ElementId), Library, Run (one
+  kind, two places: `Run.in(tx, repairer, library)` inside a transaction; `Run.on(projection, library)` with no
+  engine, which is how scripts are tested), Args (the one place an id-or-address is resolved), Value (Elem, Ref,
+  Text, Bool, Items), Primitives (read off the Primitive records: nothing registered by hand), ChangeSignature (the
+  only Java composite); the `.ref` language in `ide.refactoring.script`; the catalog
+  `refactoring/src/main/resources/ide/refactoring/standard.ref`.
 - `knowledge` (engine, refactoring) — goals/effects planner over
-  `knowledge/src/main/resources/ide/knowledge/knowledge.ref`; no remedy or quick fix is written in Java.
+  `knowledge/src/main/resources/ide/knowledge/knowledge.ref`; effects run on the real Run, straight on the
+  projection; no remedy or quick fix is written in Java.
 - `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — `Workspace` over a
   `JavaProjection`: transactions,
   library, undo, log, fixes, completion, navigation, capabilities.
@@ -73,7 +79,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - Product tests live in each module and use the product alone, in its own vocabulary; acceptance scenarios live in
   `acceptance`. The proposed double loop is in ARCHITECTURE.md, section "Cómo se testea".
 - A new dependency between products is a pom change, made in the same commit and reflected in ARCHITECTURE.md.
-- Catalog scripts stay within 20 statements (CatalogBudgetTest).
+- Catalog scripts stay within 20 statements, and every Java body in them is marked `# leak: Java body` (CatalogTest).
 - UI and MCP come last.
 
 ## Architecture and migration

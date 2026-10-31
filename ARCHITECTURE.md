@@ -40,13 +40,14 @@ refactorings y el conocimiento no pueden probarse solos, y la regla de autonomí
 La prueba de vocabulario, en el código que une todo:
 
 ```java
-var tx = engine.open(projection);            // engine
-runtime.in(tx).call(refactoring, args);      // refactoring
-var result = tx.close(repairer);             // engine
-session.record(result);                      // session
+var tx = new Transaction(projection);                    // engine
+Run.in(tx, repairer, library).call(refactoring, args);   // refactoring
+var result = tx.commit(repairer);                        // engine
+session.record(result);                                  // session
 ```
 
-Si para escribir eso hace falta más, a algún producto le falta un concepto.
+Si para escribir eso hace falta más, a algún producto le falta un concepto. Hoy hace falta algo de más: el
+reparador entra dos veces, porque la transacción no sabe cómo se la juzga (decisión 17, propuesta).
 
 ## 3. Principios
 
@@ -104,7 +105,7 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | projection-kit | projection, JUnit, AssertJ                              | el contrato como tests y la proyección en memoria |
 | java        | projection, JavaParser                                     | el driver de Java                            |
 | engine      | projection                                                 | transacciones verificadas                    |
-| refactoring | projection                                                 | refactorings, runtime, lenguaje `.ref`, catálogo |
+| refactoring | projection, engine                                         | refactorings, run, lenguaje `.ref`, catálogo |
 | knowledge   | engine, refactoring                                        | planificador por metas                       |
 | session     | java, engine, refactoring, knowledge; JavaParser en runtime | el ensamblado                                |
 | acceptance  | session, solo para tests                                   | escenarios transversales, samples, reglas    |
@@ -112,13 +113,14 @@ pom declara solo los productos que usa, y el pom es el mapa:
 Cómo se hace cumplir:
 
 - Un producto compila contra lo que declara y lo que está debajo de eso; nada de arriba ni de al lado.
-- `refactoring` hoy declara solo `projection`; cuando su runtime necesite la transacción (fase 5) declarará `engine`.
+- `refactoring` declara `engine` desde la fase 5: un run corre dentro de una transacción.
 - Solo `java` compila contra JavaParser: `session` lo recibe en runtime, para ejecutar el driver.
 - javac viene con el JDK, así que "solo `java` usa la API del compilador" lo verifica ArchUnit, igual que "solo
   `knowledge` implementa remedios". Son las dos reglas que Maven no puede expresar, y viven en `acceptance`.
 - `acceptance` no es un producto: es donde los productos se encuentran.
 - `projection-kit` es lo que bajaría quien escribe un driver: `java` lo declara para correr el contrato en sus
-  tests; `engine` y `refactoring` lo declaran para probarse sobre la proyección en memoria. Siempre solo para tests.
+  tests; `engine`, `refactoring` y `knowledge` lo declaran para probarse sobre la proyección en memoria. Siempre solo
+  para tests.
 
 De dónde viene cada cosa:
 
@@ -227,7 +229,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
   el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
   mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo
-  que permite probar `engine`, `refactoring` y `knowledge` solos.
+  que permite probar `engine`, `refactoring` y `knowledge` solos. Trae dos reglas de lenguaje: `OPEN`, donde nada
+  está restringido, y `PRIVATE_TO_TOP_LEVEL`, donde un privado se accede solo desde su tipo de nivel superior.
 - **Qué ignora.** Refactorings, transacciones, conocimiento, sesión.
 - **Estado actual** (fase 2 cerrada, 2026-10-31). `Projection` es `program`, `apply`, `edit`, `snapshot` y `restore`
   tipados, `rules`, `diagnostics` y `completionContext`. El texto (`files`, `sources`) queda en el driver de Java:
@@ -280,60 +283,73 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Para qué lo usarías.** Cualquier transformación que deba preservar invariantes y explicar qué pasó: migraciones
   de esquema, cambios de configuración.
 - **Dominio.**
-  - `Transaction`: la línea base (el `Program` de antes con las expectativas plegadas), los pins, el rastro, el
-    checkpoint inicial y marcas (`Mark`) para intentos. Intercepta `apply(Primitive)`: delega a la proyección,
-    pliega las expectativas del `Change`, acumula pins, registra el paso. No interpreta primitivos.
+  - `Transaction`: la línea base (el `Program` de antes con las expectativas plegadas), los pins, el rastro y el
+    punto inicial. Intercepta `apply(Primitive)`: delega a la proyección, pliega las expectativas del `Change`,
+    acumula pins, registra el paso. No interpreta primitivos. Un punto (`snapshot`) guarda también la línea base y
+    los pins: volver a él olvida lo declarado desde entonces. `attempt(label, body, repairer)` corre parte del
+    cambio como intento: si lo rechazan o no verifica, se deshace y queda en el rastro como descartado.
   - `View`: `check(baseline, after, rules)` devuelve violaciones. Vistas: Binding (perdida, religada, sin resolver),
     Access, Dispatch (overrides perdidos o nuevos), Compiler (solo si el código compilaba antes; corre última porque
     es la más cara). Futuras: Projection (direcciones duplicadas), Init.
   - `Verifier`: una lista de vistas más la exención de lo que ya estaba roto antes de la transacción.
   - `Violation`: código estable `vista.tipo`, site, target, hechos para los remedios.
-  - `Remedy` y `QuickFix`: proponen `Plan`s para una violación o un diagnóstico. `Plan`: título, preguntas (asks),
-    acción sobre la proyección.
+  - `Remedy` y `QuickFix`: proponen `Plan`s para una violación o un diagnóstico, sobre la proyección, que trae sus
+    reglas. `Plan`: título, preguntas (asks), acción sobre la proyección.
   - `Repairer`: toma la primera violación, prueba planes sin preguntas del más barato al más caro desde un punto
     guardado; conserva el que hace desaparecer esa violación sin mover un pin; topes de 10 rondas y 16 ramas.
-  - `Trace`: árbol de `Step` con tipo (call, primitive, repair, attempt, discarded, obligation, violation,
-    planKept, planUndone), etiqueta e hijos. Un único render a líneas con sigilos (`.`, `'`, `!`, `X`, `?`, `:`).
+  - `Trace`: árbol de pasos con tipo (call, primitive, question, answer, dropped, assumed, note), etiqueta e hijos.
+    Un único render a líneas con sigilos (`.`, `'`, `?`, `!`, `X`, `:`).
   - `Result`: aplicado o abortado, violaciones, reparaciones, rastro, obligaciones y garantía (`guaranteed` o
     `assumed`).
 - **Qué ignora.** Lenguajes, scripts, conocimiento, sesión.
 - **Prueba de autonomía.** Sobre `MemoryProjection`, con una vista y un remedio escritos en el test: llega al punto
   fijo, respeta los topes, no mueve pins, deshace cuando no puede.
-- **Estado actual** (fase 4 cerrada, 2026-10-31). `Transaction` intercepta `apply`, pliega el `Change` declarado y
+- **Estado actual** (fase 5 cerrada, 2026-10-31). `Transaction` intercepta `apply`, pliega el `Change` declarado y
   acumula pins tipados; no conoce ningún atributo. Las vistas son una clase cada una (`BindingView`, `AccessView`,
   `DispatchView`, `CompilerView`) detrás de `View` y `Comparison`; `Verifier` es una lista de vistas, y las costosas
   corren solo si las baratas no ven nada. La exención de lo que ya estaba roto vive en la vista que la necesita
   (acceso). `Trace` es un árbol de datos y el único lugar que escribe sigilos; el planificador de `knowledge` también
   responde su deducción como `Trace`. Tests propios sobre la proyección en memoria: transacción, reparador, rastro y
-  cada vista sola.
+  cada vista sola. En la fase 5 el intento pasó de la sesión a la transacción, y remedios y quick fixes dejaron de
+  recibir las reglas aparte de la proyección.
+- **Abierto.** El reparador entra dos veces en el código que coordina: al run, para juzgar intentos, y al
+  `commit`. Propuesta (decisión 17): la transacción nace con su reparador, `new Transaction(projection, repairer)`,
+  y `attempt(label, body)` y `commit()` no lo reciben; el run queda `Run.in(tx, library)`.
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
-- **Qué es.** Una biblioteca de refactorings, un runtime que los ejecuta dentro de una transacción, y el lenguaje
-  `.ref` para escribirlos como composición de primitivos y de otros refactorings.
+- **Qué es.** Una biblioteca de refactorings, un run que los ejecuta, y el lenguaje `.ref` para escribirlos como
+  composición de primitivos y de otros refactorings.
 - **Para qué lo usarías.** Para que usuarios o equipos definan sus propios refactorings sin escribir Java.
 - **Dominio.**
-  - `Refactoring`: id, descripción, parámetros, nivel (primitive, script, composite), `apply(Runtime, Args)`.
+  - `Refactoring`: id, descripción, parámetros, nivel (primitive, script, composite), `apply(Run, Args)`, que
+    responde el elemento que produjo o sobre el que trabajó.
   - `Library`: registro y búsqueda. Los primitivos se exponen como refactorings mecánicamente desde los records de
     `Primitive`; `define(text)` agrega scripts.
-  - `Runtime`: lo que un refactoring ve mientras corre. `call(id, args)` con anidamiento en el rastro;
-    `attempt(label, body)` con marca y verificación parcial; `oblige(assumption)`; `program()`; `rules()`. Es único:
-    lo usan la sesión y `knowledge`.
+  - `Run`: lo que un refactoring ve mientras corre: `program()`, `rules()`, `call(id, args)`, `attempt(label, body)`,
+    `oblige(assumption)`. Es uno solo y corre en dos lugares:
+    - Dentro de una transacción (`Run.in`, lo que hace la sesión): las llamadas se anidan en el rastro, un intento
+      rechazado o que no verifica se deshace, y una suposición es una obligación del resultado.
+    - Directo sobre una proyección (`Run.on`: un plan, o un script bajo test): no hace falta el motor. Un intento
+      se deshace si lo rechazan, y suponer se rechaza, porque una reparación no puede suponer lo que no verifica.
+  - `Value`: lo que los refactorings se pasan y los scripts calculan: `Elem` y `Ref` (por id), `Text`, `Bool` e
+    `Items`. La ambigüedad "¿es un id o una dirección?" se resuelve una vez, en `Args`. Dentro de un script, un
+    texto donde se espera un elemento es una dirección: los ids no se escriben a mano.
   - El lenguaje: `ScriptParser`, `Stmt` (let, call, for, if, try, require, oblige, fail, return), `Expr` (literal,
-    variable, función, filtro), `Functions` (consultas sobre el programa y las reglas), `Value` (Elem, Ref, Text,
-    Bool, Items). La ambigüedad "¿es un id o una dirección?" se resuelve una vez, en `Args`.
-  - El catálogo `standard.ref`, con presupuesto de 20 sentencias por script (`CatalogBudgetTest`).
+    variable, función, filtro) y `ScriptFunctions` (consultas sobre el programa y las reglas). Quien embebe scripts,
+    como los efectos de `knowledge`, le pregunta al lenguaje dónde termina un bloque (`ScriptParser.blockLength`).
+  - El catálogo `standard.ref`, con presupuesto de 20 sentencias por script y sus fugas marcadas (`CatalogTest`).
   - `ChangeSignature`: el único compuesto escrito en Java, porque su parámetro es una lista de registros.
-- **Qué ignora.** Verificación (se la pide al motor a través del runtime), lenguajes, sesión.
-- **Prueba de autonomía.** Un script sobre `MemoryProjection` produce la secuencia de primitivos esperada (lo que
-  hoy hace `expand`), sin verificar nada.
-- **Estado actual.** `ide.refactor` y `ide.refactor.script`. El runtime es una clase anónima dentro de `Workspace`;
-  `Knowledge` tiene otro propio donde `attempt` no intenta y `oblige` no obliga. Los primitivos se leen del
-  vocabulario (fase 2): nada se registra a mano. Los valores de los scripts son strings. Fugas de Java en el catálogo: plantillas de cuerpo con `this.` y
-  `new` (generate-getter, generate-setter, introduce-factory) y `set import` en el conocimiento.
+- **Qué ignora.** Lenguajes y sesión. De la verificación sabe solo que existe: la pide a la transacción en la que
+  corre.
+- **Prueba de autonomía.** `RunTest`, sobre `MemoryProjection`: encapsulate-field corre sin motor; dentro de una
+  transacción su expansión da la secuencia esperada; y `try` y `oblige` se comportan como se espera en cada lugar.
+- **Estado actual** (fase 5 cerrada, 2026-10-31). `ide.refactoring` (`Refactoring`, `Library`, `Run`, `Args`,
+  `Value`, `Primitives`, `ChangeSignature`) e `ide.refactoring.script`. Los primitivos se leen del vocabulario:
+  nada se registra a mano. Fugas de Java, marcadas donde están: las plantillas de cuerpo de generate-getter,
+  generate-setter e introduce-factory en el catálogo, y `import` e `initializer` en el conocimiento.
 - **Abierto.** Un lenguaje neutral de cuerpos para las plantillas (`return field`, `assign field param`,
-  `return new owner(params)`) que la proyección renderice. Hasta entonces las plantillas son Java y se marcan como
-  tales en el catálogo.
+  `return new owner(params)`) que la proyección renderice (decisión 12, etapa 2).
 
 ### 5.7 `knowledge`: planificador por metas
 
@@ -341,12 +357,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   predicado, bajo qué condición, con qué costo, con qué preguntas), propone planes ordenados por costo con una traza
   explicable. Podría planificar otra cosa que código.
 - **Dominio.** `Goal(code, predicate)`, `Effect(name, title, makes, when, for, cost, asks, do)`, `Predicate`,
-  `Search` con su traza, `Plan`. Implementa `Remedy` y `QuickFix` del motor y ejecuta acciones por el `Runtime` de
+  `Search` con su traza, `Plan`. Implementa `Remedy` y `QuickFix` del motor y ejecuta acciones por el `Run` de
   `refactoring`. ArchUnit garantiza que nadie más implementa `Remedy` ni `QuickFix`.
 - **Qué ignora.** Lenguajes, texto, sesión.
 - **Prueba de autonomía.** Una base de tres efectos sobre predicados inventados, sobre `MemoryProjection`.
-- **Estado actual.** `ide.knowledge`. Casi autónomo: usa helpers estáticos de `Script` en vez de un evaluador de
-  expresiones, y su propio `Ctx` falso.
+- **Estado actual** (fase 5 cerrada, 2026-10-31). `ide.knowledge`, autónomo. Evalúa condiciones y títulos con el
+  lenguaje de scripts (`Script.evaluate`, `Script.render`) y ejecuta los efectos con el `Run` real, directo sobre la
+  proyección que le dan. Ya no tiene un contexto propio donde `attempt` no intentaba y `oblige` no obligaba. Los
+  hechos entran tipados (site y target son elementos) y sus preguntas muestran los elementos por dirección. Tests
+  propios (`KnowledgeTest`) con metas y efectos escritos en el test.
 - **Abierto.** Encadenamiento hacia atrás en varios niveles (la spec pedía 8 niveles, 4 pasos y 12 planes; hoy hay
   un nivel); `fact` e `invariant` del lenguaje de conocimiento.
 
@@ -360,8 +379,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Regla propia.** No contiene lógica de otro dominio; su prueba es la inversa de las demás: que cada línea se lea
   con los términos de los otros productos.
 - **Prueba de autonomía.** Cada colaborador se testea solo; la fachada solo delega.
-- **Estado actual.** `ide.workbench.Workspace`, 501 líneas con reglas, conocimiento, reparador, biblioteca, undo,
-  log, guardado, transacciones, quick fixes, completion, navegación y el registro de capacidades.
+- **Estado actual.** `ide.session.Workspace`, 416 líneas con reglas, conocimiento, reparador, biblioteca, undo,
+  log, guardado, transacciones, quick fixes, completion, navegación y el registro de capacidades. Desde la fase 5 no
+  tiene runtime propio: cada transacción corre su refactoring con `Run.in`.
 
 ### 5.9 `adapters`: cli, ui, mcp
 
@@ -413,16 +433,17 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo                                    | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 |
-|-------------------------------------------|----------------------|---------------------|---------------------|---------------------|
-| program                                   | 8                    | 12                  | 12                  | 12                  |
-| projection-kit                            | (no existía)         | 8                   | 8                   | 8                   |
-| java                                      | 0                    | 8                   | 24                  | 24                  |
-| engine                                    | 0                    | 9                   | 9                   | 17                  |
-| refactoring                               | 1                    | 3                   | 3                   | 3                   |
-| core, projection, knowledge               | 0                    | 0                   | 0                   | 0                   |
-| session                                   | 13                   | 13                  | 13                  | 13                  |
-| acceptance                                | 102                  | 103                 | 104                 | 104                 |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 |
 
 ## 7. Decisiones
 
@@ -442,6 +463,9 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 12 | Cuerpos en plantillas    | lenguaje neutral de cuerpos renderizado por la proyección                                  | diferida, etapa 2 |
 | 13 | Módulos Maven            | un módulo por producto, más `acceptance` para los escenarios transversales                  | tomada, 2026-10-31 (5d641a2) |
 | 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | tomada, 2026-10-31 |
+| 15 | Ejecución                | un único `Run`, dentro de una transacción o directo sobre una proyección; reemplaza a `Ctx` | tomada, 2026-10-31 (6911992) |
+| 16 | Valores de scripts       | `Value` tipado (`Elem`, `Ref`, `Text`, `Bool`, `Items`); id o dirección se resuelve en `Args` | tomada, 2026-10-31 (fb7e3e9) |
+| 17 | Transacción y reparador  | la transacción nace con su reparador; `attempt(label, body)`, `commit()`, `Run.in(tx, library)` | propuesta, para el comienzo de la fase 6 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -464,10 +488,11 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Búsqueda de declaración, unidad y ruta repetida por primitivo (resuelto en 646c9bc) | `ide.java`             | 3    |
 | Vistas no enchufables; vista del compilador dentro del reparador (resuelto en 6bbf600) | `ide.engine`       | 4    |
 | Rastro como strings con sigilos (resuelto en 34a3b0e)                              | `ide.engine`           | 4    |
-| Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge  | `ide.workbench`, `ide.knowledge` | 5 |
-| Valores de scripts como strings; id o dirección resuelto en cada función           | `ide.refactor.script`  | 5    |
-| Plantillas de cuerpo en Java dentro del catálogo; `set import`                     | `standard.ref`, `knowledge.ref` | etapa 2 |
-| Workspace como cajón de todo                                                       | `ide.workbench`        | 6    |
+| Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge (resuelto en 6911992) | `ide.session`, `ide.knowledge` | 5 |
+| Valores de scripts como strings; id o dirección resuelto en cada función (resuelto en fb7e3e9) | `ide.refactoring.script` | 5 |
+| Plantillas de cuerpo en Java dentro del catálogo; `set import` e `initializer` (marcadas donde están en fb7e3e9; `CatalogTest` las cuida) | `standard.ref`, `knowledge.ref` | etapa 2 |
+| El reparador entra dos veces en el código que coordina (decisión 17)                | `ide.engine`, `ide.session` | 6 |
+| Workspace como cajón de todo                                                       | `ide.session`          | 6    |
 
 ## 9. Plan de acción
 
@@ -551,15 +576,29 @@ configuran todavía desde la sesión: usa `Verifier.standard()`; agregar una vis
   árbol; `why` y `why-repair` devuelven el árbol y lo renderizan en el borde.
 - Criterio de cierre: agregar una vista es agregar una clase; los strings con sigilos existen en un solo lugar.
 
-### Fase 5: `refactoring` y `knowledge` como productos
+### Fase 5: `refactoring` y `knowledge` como productos (cerrada, 2026-10-31)
 
-- Objetivo: `Library` y `Runtime` propios; valores tipados; conocimiento sobre el runtime real.
-- Tests rojos: `RuntimeTest` en `refactoring`, sobre `MemoryProjection` (expand de encapsulate-field da la
-  secuencia esperada; semántica de attempt y oblige); `KnowledgeTest` en `knowledge`, sobre `MemoryProjection` con
-  efectos inventados; ArchUnit: `knowledge` no tiene `Ctx` propio.
-- Qué se toca: el runtime sale de `Workspace`; `Knowledge` usa el runtime real; `Value` y `Args` resuelven
-  id-o-dirección una vez; las plantillas Java del catálogo quedan marcadas como fuga conocida.
-- Criterio de cierre: `Workspace` no tiene ningún `Ctx`; un script se prueba sin motor.
+Hecha en tres ciclos: e70079e (`Library`), 6911992 (`Run`) y fb7e3e9 (valores tipados). El plan llamaba `Runtime`
+a lo que quedó como `Run`. La regla de ArchUnit "knowledge no tiene `Ctx` propio" no hizo falta: `Run` es una clase
+final con constructor privado, no hay interfaz que implementar, y el compilador cumple la regla.
+
+Pasar al run real destapó dos cosas que el contexto falso escondía, y cada una se fijó en su producto:
+
+- El parser de conocimiento no contaba `try` como bloque. Ahora el lenguaje de scripts dice dónde termina un bloque.
+- Volver a un punto de una transacción no olvidaba lo declarado desde entonces. Ahora el punto guarda línea base y
+  pins.
+
+Con los valores tipados, `superclass` responde un elemento, y un mensaje de collapse-hierarchy pasó a escribir un
+id; la aceptación ahora lee ese mensaje.
+
+- Objetivo: `Library` y `Run` propios; valores tipados; conocimiento sobre el run real.
+- Tests rojos: `RunTest` en `refactoring`, sobre `MemoryProjection` (expand de encapsulate-field da la secuencia
+  esperada; semántica de attempt y oblige); `KnowledgeTest` en `knowledge`, sobre `MemoryProjection` con efectos
+  inventados.
+- Qué se toca: el run sale de `Workspace`; `Knowledge` usa el run real; `Value` y `Args` resuelven id-o-dirección
+  una vez; las plantillas Java del catálogo quedan marcadas como fuga conocida.
+- Criterio de cierre: `Workspace` no tiene ningún `Ctx`; un script se prueba sin motor. Cumplido: `Ctx` ya no
+  existe, y `RunTest` corre encapsulate-field sobre la proyección en memoria con `Run.on`.
 
 ### Fase 6: `session`
 
@@ -598,7 +637,9 @@ configuran todavía desde la sesión: usa `Verifier.standard()`; agregar una vis
 - **Rastro**: el árbol de lo que pasó en una transacción.
 - **Garantía**: `guaranteed` si nada quedó asumido; `assumed` si hay obligaciones.
 - **Refactoring**: una composición de primitivos y otros refactorings, con parámetros declarados.
-- **Runtime**: lo que un refactoring ve mientras corre dentro de una transacción.
+- **Run**: lo que un refactoring ve mientras corre, dentro de una transacción o directo sobre una proyección.
+- **Valor**: lo que los refactorings se pasan y los scripts calculan: un elemento o una referencia por id, texto, un
+  valor de verdad o una lista.
 - **Capacidad**: esquema más invocación; lo único que los adaptadores conocen.
 - **Test de producto**: usa un producto solo, en su vocabulario, con dobles de lo que necesita de afuera.
 - **Test de contrato**: verifica que cada implementación de una interfaz cumple lo que sus usuarios asumen.
