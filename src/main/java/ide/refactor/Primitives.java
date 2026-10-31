@@ -45,6 +45,9 @@ public final class Primitives {
                     ctx.program().set(element, args.text("attribute"), args.text("value"));
                     return element.value();
                 }),
+                primitive("extract", "Moves statements into a new method", List.of(Param.of("from", "element", "METHOD"),
+                        Param.of("fragment", "text"), Param.of("into", "text")), (ctx, args) -> ctx.program()
+                        .extract(args.element("from", ctx.program().graph()).id(), args.text("fragment"), args.text("into")).value()),
                 primitive("inline", "Replaces a call by the called method's body", List.of(Param.of("call", "text")),
                         (ctx, args) -> {
                             ctx.program().inline(args.text("call"));

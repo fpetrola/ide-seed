@@ -50,6 +50,13 @@ public interface Program {
      */
     void inline(String call);
 
+    /**
+     * Moves the statements of {@code from} on lines {@code fragment} ("first-last") into a new method {@code name}
+     * and calls it there; inputs become parameters, at most one value used afterwards becomes the result.
+     * Refuses fragments with jumps out of them or more than one output.
+     */
+    ElementId extract(ElementId from, String fragment, String name);
+
     /** Points reference {@code ref} at {@code target}, changing the shape of the site as needed. */
     void retarget(String ref, ElementId target);
 }

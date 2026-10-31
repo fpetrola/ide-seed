@@ -17,6 +17,24 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.BreakStmt;
+import com.github.javaparser.ast.stmt.ContinueStmt;
+import com.github.javaparser.ast.stmt.DoStmt;
+import com.github.javaparser.ast.stmt.ForEachStmt;
+import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
+import com.github.javaparser.ast.type.Type;
+
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Expression-level helpers for the body primitives (inline, extract): purity, precedence, parentheses. */
@@ -53,6 +71,85 @@ final class Bodies {
                 && !(e instanceof com.github.javaparser.ast.expr.AssignExpr) && !(e instanceof com.github.javaparser.ast.expr.CastExpr)
                 && !(e instanceof com.github.javaparser.ast.expr.InstanceOfExpr) && !(e instanceof com.github.javaparser.ast.expr.LambdaExpr)
                 || e instanceof MethodCallExpr;
+    }
+
+    /** The statements of the outermost block of {@code method} that lie whole within lines first..last. */
+    static List<Statement> statementsWithin(MethodDeclaration method, int first, int last) {
+        for (var block : method.findAll(BlockStmt.class)) {
+            var inside = block.getStatements().stream().filter(s -> s.getBegin().orElseThrow().line >= first
+                    && s.getEnd().orElseThrow().line <= last).toList();
+            var partial = block.getStatements().stream().anyMatch(s -> !inside.contains(s)
+                    && s.getBegin().orElseThrow().line <= last && s.getEnd().orElseThrow().line >= first);
+            if (!inside.isEmpty() && !partial) return inside;
+        }
+        return List.of();
+    }
+
+    /** A return, or a break/continue whose loop or switch is outside the fragment; null if none. */
+    static Statement jumpOut(List<Statement> fragment) {
+        for (var statement : fragment) {
+            for (var jump : statement.findAll(Statement.class, s -> s instanceof ReturnStmt || s instanceof BreakStmt || s instanceof ContinueStmt)) {
+                if (jump.findAncestor(LambdaExpr.class).filter(l -> statement.isAncestorOf(l)).isPresent()) continue;
+                if (jump instanceof ReturnStmt) return jump;
+                var target = jump.findAncestor(Statement.class, s -> s instanceof ForStmt || s instanceof ForEachStmt
+                        || s instanceof WhileStmt || s instanceof DoStmt || (jump instanceof BreakStmt && s instanceof SwitchStmt));
+                if (target.isEmpty() || !(statement == target.get() || statement.isAncestorOf(target.get()))) return jump;
+            }
+        }
+        return null;
+    }
+
+    /** Data flow of a fragment: locals it reads from before (inputs) and values it sets that are read after. */
+    record Flow(Map<String, Type> inputs, Map<String, Type> outputs, java.util.Set<String> inside) {
+        boolean declaredInside(String name) {
+            return inside.contains(name);
+        }
+    }
+
+    static Flow flow(MethodDeclaration method, List<Statement> fragment) {
+        var start = fragment.getFirst().getBegin().orElseThrow();
+        var end = fragment.getLast().getEnd().orElseThrow();
+        var before = new LinkedHashMap<String, Type>();
+        method.getParameters().forEach(p -> before.put(p.getNameAsString(), p.getType()));
+        for (var v : method.findAll(VariableDeclarator.class)) {
+            if (v.getEnd().orElseThrow().isBefore(start)) before.put(v.getNameAsString(), v.getType());
+        }
+        var inside = new LinkedHashMap<String, Type>();
+        fragment.forEach(s -> s.findAll(VariableDeclarator.class).forEach(v -> inside.put(v.getNameAsString(), v.getType())));
+        var inputs = new LinkedHashMap<String, Type>();
+        var assigned = new java.util.LinkedHashSet<String>();
+        for (var statement : fragment) {
+            for (var name : statement.findAll(NameExpr.class)) {
+                var n = name.getNameAsString();
+                if (before.containsKey(n) && !inside.containsKey(n)) inputs.putIfAbsent(n, before.get(n));
+            }
+            statement.findAll(AssignExpr.class).forEach(a -> {
+                if (a.getTarget() instanceof NameExpr target) assigned.add(target.getNameAsString());
+            });
+            statement.findAll(UnaryExpr.class).forEach(u -> {
+                if (u.getExpression() instanceof NameExpr target) assigned.add(target.getNameAsString());
+            });
+        }
+        var usedAfter = new java.util.HashSet<String>();
+        method.findAll(NameExpr.class).stream().filter(n -> n.getBegin().orElseThrow().isAfter(end))
+                .forEach(n -> usedAfter.add(n.getNameAsString()));
+        var outputs = new LinkedHashMap<String, Type>();
+        inside.forEach((n, t) -> {
+            if (usedAfter.contains(n)) outputs.put(n, t);
+        });
+        assigned.forEach(n -> {
+            if (before.containsKey(n) && !inside.containsKey(n) && usedAfter.contains(n)) outputs.put(n, before.get(n));
+        });
+        return new Flow(inputs, outputs, inside.keySet());
+    }
+
+    /** Shifts lines so the least indented one starts with {@code indent}. */
+    static String reindent(String text, String indent) {
+        var lines = text.lines().toList();
+        var least = lines.stream().filter(l -> !l.isBlank()).mapToInt(l -> l.length() - l.stripLeading().length()).min().orElse(0);
+        var out = new StringBuilder();
+        for (var line : lines) out.append(line.isBlank() ? "" : indent + line.substring(least)).append('\n');
+        return out.toString();
     }
 
     private static final Map<BinaryExpr.Operator, Integer> PRECEDENCE = Map.ofEntries(

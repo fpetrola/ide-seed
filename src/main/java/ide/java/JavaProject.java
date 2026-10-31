@@ -600,6 +600,49 @@ public final class JavaProject implements Program {
         if (!value.equals("package")) modifiers.addFirst(new Modifier(Modifier.Keyword.valueOf(value.toUpperCase())));
     }
 
+    @Override
+    public ElementId extract(ElementId from, String fragment, String name) {
+        requireIdentifier(name);
+        var source = graph().element(from);
+        var method = (MethodDeclaration) declaration(source);
+        var dash = fragment.indexOf('-');
+        var first = Integer.parseInt(fragment.substring(0, dash).strip());
+        var last = Integer.parseInt(fragment.substring(dash + 1).strip());
+        var selected = Bodies.statementsWithin(method, first, last);
+        if (selected.isEmpty()) throw new PrimitiveRejected("extract.fragment", "lines " + fragment + " are not whole statements of one block");
+        var jump = Bodies.jumpOut(selected);
+        if (jump != null) throw new PrimitiveRejected("extract.jump", "'" + jump + "' leaves the fragment");
+        var flow = Bodies.flow(method, selected);
+        if (flow.outputs().size() > 1) {
+            throw new PrimitiveRejected("extract.outputs", "more than one value is used afterwards: " + flow.outputs());
+        }
+        for (var input : flow.inputs().values()) {
+            if (input.isVarType()) throw new PrimitiveRejected("extract.var-type", "cannot name the type of a 'var' input");
+        }
+        var output = flow.outputs().isEmpty() ? null : flow.outputs().keySet().iterator().next();
+        var outputType = output == null ? "void" : flow.outputs().get(output).asString();
+        var params = flow.inputs().entrySet().stream().map(e -> e.getValue().asString() + " " + e.getKey())
+                .collect(Collectors.joining(", "));
+        var path = pathOf(method.findCompilationUnit().orElseThrow());
+        var code = source(path);
+        var begin = selected.getFirst().getBegin().orElseThrow().line;
+        var end = selected.getLast().getEnd().orElseThrow().line;
+        var callIndent = code.substring(Text.lineStart(code, begin)).replaceFirst("(?s)^([ \\t]*).*", "$1");
+        var body = Bodies.reindent(code.substring(Text.lineStart(code, begin), Text.lineStart(code, end + 1)), " ".repeat(8));
+        if (output != null) body += " ".repeat(8) + "return " + output + ";\n";
+        var call = name + "(" + String.join(", ", flow.inputs().keySet()) + ")";
+        var callLine = output == null ? call + ";"
+                : flow.declaredInside(output) ? outputType + " " + output + " = " + call + ";"
+                : output + " = " + call + ";";
+        var edited = code.substring(0, Text.lineStart(code, begin)) + callIndent + callLine + "\n" + code.substring(Text.lineStart(code, end + 1));
+        load(path, edited);
+        var owner = graph().element(source.parent());
+        var modifiers = method.isStatic() ? "private static " : "private ";
+        insertMember(typeDeclaration(owner.qualified()), modifiers + outputType + " " + name + "(" + params + ") {\n" + body + "    }");
+        var created = typeDeclaration(owner.qualified()).getMethodsByName(name).getFirst();
+        return idOf(methodAddress(owner.qualified(), created), Kind.METHOD);
+    }
+
     /**
      * Inlines a call to a method whose body is a single {@code return expr;}: each parameter becomes its argument
      * (parenthesized where precedence needs it), and so does the whole expression at the call site. Refused:

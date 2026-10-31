@@ -72,6 +72,19 @@ public final class ProgramGraph {
         return false;
     }
 
+    /** A copy where one reference from {@code site} to {@code target} is made from {@code newSite} instead. */
+    public ProgramGraph resited(ElementId site, ElementId target, ElementId newSite) {
+        var copy = new ArrayList<>(references);
+        for (var i = 0; i < copy.size(); i++) {
+            var r = copy.get(i);
+            if (r.site().equals(site) && r.target().equals(target)) {
+                copy.set(i, new Reference(r.id(), newSite, target, r.name(), r.mode()));
+                break;
+            }
+        }
+        return new ProgramGraph(elements.values(), copy);
+    }
+
     /** A copy without one reference from {@code site} to {@code target}. */
     public ProgramGraph without(ElementId site, ElementId target) {
         var copy = new ArrayList<>(references);

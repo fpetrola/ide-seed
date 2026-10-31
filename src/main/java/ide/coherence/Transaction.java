@@ -172,6 +172,17 @@ public final class Transaction implements Program {
     }
 
     @Override
+    public ElementId extract(ElementId from, String fragment, String name) {
+        var where = name(from);
+        var created = program.extract(from, fragment, name);
+        for (var moved : program.graph().references()) { // what the fragment used is now used from the new method
+            if (moved.site().equals(created)) baseline = baseline.resited(from, moved.target(), created);
+        }
+        log("' extract " + where + " " + fragment + " -> " + name(created));
+        return created;
+    }
+
+    @Override
     public void inline(String call) {
         var reference = program.graph().reference(call);
         program.inline(call);

@@ -172,3 +172,11 @@ refactoring inline-method "Replaces every call of a method by its body, then del
   end
   delete ${method}
 end
+
+refactoring extract-method "Moves a run of statements into a new private method and calls it"
+  param method : element(METHOD) "the method the statements are in"
+  param lines : text "first-last line of the statements"
+  param name : text "name of the new method"
+  m := extract ${method} ${lines} ${name}
+  return ${m}
+end
