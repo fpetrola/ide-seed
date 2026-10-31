@@ -95,32 +95,37 @@ class PullUpFieldTest {
     }
 
     @Test
-    void pullUpFieldWhoseInitializerNeedsSubclassStateAborts() {
-        var a = """
-                package a;
+    void pullUpFieldDragsItsInitializerDependency() {
+        var ws = Workspace.of(Map.of(
+                "a/A.java", """
+                        package a;
 
-                public class A {
-                }
-                """;
-        var b = """
-                package a;
+                        public class A {
+                        }
+                        """,
+                "a/B.java", """
+                        package a;
 
-                public class B extends A {
+                        public class B extends A {
 
-                    private int y = 1;
-                    protected int x = y;
-                }
-                """;
-        var ws = Workspace.of(Map.of("a/A.java", a, "a/B.java", b));
+                            private int y = 1;
+                            protected int x = y;
+                        }
+                        """));
 
         var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
 
-        assertThat(result.applied()).isFalse();
-        assertThat(result.violations())
-                .extracting(Violation::code)
-                .containsExactly("binding.unresolved");
-        assertThat(result.violations().getFirst().detail()).contains("a.A#x", "a.B#y");
-        assertThat(ws.source("a/A.java")).isEqualTo(a);
-        assertThat(ws.source("a/B.java")).isEqualTo(b);
+        assertThat(result.violations()).isEmpty();
+        assertThat(result.repairs()).containsExactly("pull-up-dependency a.B#y -> a.A");
+        assertThat(ws.source("a/A.java")).isEqualTo("""
+                package a;
+
+                public class A {
+
+                    private int y = 1;
+
+                    protected int x = y;
+                }
+                """);
     }
 }

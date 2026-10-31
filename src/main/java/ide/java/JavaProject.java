@@ -16,6 +16,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -109,14 +110,16 @@ public final class JavaProject implements Program {
 
     /** Moves a member into another type, keeping its identity. */
     @Override
-    public void move(ElementId member, ElementId newParent) {
+    public void move(ElementId member, ElementId newParent, ElementId before) {
         var g = graph();
         var element = g.element(member);
         var target = g.element(newParent);
+        var anchor = before == null ? null : declaration(g.element(before));
         var node = declaration(element);
         var text = LexicalPreservingPrinter.print(node).strip();
         node.remove();
-        insertMember(typeDeclaration(target.qualified()), text);
+        if (anchor == null) insertMember(typeDeclaration(target.qualified()), text);
+        else insertBefore(anchor, text);
         var signature = element.qualified().substring(element.qualified().indexOf('#'));
         transfer(element.qualified(), target.qualified() + signature);
     }
@@ -192,7 +195,9 @@ public final class JavaProject implements Program {
 
     /** Records a use of a workspace element; uses of JDK elements and unresolved ones are not tracked yet. */
     private void addReference(List<Reference> references, Node site, String target) {
-        if (target != null && ids.containsKey(target)) references.add(new Reference(siteOf(site), ids.get(target)));
+        if (target == null || !ids.containsKey(target)) return;
+        var name = ((NodeWithSimpleName<?>) site).getNameAsString();
+        references.add(new Reference(siteOf(site), ids.get(target), name));
     }
 
     /** Address of the method the call resolves to, or null if unresolvable. */
@@ -301,6 +306,15 @@ public final class JavaProject implements Program {
         var offset = lineStart(code, type.getEnd().orElseThrow().line);
         var indent = " ".repeat(4);
         load(path, code.substring(0, offset) + "\n" + indent + memberText + "\n" + code.substring(offset));
+    }
+
+    /** Inserts a member as a text edit on the lines just above {@code anchor}, then re-parses the unit. */
+    private void insertBefore(BodyDeclaration<?> anchor, String memberText) {
+        var path = pathOf(anchor.findCompilationUnit().orElseThrow());
+        var code = source(path);
+        var offset = lineStart(code, anchor.getBegin().orElseThrow().line);
+        var indent = " ".repeat(4);
+        load(path, code.substring(0, offset) + indent + memberText + "\n\n" + code.substring(offset));
     }
 
     private void load(String path, String code) {

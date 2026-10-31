@@ -74,8 +74,8 @@ class PullUpMethodTest {
     }
 
     @Test
-    void methodUsingSubclassStateAborts() {
-        var b = """
+    void methodUsingSubclassStateDragsTheFieldUp() {
+        var ws = Workspace.of(Map.of("a/A.java", A, "a/B.java", """
                 package a;
 
                 public class B extends A {
@@ -86,14 +86,62 @@ class PullUpMethodTest {
                         return count * 2;
                     }
                 }
+                """));
+
+        var result = ws.invoke("pull-up-method", Map.of("method", "a.B#total()"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(result.repairs()).containsExactly("pull-up-dependency a.B#count -> a.A");
+        assertThat(ws.source("a/A.java")).isEqualTo("""
+                package a;
+
+                public class A {
+
+                    int total() {
+                        return count * 2;
+                    }
+
+                    int count;
+                }
+                """);
+        assertThat(ws.source("a/B.java")).isEqualTo("""
+                package a;
+
+                public class B extends A {
+                }
+                """);
+    }
+
+    @Test
+    void dependencyCollidingWithSuperclassMemberAborts() {
+        var a = """
+                package a;
+
+                public class A {
+
+                    int count = 7;
+                }
                 """;
-        var ws = Workspace.of(Map.of("a/A.java", A, "a/B.java", b));
+        var b = """
+                package a;
+
+                public class B extends A {
+
+                    int count;
+
+                    int total() {
+                        return this.count * 2;
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/A.java", a, "a/B.java", b));
 
         var result = ws.invoke("pull-up-method", Map.of("method", "a.B#total()"));
 
         assertThat(result.applied()).isFalse();
-        assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.unresolved");
-        assertThat(result.violations().getFirst().detail()).contains("a.A#total()", "a.B#count");
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.rebound");
+        assertThat(result.violations().getFirst().detail()).contains("a.A#total()", "a.B#count", "a.A#count");
+        assertThat(ws.source("a/A.java")).isEqualTo(a);
         assertThat(ws.source("a/B.java")).isEqualTo(b);
     }
 

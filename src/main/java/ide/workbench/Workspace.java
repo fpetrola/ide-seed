@@ -1,6 +1,7 @@
 package ide.workbench;
 
 import ide.coherence.OpenVisibility;
+import ide.coherence.PullUpDependency;
 import ide.coherence.Repairer;
 import ide.coherence.Result;
 import ide.graph.Program;
@@ -22,7 +23,7 @@ import java.util.stream.Stream;
 public final class Workspace {
 
     private final JavaProject project;
-    private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility()));
+    private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility(), new PullUpDependency()));
     private final Map<String, Refactoring> refactorings = Stream.of(PullUp.field(), PullUp.method(), new ExtractSuperclass())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
 

@@ -23,10 +23,15 @@ public final class Verifier {
         var violations = new ArrayList<Violation>();
         var remaining = new HashMap<Reference, Integer>();
         after.references().forEach(ref -> remaining.merge(ref, 1, Integer::sum));
+        var lost = new ArrayList<Reference>();
         for (var ref : baseline.references()) {
-            if (remaining.merge(ref, -1, Integer::sum) >= 0) continue;
-            violations.add(lost(ref, baseline, after));
+            if (remaining.merge(ref, -1, Integer::sum) < 0) lost.add(ref);
         }
+        var gained = new ArrayList<Reference>();
+        remaining.forEach((ref, count) -> {
+            for (var i = 0; i < count; i++) gained.add(ref);
+        });
+        for (var ref : lost) violations.add(lost(ref, gained, baseline, after));
         for (var ref : after.references()) {
             if (!rules.accessible(after, ref.site(), ref.target())) violations.add(inaccessible(ref, after));
         }
@@ -57,14 +62,27 @@ public final class Verifier {
     }
 
     /** A baseline reference that no longer binds to the same element. */
-    private Violation lost(Reference ref, ProgramGraph baseline, ProgramGraph after) {
-        if (after.contains(ref.site()) && after.contains(ref.target())
+    private Violation lost(Reference ref, List<Reference> gained, ProgramGraph baseline, ProgramGraph after) {
+        var rebound = gained.stream()
+                .filter(g -> g.site().equals(ref.site()) && g.name().equals(ref.name())).findFirst();
+        if (rebound.isPresent()) {
+            return new Violation("binding.rebound", ref.site(), ref.target(), after.element(ref.site()).qualified()
+                    + " now binds " + ref.name() + " to " + after.element(rebound.get().target()).qualified()
+                    + " instead of " + baseline.element(ref.target()).qualified());
+        }
+        if (after.contains(ref.site()) && after.contains(ref.target()) && inScope(after, ref)
                 && !rules.accessible(after, ref.site(), ref.target())) {
             return inaccessible(ref, after);
         }
         var site = (after.contains(ref.site()) ? after : baseline).element(ref.site()).qualified();
         return new Violation("binding.unresolved", ref.site(), ref.target(),
                 site + " no longer binds to " + baseline.element(ref.target()).qualified());
+    }
+
+    /** Whether the target is a member of the site's type or of one of its supertypes (so only access can hide it). */
+    private static boolean inScope(ProgramGraph graph, Reference ref) {
+        var owner = graph.enclosingType(ref.target());
+        return graph.isSubclass(graph.enclosingType(ref.site()), owner);
     }
 
     private static Violation inaccessible(Reference ref, ProgramGraph graph) {
