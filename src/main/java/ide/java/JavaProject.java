@@ -68,6 +68,7 @@ public final class JavaProject implements Program {
 
     private final JavaParser parser;
     private final WorkspaceTypeSolver typeSolver;
+    private final GraphReader reader;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
     private final Identity ids = new Identity();
     private ProgramGraph graph;
@@ -79,6 +80,7 @@ public final class JavaProject implements Program {
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
         typeSolver = solver;
+        reader = new GraphReader(ids, solver);
         parser = new JavaParser(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(solver)));
     }
 
@@ -152,11 +154,11 @@ public final class JavaProject implements Program {
         var site = cu.findFirst(Node.class, n -> n instanceof NodeWithSimpleName<?> named
                 && named.getNameAsString().equals(name) && (n instanceof NameExpr || n instanceof FieldAccessExpr));
         if (site.isEmpty()) return Optional.empty();
-        var siteId = siteOf(site.get());
+        var siteId = reader.siteOf(site.get());
         if (siteId == null) return Optional.empty();
         try {
             if (site.get() instanceof FieldAccessExpr access) {
-                var typeName = access.getScope() instanceof NameExpr scopeName ? resolveTypeName(scopeName) : null;
+                var typeName = access.getScope() instanceof NameExpr scopeName ? reader.resolveTypeName(scopeName) : null;
                 var receiver = typeName != null ? typeName
                         : access.getScope().calculateResolvedType().asReferenceType().getQualifiedName();
                 return Optional.ofNullable(ids.get(receiver))
@@ -185,7 +187,11 @@ public final class JavaProject implements Program {
 
     @Override
     public ProgramGraph graph() {
-        if (graph == null) graph = buildGraph();
+        if (graph == null) {
+            var read = reader.read(units, emptyPackages);
+            graph = read.graph();
+            referenceNodes = read.nodes();
+        }
         return graph;
     }
 
@@ -810,7 +816,7 @@ public final class JavaProject implements Program {
             throw new PrimitiveRejected("inline.body-shape", method.qualified() + " is not a single 'return expr;'");
         }
         var original = statements.get(0).asReturnStmt().getExpression().get(); // attached, so names resolve
-        if (original.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.qualified().equals(resolveMethod(c)))) {
+        if (original.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.qualified().equals(reader.resolveMethod(c)))) {
             throw new PrimitiveRejected("inline.recursive", method.qualified() + " calls itself");
         }
         var thisMembers = original.findAll(NameExpr.class).stream().anyMatch(n -> resolveField(n) != null)
@@ -920,180 +926,6 @@ public final class JavaProject implements Program {
     }
 
     // ---- projection: graph from AST
-
-    private ProgramGraph buildGraph() {
-        var elements = new ArrayList<Element>();
-        var references = new ArrayList<Reference>();
-        var nodes = new HashMap<String, Node>();
-        var packages = new LinkedHashMap<String, ElementId>();
-        for (var cu : units.values()) {
-            var pkg = cu.getPackageDeclaration().map(p -> {
-                var name = p.getNameAsString();
-                return packages.computeIfAbsent(name, n -> {
-                    var id = idOf(n, Kind.PACKAGE);
-                    elements.add(new Element(id, Kind.PACKAGE, n, null, n, Map.of()));
-                    return id;
-                });
-            }).orElse(null);
-            for (TypeDeclaration<?> type : types(cu)) {
-                var typeName = type.getFullyQualifiedName().orElseThrow();
-                var parent = type.getParentNode().filter(TypeDeclaration.class::isInstance)
-                        .map(t -> idOf(((TypeDeclaration<?>) t).getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(pkg);
-                var typeId = idOf(typeName, Kind.CLASS);
-                var typeAttributes = new HashMap<>(typeAttributes(type));
-                if (type.isTopLevelType()) typeAttributes.put("file", pathOf(cu));
-                elements.add(new Element(typeId, kindOf(type),
-                        type.getNameAsString(), parent, typeName, Map.copyOf(typeAttributes)));
-                for (var field : type.getFields()) {
-                    for (var variable : field.getVariables()) {
-                        var address = typeName + "#" + variable.getNameAsString();
-                        var attributes = new HashMap<>(attributes(field));
-                        attributes.put("type", variable.getType().asString());
-                        declared(variable.getType()).ifPresent(d -> attributes.put("declared", d));
-                        elements.add(new Element(idOf(address, Kind.FIELD), Kind.FIELD,
-                                variable.getNameAsString(), typeId, address, Map.copyOf(attributes)));
-                    }
-                }
-                for (var constructor : type.getConstructors()) {
-                    var address = methodAddress(typeName, constructor);
-                    var constructorId = idOf(address, Kind.CONSTRUCTOR);
-                    elements.add(new Element(constructorId, Kind.CONSTRUCTOR, type.getNameAsString(), typeId, address,
-                            attributes(constructor)));
-                    addParams(elements, constructor, address, constructorId);
-                }
-                for (var method : type.getMethods()) {
-                    var address = methodAddress(typeName, method);
-                    var methodId = idOf(address, Kind.METHOD);
-                    var methodAttributes = new HashMap<>(attributes(method));
-                    methodAttributes.put("type", method.getType().asString());
-                    method.getBody().ifPresent(b -> methodAttributes.put("body", b.toString().replaceAll("\\s+", " ")));
-                    if (kindOf(type) == Kind.INTERFACE && method.getAccessSpecifier().asString().isEmpty()) {
-                        methodAttributes.put("visibility", "public"); // interface members are implicitly public
-                    }
-                    elements.add(new Element(methodId, Kind.METHOD,
-                            method.getNameAsString(), typeId, address, Map.copyOf(methodAttributes)));
-                    addParams(elements, method, address, methodId);
-                }
-            }
-        }
-        for (var name : emptyPackages) {
-            if (!packages.containsKey(name)) {
-                var id = idOf(name, Kind.PACKAGE);
-                packages.put(name, id);
-                elements.add(new Element(id, Kind.PACKAGE, name, null, name, Map.of()));
-            }
-        }
-        // references only once every element has its id: a use may point into a unit processed later
-        for (var cu : units.values()) {
-            var uses = new ArrayList<Node>();
-            uses.addAll(fieldUses(cu));
-            uses.addAll(cu.findAll(MethodCallExpr.class));
-            uses.addAll(cu.findAll(ClassOrInterfaceType.class));
-            uses.addAll(cu.findAll(ObjectCreationExpr.class));
-            uses.addAll(cu.findAll(MethodReferenceExpr.class));
-            uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
-            for (var use : uses) {
-                var target = switch (use) {
-                    case MethodCallExpr call -> resolveMethod(call);
-                    case ObjectCreationExpr creation -> resolveConstructor(creation);
-                    case MethodReferenceExpr reference -> resolveMethodReference(reference);
-                    case ClassOrInterfaceType type -> resolveType(type);
-                    default -> {
-                        var field = resolveField((Expression) use);
-                        yield field != null || !(use instanceof NameExpr name) ? field : resolveTypeName(name);
-                    }
-                };
-                addReference(references, nodes, use, target);
-            }
-        }
-        referenceNodes = nodes;
-        return new ProgramGraph(elements, references);
-    }
-
-    /**
-     * Records a use of a workspace element (JDK and unresolved uses are not tracked yet).
-     * Its id is the site plus the ordinal of the use within the site, in source order.
-     */
-    private void addReference(List<Reference> references, Map<String, Node> nodes, Node use, String target) {
-        if (target == null || !ids.has(target)) return;
-        var site = siteOf(use);
-        var ordinal = references.stream().filter(r -> r.site().equals(site)).count();
-        var id = site + "@" + ordinal;
-        nodes.put(id, use);
-        var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
-                : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
-                : ((NodeWithSimpleName<?>) use).getNameAsString();
-        var mode = use instanceof NameExpr && !target.contains("#") ? "type" : modeOf(use);
-        references.add(new Reference(id, site, ids.get(target), name, mode));
-    }
-
-    /** A name used as a type (e.g. the receiver in {@code Money.of(1)}): its qualified name, or null. */
-    private String resolveTypeName(NameExpr name) {
-        if (name.getParentNode().filter(p -> p instanceof MethodCallExpr || p instanceof FieldAccessExpr).isEmpty()) return null;
-        try {
-            var type = com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory.getContext(name, typeSolver)
-                    .solveType(name.getNameAsString());
-            return type.isSolved() ? type.getCorrespondingDeclaration().getQualifiedName() : null;
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    /** Address of the method the call resolves to, or null if unresolvable. */
-    private String resolveMethod(MethodCallExpr call) {
-        var resolved = resolveMethodStrictly(call);
-        return resolved != null ? resolved : resolveThroughBounds(call);
-    }
-
-    /**
-     * For a receiver typed by a type variable ({@code T extends Item}), which the solver does not resolve: the one
-     * workspace method of that name and arity in the variable's bounds.
-     */
-    private String resolveThroughBounds(MethodCallExpr call) {
-        try {
-            if (call.getScope().isEmpty()) return null;
-            var type = call.getScope().get().calculateResolvedType();
-            if (!type.isTypeVariable()) return null;
-            var candidates = new ArrayList<String>();
-            for (var bound : type.asTypeParameter().getBounds()) {
-                var owner = bound.getType().asReferenceType().getQualifiedName();
-                var prefix = owner + "#" + call.getNameAsString() + "(";
-                for (var address : ids.addresses()) {
-                    if (!address.startsWith(prefix) || address.contains("/")) continue;
-                    var params = address.substring(prefix.length(), address.length() - 1);
-                    var arity = params.isEmpty() ? 0 : params.split(",").length;
-                    if (arity == call.getArguments().size()) candidates.add(address);
-                }
-            }
-            return candidates.size() == 1 ? candidates.getFirst() : null;
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    /** The innermost member (method or field) containing the node, else its type. */
-    private ElementId siteOf(Node node) {
-        var type = node.findAncestor(TypeDeclaration.class).orElseThrow();
-        var typeName = type.getFullyQualifiedName().orElseThrow().toString();
-        var method = node.findAncestor(CallableDeclaration.class);
-        if (method.isPresent() && method.get().findAncestor(TypeDeclaration.class).orElse(null) == type) {
-            return ids.get(methodAddress(typeName, method.get()));
-        }
-        var field = node.findAncestor(VariableDeclarator.class).filter(v -> v.getParentNode()
-                .filter(FieldDeclaration.class::isInstance).isPresent());
-        return field.map(v -> ids.get(typeName + "#" + v.getNameAsString())).orElseGet(() -> ids.get(typeName));
-    }
-
-    private void addParams(List<Element> elements, CallableDeclaration<?> callable, String address, ElementId owner) {
-        for (var param : callable.getParameters()) {
-            var paramAddress = address + "/" + param.getNameAsString();
-            var attributes = new HashMap<String, String>();
-            attributes.put("type", param.getType().asString());
-            declared(param.getType()).ifPresent(d -> attributes.put("declared", d));
-            elements.add(new Element(idOf(paramAddress, Kind.PARAM), Kind.PARAM, param.getNameAsString(),
-                    owner, paramAddress, Map.copyOf(attributes)));
-        }
-    }
 
     // ---- identity
 

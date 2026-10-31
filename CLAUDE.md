@@ -14,8 +14,9 @@ Every structural change is made of a few primitives; correctness comes from veri
 - `ide.core` — Capability, CapabilityRegistry, Param, Json, EventLog (JSONL), TextDiff. Knows nothing else.
 - `ide.graph` — Element/ElementId/Kind, Reference (id `site@ordinal`, mode read|write|update|call|new|type),
   ProgramGraph (queries), Program (the primitives: create, delete, move, rename, set, retarget), LanguageRules SPI.
-- `ide.java` — the Java projection: JavaProject (parse with lexical preservation, graph building, primitives as
-  minimal text edits, identity transfer), JavaRules, WorkspaceTypeSolver, JavacCheck, Imports/Text.
+- `ide.java` — the Java projection: JavaProject (units, primitives as minimal text edits, re-parse after each),
+  GraphReader (graph from units), Resolution (addresses, kinds, attributes), Identity (address → id, transfer),
+  Bodies (data flow and precedence for extract/inline), JavaRules, WorkspaceTypeSolver, JavacCheck, Imports/Text.
 - `ide.coherence` — Verifier (binding, access, dispatch views; javac view when the code compiled before),
   Repairer (plans from saved points), Transaction (baseline, intent folding, step tree), Plan/Remedy/QuickFix.
 - `ide.refactor` — Refactoring/Ctx/Args, Primitives, ChangeSignature (the only Java composite);
