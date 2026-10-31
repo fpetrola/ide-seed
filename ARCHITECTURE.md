@@ -101,6 +101,7 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | core        | nada                                                       | kit de capacidades y utilidades              |
 | program     | core                                                       | el programa como grafo                       |
 | projection  | program                                                    | el contrato de un driver de lenguaje         |
+| projection-kit | projection, JUnit, AssertJ                              | el contrato como tests y la proyección en memoria |
 | java        | projection, JavaParser                                     | el driver de Java                            |
 | engine      | projection                                                 | transacciones verificadas                    |
 | refactoring | projection                                                 | refactorings, runtime, lenguaje `.ref`, catálogo |
@@ -116,6 +117,8 @@ Cómo se hace cumplir:
 - javac viene con el JDK, así que "solo `java` usa la API del compilador" lo verifica ArchUnit, igual que "solo
   `knowledge` implementa remedios". Son las dos reglas que Maven no puede expresar, y viven en `acceptance`.
 - `acceptance` no es un producto: es donde los productos se encuentran.
+- `projection-kit` es lo que bajaría quien escribe un driver: `java` lo declara para correr el contrato en sus
+  tests; `engine` y `refactoring` lo declaran para probarse sobre la proyección en memoria. Siempre solo para tests.
 
 De dónde viene cada cosa:
 
@@ -188,7 +191,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Qué ignora.** Texto, posiciones, archivos, parser, compilador, cuerpos de métodos.
 - **Prueba de autonomía.** Un test arma un grafo con tres elementos y dos referencias y ejercita consultas, diff y
   direcciones, sin parser.
-- **Estado actual** (fase 1 cerrada, 2026-10-31). `ide.program`: `Mode` y `Fact` tipados; extends, implements y el
+- **Estado actual** (fases 1 y 2 cerradas, 2026-10-31). El vocabulario de cambio existe: `Primitive` con `Create`
+  (con hechos y argumento), `Delete`, `Move`, `Rename`, `Set` (texto), `Link`, `Retarget`, `Extract` e `Inline`;
+  cada uno declara su intención (`Primitive.intent`) y se documenta a sí mismo (`@Summary`, `@Optional`);
+  `Change` con expectativas y pins tipados; `Program.expecting` y `Program.outline`. Desde la fase 1: `ide.program`: `Mode` y `Fact` tipados; extends, implements y el
   tipo declarado son referencias; `Program` indexa por padre, site, destino y dirección, calcula `diff` y memoriza
   los overriders; `Address` e `Identity` tipadas, con las claves de tipo de parámetro por id; cada `Element` lleva
   su dirección, y la sobrescritura compara nombre y claves, no texto.
@@ -206,7 +212,6 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     `PrimitiveRejected(code, detail)` y sin efecto.
   - `Snapshot snapshot()` y `restore(Snapshot)`: todo el estado, texto e identidad, tipado.
   - `edit(path, text)`: edición manual; el texto del usuario es la autoridad; rechaza lo que no parsea.
-  - `files()`, `source(path)`.
   - `List<Diagnostic> diagnostics()`: la vista del compilador.
   - `Optional<CompletionContext> completion(path, text, offset)`.
   - `LanguageRules rules()`: accesibilidad, visibilidades posibles de un elemento, candidatos de import.
@@ -219,13 +224,16 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
      texto, salvo los ids.
   4. `snapshot` y `restore` devuelven texto, identidad y grafo idénticos.
   5. Un primitivo rechazado no deja ningún cambio.
-- **`MemoryProjection`** (en tests): una proyección sin lenguaje sobre un grafo mutable. Aplica los primitivos al
-  grafo y declara los mismos `Change`. Es lo que permite probar `engine`, `refactoring` y `knowledge` solos, y es la
-  implementación de referencia del contrato.
+- **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
+  el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
+  mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo
+  que permite probar `engine`, `refactoring` y `knowledge` solos.
 - **Qué ignora.** Refactorings, transacciones, conocimiento, sesión.
-- **Estado actual.** No existe como módulo. La interfaz `ide.graph.Program` mezcla nueve primitivos con firmas
-  distintas, un checkpoint sin tipo, diagnósticos y completion; `Transaction` deduce la intención de cada primitivo
-  desde el nombre del atributo.
+- **Estado actual** (fase 2 cerrada, 2026-10-31). `Projection` es `program`, `apply`, `edit`, `snapshot` y `restore`
+  tipados, `rules`, `diagnostics` y `completionContext`. El texto (`files`, `sources`) queda en el driver de Java:
+  lo usa la sesión, que lo conoce. El contrato verifica las cinco obligaciones más los parámetros (se crean con el
+  argumento que pasan las llamadas y se mueven dentro de su método). Corre contra `MemoryProjection` y contra el
+  driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
   hasta que estorbe.
 
@@ -251,13 +259,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   5. Fachada. `JavaProjection`: unidades, identidad, lectura cacheada, invalidación, instantáneas. Unas 150 líneas.
 - **Qué ignora.** Transacciones, verificación, refactorings, scripts, sesión.
 - **Prueba de autonomía.** Aplicar un primitivo sobre texto y comparar texto; el kit de conformidad de `projection`.
-- **Estado actual.** `ide.java`. `JavaProject` tiene 1066 líneas con los primitivos como métodos. Conviven dos
-  mecanismos de edición: mutación del AST seguida de `changed()`, que reimprime y reparsea todas las unidades, y
-  empalme de texto. `set` es un switch de doce casos, varios de los cuales son operaciones y no atributos (`import`,
-  `order`, `default`). Los defaults de parámetros nuevos se resuelven con marcadores de texto. La búsqueda de la
-  declaración, de la unidad y de la ruta se repite en cada primitivo. La identidad se transfiere por prefijos de
-  string. Bug conocido y reproducido: renombrar un tipo que otra clase usa como tipo de parámetro aborta con un
-  `binding.unresolved` falso, porque la dirección de ese método cambia sin que nadie transfiera su id.
+- **Estado actual** (después de la fase 2). `JavaProject` tiene unas 1100 líneas: un `apply` que despacha a los
+  primitivos como métodos privados. Pasa el contrato. Ya no hay marcadores de texto ni `set default`/`set order`;
+  `set` quedó con nueve casos, de los cuales `import` e `initializer` todavía son operaciones. Siguen conviviendo
+  dos mecanismos de edición (mutación del AST seguida de `changed()`, que reimprime y reparsea todas las unidades,
+  y empalme de texto), y la búsqueda de la declaración, la unidad y la ruta se repite en cada primitivo: es la
+  fase 3. El bug del rename de un tipo usado como parámetro se resolvió en la fase 1.
 - **Abierto.** Invalidación selectiva del grafo (hoy se reconstruye entero; rename sobre 2400 elementos tarda unos
   4 s); borrado de tipos anidados; reconciliación estructural de identidad en `edit`.
 
@@ -288,9 +295,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Qué ignora.** Lenguajes, scripts, conocimiento, sesión.
 - **Prueba de autonomía.** Sobre `MemoryProjection`, con una vista y un remedio escritos en el test: llega al punto
   fijo, respeta los topes, no mueve pins, deshace cuando no puede.
-- **Estado actual.** `ide.coherence`. `Transaction` tiene casos por nombre de atributo (superclass, type,
-  visibility). `Verifier` es tres chequeos entrelazados en una clase. La vista del compilador está dentro de
-  `Repairer`. El rastro son strings con sigilos e indentación armados al registrar, y `Result` lleva líneas.
+- **Estado actual** (después de la fase 2). `Transaction` intercepta `apply`, pliega el `Change` declarado y acumula
+  pins tipados; no conoce ningún atributo. Tiene tests propios sobre la proyección en memoria (transacción y
+  reparador). Queda para la fase 4: `Verifier` son tres chequeos entrelazados en una clase, la vista del compilador
+  está dentro de `Repairer`, y el rastro son strings con sigilos armados al registrar.
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
@@ -313,8 +321,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Prueba de autonomía.** Un script sobre `MemoryProjection` produce la secuencia de primitivos esperada (lo que
   hoy hace `expand`), sin verificar nada.
 - **Estado actual.** `ide.refactor` y `ide.refactor.script`. El runtime es una clase anónima dentro de `Workspace`;
-  `Knowledge` tiene otro propio donde `attempt` no intenta y `oblige` no obliga. `Primitives.all()` registra a
-  mano. Los valores de los scripts son strings. Fugas de Java en el catálogo: plantillas de cuerpo con `this.` y
+  `Knowledge` tiene otro propio donde `attempt` no intenta y `oblige` no obliga. Los primitivos se leen del
+  vocabulario (fase 2): nada se registra a mano. Los valores de los scripts son strings. Fugas de Java en el catálogo: plantillas de cuerpo con `this.` y
   `new` (generate-getter, generate-setter, introduce-factory) y `set import` en el conocimiento.
 - **Abierto.** Un lenguaje neutral de cuerpos para las plantillas (`return field`, `assign field param`,
   `return new owner(params)`) que la proyección renderice. Hasta entonces las plantillas son Java y se marcan como
@@ -394,35 +402,39 @@ Un bug que encuentra un test de aceptación se fija con un test en el producto q
 como red. Ejemplo: el rename de un tipo usado como parámetro apareció en `RenameTypeTest`, de aceptación; la causa
 estaba en la identidad, y `IdentityTest` lo fija en el vocabulario de `program`, sin Java.
 
-Estado al 2026-10-31: la pirámide está invertida. Casi todo se prueba de punta a punta, y cinco productos no tienen
-ningún test propio. Cada fase de la migración baja a los productos que toca los casos borde que les pertenecen.
+Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punta a punta y cinco productos no
+tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
+nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo                                    | Tests |
-|-------------------------------------------|-------|
-| program                                   | 8     |
-| refactoring                               | 1     |
-| session                                   | 13    |
-| core, projection, java, engine, knowledge | 0     |
-| acceptance                                | 102   |
+| Módulo                                    | Tests al empezar la fase 2 | Al cerrarla |
+|-------------------------------------------|----------------------------|-------------|
+| program                                   | 8                          | 12          |
+| projection-kit                            | (no existía)               | 8           |
+| java                                      | 0                          | 8           |
+| engine                                    | 0                          | 9           |
+| refactoring                               | 1                          | 3           |
+| core, projection, knowledge               | 0                          | 0           |
+| session                                   | 13                         | 13          |
+| acceptance                                | 102                        | 103         |
 
 ## 7. Decisiones
 
 | #  | Tema                     | Decisión                                                                                   | Estado      |
 |----|--------------------------|--------------------------------------------------------------------------------------------|-------------|
 | 1  | Mapa y nombres           | core, program, projection, java, engine, refactoring, knowledge, session, adapters          | tomada, 2026-10-31 (10610bc) |
-| 2  | Forma de los primitivos  | `Primitive` sellado y `apply(Primitive)` que devuelve `Change`                             | propuesta   |
-| 3  | Vínculos                 | extends, implements y declared son referencias; `Link` reemplaza los `set` de tipos        | referencias tomadas, 2026-10-31 (4d16bfe); `Link` en fase 2 |
+| 2  | Forma de los primitivos  | `Primitive` sellado y `apply(Primitive)` que devuelve `Change`; cada primitivo declara su intención | tomada, 2026-10-31 (1524f0c) |
+| 3  | Vínculos                 | extends, implements y declared son referencias; `Link` reemplaza los `set` de tipos        | tomada, 2026-10-31 (4d16bfe, 5cceb1a) |
 | 4  | Identidad                | `Address` tipada con ids de dueño y de tipos de parámetro; reconciliación estructural después | tomada, 2026-10-31 (67901c9) |
 | 5  | Edición                  | solo `EditSet` de texto; sin mutación del AST ni printer léxico                            | propuesta   |
 | 6  | Hechos                   | conjunto cerrado y tipado (claves `Fact`; los valores siguen siendo texto)                 | tomada, 2026-10-31 (4d16bfe) |
-| 7  | Cuerpos                  | fuera del grafo; el fragmento es una dirección opaca de la proyección                      | propuesta   |
-| 8  | Creación                 | `Create` recibe la especificación inicial (type, default, body)                            | propuesta   |
+| 7  | Cuerpos                  | fuera del grafo; el fragmento es una dirección opaca de la proyección (líneas en Java, posiciones de usos en memoria) | tomada, 2026-10-31 (f64f7dd) |
+| 8  | Creación                 | `Create` recibe los hechos con que nace y, para un parámetro, el argumento de las llamadas  | tomada, 2026-10-31 (8f0ed6a) |
 | 9  | Rastro                   | `Trace` como árbol de datos; un único render a líneas                                      | propuesta   |
-| 10 | Conformidad              | `MemoryProjection` más un kit de conformidad que corre contra cada driver                  | propuesta   |
+| 10 | Conformidad              | `projection-kit`: `MemoryProjection` y `ProjectionContract`, que corre contra cada driver   | tomada, 2026-10-31 (f64f7dd) |
 | 11 | Referencias no resueltas | entran al grafo con destino desconocido; import pasa a ser retarget                        | diferida, etapa 2 |
 | 12 | Cuerpos en plantillas    | lenguaje neutral de cuerpos renderizado por la proyección                                  | diferida, etapa 2 |
 | 13 | Módulos Maven            | un módulo por producto, más `acceptance` para los escenarios transversales                  | tomada, 2026-10-31 (5d641a2) |
-| 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | propuesta   |
+| 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | tomada, 2026-10-31 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -436,11 +448,12 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Consultas lineales dentro de bucles (resuelto en 4d16bfe)                          | `ide.program`          | 1    |
 | Comparación de referencias dentro del Verifier (resuelto en 4d16bfe)               | `ide.engine`           | 1    |
 | Identidad por prefijos de string y regex; bug de rename de tipo usado como parámetro (resuelto en 67901c9) | `ide.program.Identity` | 1 |
-| Interfaz mutable con nueve firmas y checkpoint sin tipo                            | `ide.graph.Program`    | 2    |
-| La Transaction interpreta atributos para deducir la intención                      | `ide.coherence`        | 2    |
-| Registro manual de los primitivos como refactorings                                | `ide.refactor`         | 2    |
+| Interfaz mutable con nueve firmas y checkpoint sin tipo (resuelto en 1524f0c)      | `ide.projection`       | 2    |
+| La Transaction interpreta atributos para deducir la intención (resuelto en 1524f0c y 5cceb1a) | `ide.engine`    | 2    |
+| Registro manual de los primitivos como refactorings (resuelto en 351d5c2)          | `ide.refactoring`      | 2    |
 | Dos mecanismos de edición; `changed()` reimprime todas las unidades                | `ide.java.JavaProject` | 3    |
-| `set` como switch de doce operaciones; marcadores de texto para defaults           | `ide.java.JavaProject` | 3    |
+| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; quedan `import` e `initializer`) | `ide.java.JavaProject` | 3 |
+| `MemoryProjection` en un solo archivo grande (los nueve primitivos y el constructor de programas) | `projection-kit` | 3 |
 | Búsqueda de declaración, unidad y ruta repetida por primitivo                      | `ide.java.JavaProject` | 3    |
 | Vistas no enchufables; vista del compilador dentro del reparador                   | `ide.coherence`        | 4    |
 | Rastro como strings con sigilos                                                    | `ide.coherence`        | 4    |
@@ -479,7 +492,12 @@ Registro de deuda de diseño, con la fase que la resuelve.
 - Criterio de cierre: no queda ningún atributo string de tipo en el grafo; el Verifier usa `Program.compare`;
   ninguna consulta escanea todos los elementos.
 
-### Fase 2: el contrato `projection` y el fin de la interpretación en el motor
+### Fase 2: el contrato `projection` y el fin de la interpretación en el motor (cerrada, 2026-10-31)
+
+Hecha en siete ciclos, del 99c67c2 al 351d5c2. Además de lo planeado: `Projection` responde sus `rules()`; el
+contrato encontró que el driver de Java creaba duplicados; `Link` destapó dos bugs (una superclase de fuera del
+workspace se perdía al extraer una superclase, regresión de la fase 1; y reescribir un `extends` conservaba los
+argumentos de tipo del anterior). Los tests de `engine` fijan comportamiento existente.
 
 - Objetivo: `Primitive` y `Change`; `Projection` con `apply`; `MemoryProjection`; kit de conformidad; `Transaction`
   que pliega lo que el `Change` declara.

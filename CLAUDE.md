@@ -7,8 +7,9 @@ Every structural change is made of a few primitives; correctness comes from veri
 
 - `mvn test` from the root builds every module and runs every suite (JUnit 5, AssertJ, ArchUnit).
   Java 21 (`maven.compiler.release`), runs on JDK 25.
-- `mvn test -Dtest=OrdersSampleTest` runs one class wherever it lives; `mvn test -pl program` runs one product's
-  suite (add `-am` when the products below it changed).
+- `mvn test -Dtest=OrdersSampleTest` runs one class wherever it lives; `mvn test -pl engine -am` runs one product's
+  suite (with the products below it built first). After moving code between modules, use `mvn clean test`: stale
+  classes and resources in `target/` have hidden broken code here before.
 - Tests tagged `probe` (performance) are excluded by default; run them with
   `mvn test -Dtest=PerformanceProbe -DexcludedGroups=none`.
 
@@ -20,18 +21,25 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `core` — Capability, CapabilityRegistry, Param, Json, EventLog (JSONL), TextDiff. Knows nothing else.
 - `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts), Reference (id `site@ordinal`, Mode:
   uses read|write|update|call|new|type and links extends|implements|declared), Program (indexed queries, diff,
-  hypothetical copies), Address (typed: types by qualified name, members by owner id, callables by parameter type
-  keys) and Identity (address → id; rebindType, rename, move, resign, forget).
-- `projection` (program) — the language driver contract: Projection (the primitives: create, delete, move, rename,
-  set, retarget, extract, inline, replaceSource; checkpoint/rollback; diagnostics; completion), LanguageRules,
-  Diagnostic, CompletionContext, PrimitiveRejected.
-- `java` (projection, JavaParser) — the Java driver: JavaProject (units, primitives as minimal text edits, re-parse
-  after each), GraphReader (packages and types, then members, then references), Keys (parameter type keys),
+  `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
+  parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
+  change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
+  its `intent`) and Change (produced element, expectations, pins).
+- `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
+  typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`), LanguageRules, Diagnostic,
+  CompletionContext, PrimitiveRejected.
+- `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
+  tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
+  with a Builder; the stand-in for a driver in the tests of engine and refactoring).
+- `java` (projection, JavaParser) — the Java driver: JavaProject (units, `apply` dispatching to the primitives as
+  minimal text edits, re-parse after each; runs ProjectionContract in its tests), GraphReader (packages and types, then members, then references), Keys (parameter type keys),
   Resolution (kinds, modes, facts), Bodies (data flow and precedence for extract/inline), JavaRules,
   WorkspaceTypeSolver, JavacCheck, Imports/Text. The only module that compiles against JavaParser.
 - `engine` (projection) — Verifier (binding, access, dispatch views; javac view when the code compiled before),
-  Repairer (plans from saved points), Transaction (baseline, intent folding, step tree), Plan/Remedy/QuickFix.
-- `refactoring` (projection) — Refactoring/Ctx/Args, Primitives, ChangeSignature (the only Java composite); the `.ref`
+  Repairer (plans from saved points, typed pins), Transaction (intercepts `apply`, folds each declared Change into
+  the baseline, step tree), Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
+- `refactoring` (projection) — Refactoring/Ctx/Args, Primitives (read off the Primitive records: nothing registered
+  by hand), ChangeSignature (the only Java composite); the `.ref`
   language in `ide.refactoring.script`; the catalog `refactoring/src/main/resources/ide/refactoring/standard.ref`.
 - `knowledge` (engine, refactoring) — goals/effects planner over
   `knowledge/src/main/resources/ide/knowledge/knowledge.ref`; no remedy or quick fix is written in Java.
