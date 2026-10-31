@@ -248,10 +248,45 @@ public final class Program {
         return result;
     }
 
-    // ---- hypothetical copies, for a transaction's expectations
+    /**
+     * The program without ids, as sorted lines: {@code KIND address} for every type with its members and parameters,
+     * {@code site -> target (mode)} for every reference. Two readings of the same source have the same outline.
+     */
+    public List<String> outline() {
+        var lines = new ArrayList<String>();
+        for (var type : types) outline(type, lines);
+        for (var r : references) {
+            lines.add(element(r.site()).qualified() + " -> " + element(r.target()).qualified() + " (" + r.mode().label() + ")");
+        }
+        lines.sort(null);
+        return lines;
+    }
+
+    private void outline(Element element, List<String> lines) {
+        lines.add(element.kind() + " " + element.qualified());
+        for (var child : children(element.id())) if (!child.kind().isType()) outline(child, lines);
+    }
+
+    // ---- what a verifier should expect after a change
+
+    /** This program with every expectation of {@code change} applied: what the change means to leave. */
+    public Program expecting(Change change) {
+        var expected = this;
+        for (var expectation : change.expectations()) expected = expected.expecting(expectation);
+        return expected;
+    }
+
+    public Program expecting(Change.Expectation expectation) {
+        return switch (expectation) {
+            case Change.Retargeted r -> retargeted(r.site(), r.from(), r.to());
+            case Change.Resited r -> resited(r.from(), r.target(), r.to());
+            case Change.Dropped d -> without(d.site(), d.target());
+            case Change.UsesGone g -> withoutUsesFrom(g.element());
+        };
+    }
 
     /** A copy whose first reference from {@code site} to {@code from} points at {@code to}. */
-    public Program retargeted(ElementId site, ElementId from, ElementId to) {
+    private Program retargeted(ElementId site, ElementId from, ElementId to) {
         var copy = new ArrayList<>(references);
         for (var i = 0; i < copy.size(); i++) {
             var r = copy.get(i);
@@ -264,7 +299,7 @@ public final class Program {
     }
 
     /** A copy where one reference from {@code site} to {@code target} is made from {@code newSite} instead. */
-    public Program resited(ElementId site, ElementId target, ElementId newSite) {
+    private Program resited(ElementId site, ElementId target, ElementId newSite) {
         var copy = new ArrayList<>(references);
         for (var i = 0; i < copy.size(); i++) {
             var r = copy.get(i);
@@ -277,7 +312,7 @@ public final class Program {
     }
 
     /** A copy without one reference from {@code site} to {@code target}. */
-    public Program without(ElementId site, ElementId target) {
+    private Program without(ElementId site, ElementId target) {
         var copy = new ArrayList<>(references);
         for (var i = 0; i < copy.size(); i++) {
             if (copy.get(i).site().equals(site) && copy.get(i).target().equals(target)) {
@@ -289,7 +324,7 @@ public final class Program {
     }
 
     /** A copy without the references made from inside {@code element} (it is going away with them). */
-    public Program withoutUsesFrom(ElementId element) {
+    private Program withoutUsesFrom(ElementId element) {
         var kept = references.stream().filter(r -> !inside(r.site(), element)).toList();
         return new Program(elements.values(), kept);
     }

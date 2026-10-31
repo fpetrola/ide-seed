@@ -307,18 +307,7 @@ public final class Workspace {
 
     /** The model as sorted text: {@code KIND qualified} per element, {@code site -> target (mode)} per reference. */
     public List<String> model() {
-        var graph = project.graph();
-        var lines = new java.util.ArrayList<String>();
-        graph.types().forEach(t -> collect(graph, t, lines));
-        graph.references().forEach(r -> lines.add(graph.element(r.site()).qualified() + " -> "
-                + graph.element(r.target()).qualified() + " (" + r.mode().label() + ")"));
-        lines.sort(null);
-        return lines;
-    }
-
-    private static void collect(ide.program.Program graph, ide.program.Element element, List<String> lines) {
-        lines.add(element.kind() + " " + element.qualified());
-        graph.children(element.id()).stream().filter(c -> !c.kind().isType()).forEach(c -> collect(graph, c, lines));
+        return project.graph().outline();
     }
 
     // ---- navigation

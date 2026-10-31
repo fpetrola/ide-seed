@@ -1,5 +1,6 @@
 package ide.engine;
 
+import ide.program.Change;
 import ide.program.ElementId;
 import ide.program.Kind;
 import ide.projection.Projection;
@@ -166,7 +167,7 @@ public final class Transaction implements Projection {
     public void delete(ElementId element) {
         var name = name(element);
         projection.delete(element);
-        baseline = baseline.withoutUsesFrom(element); // what it used goes with it
+        baseline = baseline.expecting(new Change.UsesGone(element)); // what it used goes with it
         log("' delete " + name);
     }
 
@@ -184,7 +185,7 @@ public final class Transaction implements Projection {
         projection.set(element, attribute, value);
         // the declaration now links to another type, on purpose: the baseline expects the new link
         oldLink.ifPresent(old -> link(element, attribute)
-                .ifPresent(now -> baseline = baseline.retargeted(element, old.id(), now.id())));
+                .ifPresent(now -> baseline = baseline.expecting(new Change.Retargeted(element, old.id(), now.id()))));
         if (attribute.equals("visibility")) pin(element, "visibility");
         log("' set " + name(element) + " " + attribute + " = " + value);
     }
@@ -203,7 +204,7 @@ public final class Transaction implements Projection {
         var where = name(from);
         var created = projection.extract(from, fragment, name);
         for (var moved : projection.graph().references()) { // what the fragment used is now used from the new method
-            if (moved.site().equals(created)) baseline = baseline.resited(from, moved.target(), created);
+            if (moved.site().equals(created)) baseline = baseline.expecting(new Change.Resited(moved.target(), from, created));
         }
         log("' extract " + where + " " + fragment + " -> " + name(created));
         return created;
@@ -213,7 +214,7 @@ public final class Transaction implements Projection {
     public void inline(String call) {
         var reference = projection.graph().reference(call);
         projection.inline(call);
-        baseline = baseline.without(reference.site(), reference.target()); // the call is meant to go
+        baseline = baseline.expecting(new Change.Dropped(reference.site(), reference.target())); // the call is meant to go
         log("' inline " + call + " " + reference.name());
     }
 
@@ -221,7 +222,7 @@ public final class Transaction implements Projection {
     public void retarget(String ref, ElementId target) {
         var reference = projection.graph().reference(ref);
         projection.retarget(ref, target);
-        baseline = baseline.retargeted(reference.site(), reference.target(), target);
+        baseline = baseline.expecting(new Change.Retargeted(reference.site(), reference.target(), target));
         log("' retarget " + ref + " " + reference.name() + " -> " + name(target));
     }
 }

@@ -108,6 +108,35 @@ class ProgramTest {
     }
 
     @Test
+    void expectationsTurnABaselineIntoWhatTheVerifierShouldExpect() {
+        var before = program();
+
+        assertThat(before.expecting(new Change.Retargeted(B_NAME, A_NAME, I_NAME)).referencesFrom(B_NAME))
+                .extracting(Reference::target).containsExactly(B_X, I_NAME);
+        assertThat(before.expecting(new Change.Resited(B_X, B_NAME, A_NAME)).referencesFrom(A_NAME))
+                .extracting(Reference::target).containsExactly(B_X);
+        assertThat(before.expecting(new Change.Dropped(B_NAME, A_NAME)).referencesFrom(B_NAME))
+                .extracting(Reference::target).containsExactly(B_X);
+        assertThat(before.expecting(new Change.UsesGone(B_NAME)).references())
+                .extracting(Reference::site).containsOnly(B, B_X);
+
+        var change = Change.NONE.expect(new Change.Dropped(B_NAME, A_NAME)).expect(new Change.UsesGone(B_X))
+                .pin(B_X, Change.Aspect.NAME);
+        assertThat(before.expecting(change).references()).hasSize(3);
+        assertThat(change.pins()).containsExactly(new Change.Pin(B_X, Change.Aspect.NAME));
+        assertThat(Change.produced(B_X).produced()).isEqualTo(B_X);
+    }
+
+    @Test
+    void outlineIsTheProgramWithoutIds() {
+        assertThat(program().outline()).containsExactly(
+                "CLASS a.A", "CLASS a.B", "FIELD a.B#x", "INTERFACE a.I",
+                "METHOD a.A#name()", "METHOD a.B#name()", "METHOD a.I#name()",
+                "a.B -> a.A (extends)", "a.B -> a.I (implements)",
+                "a.B#name() -> a.A#name() (call)", "a.B#name() -> a.B#x (read)", "a.B#x -> a.A (declared)");
+    }
+
+    @Test
     void factsAreTyped() {
         var p = program();
 
