@@ -35,6 +35,7 @@ class PullUpFieldTest {
 
         var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
 
+        assertThat(result.violations()).isEmpty();
         assertThat(result.applied()).isTrue();
         assertThat(ws.source("a/A.java")).isEqualTo("""
                 package a;
