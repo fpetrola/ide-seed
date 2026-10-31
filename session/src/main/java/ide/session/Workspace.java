@@ -4,8 +4,6 @@ import ide.core.Capability;
 import ide.core.CapabilityRegistry;
 import ide.core.EventLog;
 import ide.core.TextDiff;
-import ide.engine.Plan;
-import ide.engine.QuickFix;
 import ide.knowledge.Knowledge;
 import ide.engine.Repairer;
 import ide.engine.Result;
@@ -32,7 +30,7 @@ public final class Workspace {
     private final Library library = Library.standard();
     private final Knowledge knowledge = Knowledge.standard(library);
     private final Repairer repairer;
-    private final List<QuickFix> quickFixes = List.of(knowledge);
+    private final Fixes fixes;
     private final Navigation navigation;
     private final Completion completion;
 
@@ -47,6 +45,7 @@ public final class Workspace {
         this.project = project;
         this.rules = project.rules();
         this.repairer = new Repairer(List.of(knowledge));
+        this.fixes = new Fixes(project, knowledge);
         this.navigation = new Navigation(project);
         this.completion = new Completion(project);
         this.saved = sources();
@@ -296,26 +295,12 @@ public final class Workspace {
 
     /** Titles of the fixes offered for the diagnostics on a line. */
     public List<String> fixes(String path, int line) {
-        return diagnosticsAt(path, line).stream()
-                .flatMap(d -> quickFixes.stream().flatMap(f -> f.plans(d, project).stream()))
-                .map(Plan::title).distinct().toList();
+        return fixes.titles(path, line);
     }
 
     /** The questions a fix asks: {@code name: question [default]}. */
     public List<String> asks(String path, int line, String title) {
-        return plan(path, line, title).getValue().asks().stream()
-                .map(a -> a.name() + ": " + a.question() + " [" + a.defaultAnswer() + "]").toList();
-    }
-
-    private Map.Entry<Diagnostic, Plan> plan(String path, int line, String title) {
-        for (var diagnostic : diagnosticsAt(path, line)) {
-            for (var quickFix : quickFixes) {
-                for (var plan : quickFix.plans(diagnostic, project)) {
-                    if (plan.title().equals(title)) return Map.entry(diagnostic, plan);
-                }
-            }
-        }
-        throw new IllegalArgumentException("no fix '" + title + "' at " + path + ":" + line);
+        return fixes.asks(path, line, title);
     }
 
     public Result fix(String path, int line, String title) {
@@ -324,15 +309,14 @@ public final class Workspace {
 
     /** Applies a fix (its questions answered, or defaulted) as a transaction that must make its diagnostic disappear. */
     public Result fix(String path, int line, String title, Map<String, String> answers) {
-        var found = plan(path, line, title);
-        var diagnostic = found.getKey();
+        var fix = fixes.find(path, line, title);
         var tx = new Transaction(project, repairer);
         tx.enter("fix " + title);
-        found.getValue().apply().accept(tx, answers);
+        fix.plan().apply().accept(tx, answers);
         tx.exit();
         var event = Map.of("event", "fix", "path", path, "line", line, "title", title);
-        if (project.diagnostics().contains(diagnostic)) {
-            return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
+        if (project.diagnostics().contains(fix.diagnostic())) {
+            return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + fix.diagnostic())));
         }
         return record(tx, event, tx.commit());
     }
@@ -344,15 +328,6 @@ public final class Workspace {
 
     /** How fixes for the diagnostics on a line are deduced: each diagnostic, its goals, and the effects tried. */
     public ide.engine.Trace why(String path, int line) {
-        var trace = new ide.engine.Trace();
-        for (var d : diagnosticsAt(path, line)) {
-            trace.add(ide.engine.Trace.Kind.NOTE, d.code() + " " + d.symbol());
-            trace.append(knowledge.search(d, project).trace());
-        }
-        return trace;
-    }
-
-    private List<Diagnostic> diagnosticsAt(String path, int line) {
-        return project.diagnostics().stream().filter(d -> d.path().equals(path) && d.line() == line).toList();
+        return fixes.why(path, line);
     }
 }
