@@ -132,6 +132,17 @@ public final class Transaction implements Program {
     }
 
     @Override
+    public void replaceSource(String path, String text) {
+        program.replaceSource(path, text);
+        log("' edit " + path);
+    }
+
+    /** Keeps a manual edit as it is: the user's text is the authority, there is nothing to verify against. */
+    public Result keep() {
+        return Result.ok(List.of(), steps);
+    }
+
+    @Override
     public void delete(ElementId element) {
         var name = name(element);
         program.delete(element);

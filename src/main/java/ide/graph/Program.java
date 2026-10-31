@@ -29,6 +29,12 @@ public interface Program {
     /** Moves a member into {@code newParent}, just before {@code before} (a member there), or at the end if null. */
     void move(ElementId member, ElementId newParent, ElementId before);
 
+    /**
+     * Replaces the text of a source file (a manual edit): elements keep their identity while their address stays,
+     * new ones are born, missing ones are gone. Refuses text that does not parse ({@code projection.unparsable}).
+     */
+    void replaceSource(String path, String text);
+
     /** Deletes an element that nothing references. */
     void delete(ElementId element);
 

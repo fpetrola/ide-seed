@@ -364,6 +364,15 @@ public final class JavaProject implements Program {
         return uses;
     }
 
+    @Override
+    public void replaceSource(String path, String text) {
+        var result = parser.parse(text);
+        if (!result.isSuccessful()) {
+            throw new PrimitiveRejected("projection.unparsable", path + ": " + result.getProblems().getFirst().getVerboseMessage());
+        }
+        load(path, text);
+    }
+
     /** Changes an attribute of an element: {@code visibility} of a member, {@code superclass} of a class. */
     @Override
     public void set(ElementId id, String attribute, String value) {

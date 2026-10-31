@@ -221,6 +221,19 @@ public final class Workspace {
         return this;
     }
 
+    /** Applies a manual edit of a file's text as its own (undoable, logged) transaction. */
+    public Result edit(String path, String text) {
+        var tx = new Transaction(project);
+        Result result;
+        try {
+            tx.replaceSource(path, text);
+            result = tx.keep();
+        } catch (PrimitiveRejected rejected) {
+            result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
+        }
+        return record(tx, Map.of("event", "edit", "path", path), result);
+    }
+
     /** Reverts the last applied transaction. */
     public void undo() {
         if (undo.isEmpty()) throw new IllegalStateException("nothing to undo");
