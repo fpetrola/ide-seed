@@ -1,5 +1,7 @@
 package ide.workbench;
 
+import ide.core.Capability;
+import ide.core.CapabilityRegistry;
 import ide.core.EventLog;
 import ide.core.TextDiff;
 import ide.coherence.Plan;
@@ -82,6 +84,72 @@ public final class Workspace {
 
     public String source(String path) {
         return project.source(path);
+    }
+
+    /**
+     * Everything this workspace can do as capabilities: every refactoring in the library (defined ones included)
+     * and the session operations. Built on each call, so it reflects the current library.
+     */
+    public CapabilityRegistry capabilities() {
+        var registry = new CapabilityRegistry();
+        for (var refactoring : refactorings.values()) {
+            registry.register(Capability.of(refactoring.id(), refactoring.description(), refactoring.params(),
+                    args -> json(invoke(refactoring.id(), args))));
+        }
+        var path = Param.of("path", "text");
+        var line = Param.of("line", "text");
+        registry.register(Capability.of("ls", "Source files", List.of(), args -> List.copyOf(files())))
+                .register(Capability.of("show", "Source of a file", List.of(path), args -> source(text(args, "path"))))
+                .register(Capability.of("diff", "Net diff of unsaved changes", List.of(), args -> diff()))
+                .register(Capability.of("undo", "Reverts the last applied transaction", List.of(), args -> {
+                    undo();
+                    return "ok";
+                }))
+                .register(Capability.of("library", "Refactorings by level", List.of(), args -> library()))
+                .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
+                        args -> define(text(args, "text"))))
+                .register(Capability.of("diagnostics", "Compiler errors", List.of(), args -> diagnostics().stream()
+                        .map(d -> Map.of("code", d.code(), "path", d.path(), "line", d.line(), "message", d.message())).toList()))
+                .register(Capability.of("fixes", "Quick fixes for a line", List.of(path, line),
+                        args -> fixes(text(args, "path"), Integer.parseInt(text(args, "line")))))
+                .register(Capability.of("fix", "Applies a quick fix", List.of(path, line, Param.of("title", "text")),
+                        args -> json(fix(text(args, "path"), Integer.parseInt(text(args, "line")), text(args, "title")))))
+                .register(Capability.of("why", "How the fixes for a line are deduced", List.of(path, line),
+                        args -> why(text(args, "path"), Integer.parseInt(text(args, "line")))))
+                .register(Capability.of("complete", "Completions at an offset of edited text",
+                        List.of(path, Param.of("text", "text"), Param.of("offset", "text")),
+                        args -> complete(text(args, "path"), text(args, "text"), Integer.parseInt(text(args, "offset")))))
+                .register(Capability.of("preview", "A refactoring's diff, without keeping it",
+                        List.of(Param.of("refactoring", "text"), Param.of("args", "text")), args -> {
+                            var preview = preview(text(args, "refactoring"), argsOf(args));
+                            var answer = new java.util.LinkedHashMap<String, Object>(json(preview.result()));
+                            answer.put("diff", preview.diff());
+                            return answer;
+                        }))
+                .register(Capability.of("expand", "A refactoring's primitives, without applying them",
+                        List.of(Param.of("refactoring", "text"), Param.of("args", "text")),
+                        args -> expand(text(args, "refactoring"), argsOf(args))));
+        return registry;
+    }
+
+    private static String text(Map<String, ?> args, String name) {
+        var value = args.get(name);
+        if (value == null) throw new IllegalArgumentException("missing argument: " + name);
+        return String.valueOf(value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, ?> argsOf(Map<String, ?> args) {
+        return args.get("args") instanceof Map<?, ?> nested ? (Map<String, ?>) nested : Map.of();
+    }
+
+    private static Map<String, Object> json(Result result) {
+        var answer = new java.util.LinkedHashMap<String, Object>();
+        answer.put("applied", result.applied());
+        answer.put("violations", result.violations().stream().map(v -> v.code() + ": " + v.detail()).toList());
+        answer.put("repairs", result.repairs());
+        answer.put("steps", result.steps());
+        return answer;
     }
 
     /** A refactoring's verified outcome and its diff; the program is left as it was. */
