@@ -10,6 +10,9 @@ public interface Program {
     /** Current compiler errors. */
     List<Diagnostic> diagnostics();
 
+    /** Where completion is asked in {@code text} (the editor's possibly unparsable version of {@code path}). */
+    java.util.Optional<CompletionContext> completionContext(String path, String text, int offset);
+
     /** Captures the whole program state (text and identity). */
     Object checkpoint();
 

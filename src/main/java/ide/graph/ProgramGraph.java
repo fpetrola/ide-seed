@@ -112,6 +112,22 @@ public final class ProgramGraph {
         return family;
     }
 
+    /** Fields then methods of a type, in declaration order. */
+    public List<Element> members(ElementId type) {
+        var fields = elements.values().stream().filter(e -> type.equals(e.parent()) && e.kind() == Kind.FIELD);
+        var methods = elements.values().stream().filter(e -> type.equals(e.parent()) && e.kind() == Kind.METHOD);
+        return java.util.stream.Stream.concat(fields, methods).toList();
+    }
+
+    /** The type and its superclasses in the workspace, nearest first. */
+    public List<Element> superclassChain(ElementId type) {
+        var chain = new ArrayList<Element>();
+        for (var t = Optional.of(element(type)); t.isPresent(); t = Optional.ofNullable(t.get().attribute("superclass")).flatMap(this::find)) {
+            chain.add(t.get());
+        }
+        return chain;
+    }
+
     /** Top-level types declared in the source file {@code path}. */
     public List<Element> typesIn(String path) {
         return elements.values().stream().filter(e -> path.equals(e.attribute("file"))).toList();

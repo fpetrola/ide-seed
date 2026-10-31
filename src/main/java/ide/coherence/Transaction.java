@@ -69,6 +69,11 @@ public final class Transaction implements Program {
     }
 
     @Override
+    public java.util.Optional<ide.graph.CompletionContext> completionContext(String path, String text, int offset) {
+        return program.completionContext(path, text, offset);
+    }
+
+    @Override
     public Object checkpoint() {
         return program.checkpoint();
     }

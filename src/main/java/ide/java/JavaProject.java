@@ -27,6 +27,7 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import ide.graph.CompletionContext;
 import ide.graph.Diagnostic;
 import ide.graph.Element;
 import ide.graph.ElementId;
@@ -41,6 +42,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -113,6 +115,39 @@ public final class JavaProject implements Program {
             diagnostics = JavacCheck.errors(sources);
         }
         return diagnostics;
+    }
+
+    private static final String MARKER = "__ide_complete__";
+
+    /**
+     * Inserts a marker identifier at the cursor (and a {@code ;} if needed to parse), parses that copy and resolves
+     * the receiver of the marker: the scope's type for {@code expr.prefix}, the enclosing type for a bare name.
+     */
+    @Override
+    public Optional<CompletionContext> completionContext(String path, String text, int offset) {
+        graph(); // identities of the saved version, which the edited text is matched against
+        var start = offset;
+        while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) start--;
+        var prefix = text.substring(start, offset);
+        var marked = text.substring(0, offset) + MARKER + text.substring(offset);
+        var parsed = parser.parse(marked);
+        if (!parsed.isSuccessful()) parsed = parser.parse(text.substring(0, offset) + MARKER + ";" + text.substring(offset));
+        if (!parsed.isSuccessful()) return Optional.empty();
+        var cu = parsed.getResult().orElseThrow();
+        var name = prefix + MARKER;
+        var site = cu.findFirst(Node.class, n -> n instanceof NodeWithSimpleName<?> named
+                && named.getNameAsString().equals(name) && (n instanceof NameExpr || n instanceof FieldAccessExpr));
+        if (site.isEmpty()) return Optional.empty();
+        var siteId = siteOf(site.get());
+        if (siteId == null) return Optional.empty();
+        try {
+            String receiver = site.get() instanceof FieldAccessExpr access
+                    ? access.getScope().calculateResolvedType().asReferenceType().getQualifiedName()
+                    : site.get().findAncestor(ClassOrInterfaceDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow();
+            return Optional.ofNullable(ids.get(receiver)).map(r -> new CompletionContext(r, prefix, siteId));
+        } catch (RuntimeException unresolved) {
+            return Optional.empty();
+        }
     }
 
     @Override

@@ -81,6 +81,25 @@ public final class Workspace {
         return tx.commit(repairer);
     }
 
+    /**
+     * Completion at {@code offset} of the editor text of {@code path}: accessible fields ({@code x}) and methods
+     * ({@code m()}) of the receiver and its superclasses, nearest first, overridden methods once.
+     */
+    public List<String> complete(String path, String text, int offset) {
+        var context = project.completionContext(path, text, offset);
+        if (context.isEmpty()) return List.of();
+        var graph = project.graph();
+        var labels = new java.util.LinkedHashSet<String>();
+        for (var type : graph.superclassChain(context.get().receiver())) {
+            for (var member : graph.members(type.id())) {
+                if (!member.name().startsWith(context.get().prefix())) continue;
+                if (!rules.accessible(graph, context.get().site(), member.id())) continue;
+                labels.add(member.kind() == ide.graph.Kind.METHOD ? member.name() + "()" : member.name());
+            }
+        }
+        return List.copyOf(labels);
+    }
+
     public List<Diagnostic> diagnostics() {
         return project.diagnostics();
     }
