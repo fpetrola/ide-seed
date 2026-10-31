@@ -1,10 +1,11 @@
 package ide.graph;
 
 public enum Kind {
-    CLASS, INTERFACE, FIELD, METHOD;
+    PACKAGE, CLASS, INTERFACE, FIELD, METHOD;
 
     public String prefix() {
         return switch (this) {
+            case PACKAGE -> "pkg";
             case CLASS, INTERFACE -> "type";
             case FIELD -> "field";
             case METHOD -> "method";

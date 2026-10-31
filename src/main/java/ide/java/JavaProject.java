@@ -92,6 +92,19 @@ public final class JavaProject implements Program {
 
     // ---- primitives
 
+    /** Creates a top-level class in its own compilation unit (only kind supported so far). */
+    @Override
+    public ElementId create(Kind kind, ElementId parent, String name) {
+        var pkg = graph().element(parent);
+        if (kind != Kind.CLASS || pkg.kind() != Kind.PACKAGE) {
+            throw new IllegalArgumentException("unsupported create: " + kind + " in " + pkg);
+        }
+        var path = pkg.qualified().replace('.', '/') + "/" + name + ".java";
+        if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
+        load(path, "package " + pkg.qualified() + ";\n\npublic class " + name + " {\n}\n");
+        return idOf(pkg.qualified() + "." + name, Kind.CLASS);
+    }
+
     /** Moves a member into another type, keeping its identity. */
     @Override
     public void move(ElementId member, ElementId newParent) {
@@ -105,14 +118,32 @@ public final class JavaProject implements Program {
         transfer(element.qualified(), target.qualified() + "#" + element.name());
     }
 
-    /** Changes an attribute of an element; only {@code visibility} so far. */
+    /** Changes an attribute of an element: {@code visibility} of a member, {@code superclass} of a class. */
     @Override
     public void set(ElementId id, String attribute, String value) {
-        if (!attribute.equals("visibility")) throw new IllegalArgumentException("unsupported attribute: " + attribute);
+        switch (attribute) {
+            case "visibility" -> setVisibility(id, value);
+            case "superclass" -> setSuperclass(id, value);
+            default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
+        }
+        changed();
+    }
+
+    /** Sets the superclass by its qualified name, written as a simple name when in the same package. */
+    private void setSuperclass(ElementId id, String superclass) {
+        var type = typeDeclaration(graph().element(id).qualified());
+        var pkg = type.findCompilationUnit().flatMap(CompilationUnit::getPackageDeclaration)
+                .map(p -> p.getNameAsString() + ".").orElse("");
+        var name = superclass.startsWith(pkg) && superclass.indexOf('.', pkg.length()) < 0
+                ? superclass.substring(pkg.length()) : superclass;
+        if (type.getExtendedTypes().isEmpty()) type.addExtendedType(name);
+        else type.getExtendedTypes(0).setName(name);
+    }
+
+    private void setVisibility(ElementId id, String value) {
         var modifiers = ((NodeWithModifiers<?>) declaration(graph().element(id))).getModifiers();
         modifiers.removeIf(m -> ACCESS.contains(m.getKeyword()));
         if (!value.equals("package")) modifiers.addFirst(new Modifier(Modifier.Keyword.valueOf(value.toUpperCase())));
-        changed();
     }
 
     // ---- projection: graph from AST
@@ -120,11 +151,20 @@ public final class JavaProject implements Program {
     private ProgramGraph buildGraph() {
         var elements = new ArrayList<Element>();
         var references = new ArrayList<Reference>();
+        var packages = new LinkedHashMap<String, ElementId>();
         for (var cu : units.values()) {
+            var pkg = cu.getPackageDeclaration().map(p -> {
+                var name = p.getNameAsString();
+                return packages.computeIfAbsent(name, n -> {
+                    var id = idOf(n, Kind.PACKAGE);
+                    elements.add(new Element(id, Kind.PACKAGE, n, null, n, Map.of()));
+                    return id;
+                });
+            }).orElse(null);
             for (var type : cu.findAll(ClassOrInterfaceDeclaration.class)) {
                 var typeName = type.getFullyQualifiedName().orElseThrow();
                 var parent = type.findAncestor(ClassOrInterfaceDeclaration.class)
-                        .map(t -> idOf(t.getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(null);
+                        .map(t -> idOf(t.getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(pkg);
                 var typeId = idOf(typeName, Kind.CLASS);
                 elements.add(new Element(typeId, type.isInterface() ? Kind.INTERFACE : Kind.CLASS,
                         type.getNameAsString(), parent, typeName, typeAttributes(type)));

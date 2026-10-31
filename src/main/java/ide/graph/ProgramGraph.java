@@ -65,7 +65,9 @@ public final class ProgramGraph {
     /** The outermost type enclosing (or equal to) the element. */
     public Element topLevel(ElementId id) {
         var element = element(id);
-        while (element.parent() != null) element = element(element.parent());
+        while (element.parent() != null && element(element.parent()).kind() != Kind.PACKAGE) {
+            element = element(element.parent());
+        }
         return element;
     }
 }
