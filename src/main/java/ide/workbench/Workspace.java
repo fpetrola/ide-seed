@@ -126,6 +126,12 @@ public final class Workspace {
                             answer.put("diff", preview.diff());
                             return answer;
                         }))
+                .register(Capability.of("callers", "Who calls a method (polymorphically)", List.of(Param.of("method", "element", "METHOD")),
+                        args -> callers(text(args, "method"))))
+                .register(Capability.of("hierarchy", "Supertypes and subtypes of a type", List.of(Param.of("type", "element", "CLASS", "INTERFACE", "ENUM")),
+                        args -> hierarchy(text(args, "type"))))
+                .register(Capability.of("references", "Every use of an element", List.of(Param.of("element", "element")),
+                        args -> references(text(args, "element"))))
                 .register(Capability.of("expand", "A refactoring's primitives, without applying them",
                         List.of(Param.of("refactoring", "text"), Param.of("args", "text")),
                         args -> expand(text(args, "refactoring"), argsOf(args))));
@@ -288,6 +294,57 @@ public final class Workspace {
             }
         }
         return List.copyOf(labels);
+    }
+
+    // ---- navigation
+
+    /** Members whose code calls the method, or a method it overrides (such a call may dispatch to it). */
+    public List<String> callers(String method) {
+        var graph = project.graph();
+        var target = graph.find(method).orElseThrow(() -> new IllegalArgumentException("no element " + method));
+        var targets = new java.util.HashSet<ide.graph.ElementId>();
+        targets.add(target.id());
+        var pending = new java.util.ArrayDeque<>(graph.overriddenAll(target));
+        while (!pending.isEmpty()) {
+            var next = pending.poll();
+            if (targets.add(next.id())) pending.addAll(graph.overriddenAll(next));
+        }
+        return graph.references().stream().filter(r -> r.mode().equals("call") && targets.contains(r.target()))
+                .map(r -> graph.element(r.site()).qualified()).distinct().sorted().toList();
+    }
+
+    /** Supertypes (nearest first), the type marked with {@code >}, then subtypes indented by depth. */
+    public List<String> hierarchy(String type) {
+        var graph = project.graph();
+        var focus = graph.find(type).orElseThrow(() -> new IllegalArgumentException("no element " + type));
+        var lines = new java.util.ArrayList<String>();
+        var up = new java.util.ArrayDeque<>(graph.supertypes(focus));
+        var seen = new java.util.HashSet<ide.graph.ElementId>();
+        while (!up.isEmpty()) {
+            var next = up.poll();
+            if (!seen.add(next.id())) continue;
+            lines.add(next.qualified());
+            up.addAll(graph.supertypes(next));
+        }
+        lines.add("> " + focus.qualified());
+        subtypes(graph, focus, 1, lines);
+        return lines;
+    }
+
+    private static void subtypes(ide.graph.ProgramGraph graph, ide.graph.Element type, int depth, List<String> lines) {
+        graph.types().stream().filter(t -> graph.supertypes(t).contains(type))
+                .sorted(java.util.Comparator.comparing(ide.graph.Element::qualified))
+                .forEach(t -> {
+                    lines.add("  ".repeat(depth) + t.qualified());
+                    subtypes(graph, t, depth + 1, lines);
+                });
+    }
+
+    /** The site of every use of an element, in reference order. */
+    public List<String> references(String element) {
+        var graph = project.graph();
+        var target = graph.find(element).orElseThrow(() -> new IllegalArgumentException("no element " + element));
+        return graph.referencesTo(target.id()).stream().map(r -> graph.element(r.site()).qualified()).toList();
     }
 
     public List<Diagnostic> diagnostics() {
