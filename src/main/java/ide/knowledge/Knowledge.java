@@ -139,6 +139,11 @@ public final class Knowledge implements Remedy, QuickFix {
             }
 
             @Override
+            public void oblige(String assumption) {
+                // remedies run inside the repairer; what they assume is not tracked yet
+            }
+
+            @Override
             public boolean attempt(String label, Runnable body) {
                 body.run(); // effects are judged as a whole by the repairer
                 return true;

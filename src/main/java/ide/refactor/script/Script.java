@@ -122,6 +122,7 @@ public final class Script implements Refactoring {
                         throw new PrimitiveRejected("refactoring.precondition", interpolate(require.message(), ctx, env).toString());
                     }
                 }
+                case Stmt.Oblige oblige -> ctx.oblige(interpolate(oblige.assumption(), ctx, env).toString());
                 case Stmt.Fail fail -> throw new PrimitiveRejected("refactoring.failed", interpolate(fail.message(), ctx, env).toString());
                 case Stmt.Return ret -> {
                     var value = interpolate(ret.value(), ctx, env);

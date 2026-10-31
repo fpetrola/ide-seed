@@ -38,7 +38,8 @@ class CapabilitiesTest {
 
         assertThat(registry.invoke("ls", Map.of())).isEqualTo("[\"a/P.java\"]");
         assertThat(registry.invoke("rename", Map.of("element", "a.P#x", "name", "y")))
-                .isEqualTo("{\"applied\":true,\"violations\":[],\"repairs\":[],\"steps\":[\"' rename a.P#x -> y\"]}");
+                .isEqualTo("{\"applied\":true,\"violations\":[],\"repairs\":[],\"steps\":[\"' rename a.P#x -> y\"],"
+                        + "\"guarantee\":\"guaranteed\",\"obligations\":[]}");
         assertThat(registry.invoke("show", Map.of("path", "a/P.java"))).contains("public int y;");
         assertThat(registry.invoke("undo", Map.of())).isEqualTo("\"ok\"");
         assertThat(ws.source("a/P.java")).isEqualTo(P);

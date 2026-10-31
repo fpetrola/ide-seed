@@ -13,7 +13,7 @@ import java.util.List;
  *   param &lt;name&gt; : text|bool|element(KINDS)|elements(KINDS)|choice(A,B) ["description"]
  *   let v = expr  |  v := &lt;id&gt; args  |  &lt;id&gt; args  |  for x in expr ... end  |  if expr ... [else ...] end
  *   try "label" ... end
- *   require expr "message"  |  fail "message"  |  return arg
+ *   require expr "message"  |  oblige "assumption"  |  fail "message"  |  return arg
  * end
  * </pre>
  */
@@ -116,6 +116,7 @@ public final class ScriptParser {
             return new Stmt.Require(condition, tokens.remainingString());
         }
         if (line.startsWith("fail ")) return new Stmt.Fail(unquote(line.substring(5).strip()));
+        if (line.startsWith("oblige ")) return new Stmt.Oblige(unquote(line.substring(7).strip()));
         if (line.startsWith("return ")) return new Stmt.Return(unquoteArg(line.substring(7).strip()));
         var assign = line.indexOf(":=");
         var variable = assign < 0 ? null : line.substring(0, assign).strip();

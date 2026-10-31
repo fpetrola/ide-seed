@@ -20,6 +20,9 @@ public interface Ctx {
      */
     boolean attempt(String label, Runnable body);
 
+    /** Declares an assumption the refactoring cannot verify; it travels with the result as an obligation. */
+    void oblige(String assumption);
+
     /** Language semantics, for scripts that ask (e.g. which visibilities are wider). */
     ide.graph.LanguageRules rules();
 

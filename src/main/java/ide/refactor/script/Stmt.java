@@ -23,6 +23,9 @@ sealed interface Stmt {
     record Require(Expr condition, String message) implements Stmt {
     }
 
+    record Oblige(String assumption) implements Stmt {
+    }
+
     record Fail(String message) implements Stmt {
     }
 

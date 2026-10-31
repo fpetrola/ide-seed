@@ -158,6 +158,8 @@ public final class Workspace {
         answer.put("violations", result.violations().stream().map(v -> v.code() + ": " + v.detail()).toList());
         answer.put("repairs", result.repairs());
         answer.put("steps", result.steps());
+        answer.put("guarantee", result.guarantee());
+        answer.put("obligations", result.obligations());
         return answer;
     }
 
@@ -446,6 +448,11 @@ public final class Workspace {
             @Override
             public LanguageRules rules() {
                 return rules;
+            }
+
+            @Override
+            public void oblige(String assumption) {
+                tx.oblige(assumption);
             }
 
             @Override

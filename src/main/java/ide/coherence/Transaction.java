@@ -21,6 +21,7 @@ public final class Transaction implements Program {
     private final boolean compiled;
     private final List<String> steps = new ArrayList<>();
     private final List<String> search = new ArrayList<>();
+    private final java.util.LinkedHashSet<String> obligations = new java.util.LinkedHashSet<>();
     /** Elements the refactoring changed on purpose; repairs may not undo that. */
     private final Map<ElementId, java.util.Set<String>> pinned = new java.util.HashMap<>();
     private int depth;
@@ -37,7 +38,8 @@ public final class Transaction implements Program {
         var outcome = repairer.stabilize(baseline, compiled, program, pinned);
         outcome.repairs().forEach(repair -> steps.add("! " + repair));
         search.addAll(outcome.search());
-        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps, search);
+        if (!compiled) obligations.add("types were not checked: the code did not compile before");
+        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps, search, List.copyOf(obligations));
         program.rollback(checkpoint);
         return Result.aborted(outcome.violations(), steps, search);
     }
@@ -62,6 +64,12 @@ public final class Transaction implements Program {
         outcome.repairs().forEach(repair -> log("! " + repair));
         search.addAll(outcome.search());
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
+    }
+
+    /** Something the refactoring cannot decide and assumes; the result's guarantee becomes "assumed". */
+    public void oblige(String assumption) {
+        obligations.add(assumption);
+        log(": " + assumption);
     }
 
     /** Records a discarded attempt. */
@@ -151,7 +159,7 @@ public final class Transaction implements Program {
 
     /** Keeps a manual edit as it is: the user's text is the authority, there is nothing to verify against. */
     public Result keep() {
-        return Result.ok(List.of(), steps, search);
+        return Result.ok(List.of(), steps, search, List.copyOf(obligations));
     }
 
     @Override
