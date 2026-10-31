@@ -15,5 +15,8 @@ public interface Program {
     /** Moves a member into {@code newParent}, just before {@code before} (a member there), or at the end if null. */
     void move(ElementId member, ElementId newParent, ElementId before);
 
+    /** Renames an element; every use of it is rewritten. */
+    void rename(ElementId element, String name);
+
     void set(ElementId element, String attribute, String value);
 }

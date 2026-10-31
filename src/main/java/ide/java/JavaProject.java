@@ -124,6 +124,39 @@ public final class JavaProject implements Program {
         transfer(element.qualified(), target.qualified() + signature);
     }
 
+    /** Renames a field or method together with every use that resolves to it, keeping its identity. */
+    @Override
+    public void rename(ElementId id, String name) {
+        var element = graph().element(id);
+        var uses = usesOf(element.qualified());
+        var node = declaration(element);
+        switch (node) {
+            case FieldDeclaration field -> field.getVariables().stream()
+                    .filter(v -> v.getNameAsString().equals(element.name())).forEach(v -> v.setName(name));
+            case MethodDeclaration method -> method.setName(name);
+            default -> throw new IllegalArgumentException("unsupported rename: " + element);
+        }
+        uses.forEach(use -> use.setName(name));
+        var owner = element.qualified().substring(0, element.qualified().indexOf('#') + 1);
+        var rest = element.qualified().substring(owner.length() + element.name().length());
+        transfer(element.qualified(), owner + name + rest);
+        changed();
+    }
+
+    /** Expressions anywhere in the workspace that resolve to the field or method at {@code address}. */
+    private List<NodeWithSimpleName<?>> usesOf(String address) {
+        var uses = new ArrayList<NodeWithSimpleName<?>>();
+        for (var cu : units.values()) {
+            for (var expr : fieldUses(cu)) {
+                if (address.equals(resolveField(expr))) uses.add((NodeWithSimpleName<?>) expr);
+            }
+            for (var call : cu.findAll(MethodCallExpr.class)) {
+                if (address.equals(resolveMethod(call))) uses.add(call);
+            }
+        }
+        return uses;
+    }
+
     /** Changes an attribute of an element: {@code visibility} of a member, {@code superclass} of a class. */
     @Override
     public void set(ElementId id, String attribute, String value) {

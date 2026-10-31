@@ -12,6 +12,7 @@ import ide.refactor.Ctx;
 import ide.refactor.ExtractSuperclass;
 import ide.refactor.PullUp;
 import ide.refactor.Refactoring;
+import ide.refactor.Rename;
 
 import java.util.List;
 import java.util.Map;
@@ -24,7 +25,7 @@ public final class Workspace {
 
     private final JavaProject project;
     private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility(), new PullUpDependency()));
-    private final Map<String, Refactoring> refactorings = Stream.of(PullUp.field(), PullUp.method(), new ExtractSuperclass())
+    private final Map<String, Refactoring> refactorings = Stream.of(new Rename(), PullUp.field(), PullUp.method(), new ExtractSuperclass())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
 
     private Workspace(JavaProject project) {
