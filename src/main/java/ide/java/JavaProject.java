@@ -652,6 +652,7 @@ public final class JavaProject implements Program {
 
     private void setType(ElementId id, String type) {
         var element = graph().element(id);
+        if (ids.containsKey(type) && type.contains(".")) type = importing(element, type); // a workspace type by name
         var parsed = parser.parseType(type).getResult().orElseThrow();
         switch (element.kind()) {
             case FIELD -> ((FieldDeclaration) declaration(element)).getVariables().forEach(v -> v.setType(parsed.clone()));
@@ -879,6 +880,18 @@ public final class JavaProject implements Program {
         changed();
     }
 
+    /** Makes {@code qualified} nameable by its simple name where {@code element} is declared; returns that name. */
+    private String importing(Element element, String qualified) {
+        var unit = typeDeclaration(graph().topLevel(element.id()).qualified()).findCompilationUnit().orElseThrow();
+        var unitPackage = unit.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
+        var imported = unit.getImports().stream().anyMatch(i -> i.getNameAsString().equals(qualified));
+        if (!packageOf(qualified).equals(unitPackage) && !imported) {
+            var path = pathOf(unit);
+            load(path, Imports.add(source(path), unit, qualified));
+        }
+        return qualified.substring(qualified.lastIndexOf('.') + 1);
+    }
+
     /** A type use now names {@code type}: its simple name, imported when another package declares it. */
     private void retargetType(Reference ref, Element type) {
         var node = referenceNodes.get(ref.id());
@@ -922,6 +935,7 @@ public final class JavaProject implements Program {
                         var address = typeName + "#" + variable.getNameAsString();
                         var attributes = new HashMap<>(attributes(field));
                         attributes.put("type", variable.getType().asString());
+                        declared(variable.getType()).ifPresent(d -> attributes.put("declared", d));
                         elements.add(new Element(idOf(address, Kind.FIELD), Kind.FIELD,
                                 variable.getNameAsString(), typeId, address, Map.copyOf(attributes)));
                     }
@@ -1155,9 +1169,17 @@ public final class JavaProject implements Program {
     private void addParams(List<Element> elements, CallableDeclaration<?> callable, String address, ElementId owner) {
         for (var param : callable.getParameters()) {
             var paramAddress = address + "/" + param.getNameAsString();
+            var attributes = new HashMap<String, String>();
+            attributes.put("type", param.getType().asString());
+            declared(param.getType()).ifPresent(d -> attributes.put("declared", d));
             elements.add(new Element(idOf(paramAddress, Kind.PARAM), Kind.PARAM, param.getNameAsString(),
-                    owner, paramAddress, Map.of("type", param.getType().asString())));
+                    owner, paramAddress, Map.copyOf(attributes)));
         }
+    }
+
+    /** The qualified name of the type a declaration names, when it is a plain class or interface type. */
+    private static Optional<String> declared(Type type) {
+        return type instanceof ClassOrInterfaceType named ? Optional.ofNullable(resolveType(named)) : Optional.empty();
     }
 
     /** Classes, interfaces and enums of a unit, outermost first. */
@@ -1320,10 +1342,23 @@ public final class JavaProject implements Program {
 
     private void invalidate() {
         JavaParserFacade.clearInstances(); // resolution caches point into replaced ASTs
+        units.values().forEach(JavaProject::forgetResolvedTypes);
         typeSolver.reset();
         graph = null;
         referenceNodes = Map.of();
         diagnostics = null;
+    }
+
+    /**
+     * The facade also caches resolved types on the nodes themselves; in units that were not re-parsed they would
+     * still describe the program before the change (e.g. a field whose declared type changed elsewhere).
+     */
+    private static void forgetResolvedTypes(CompilationUnit cu) {
+        cu.walk(node -> {
+            for (var key : List.copyOf(node.getDataKeys())) {
+                if (key.getClass().getName().startsWith(JavaParserFacade.class.getName() + "$")) node.removeData(key);
+            }
+        });
     }
 
     private String pathOf(CompilationUnit cu) {

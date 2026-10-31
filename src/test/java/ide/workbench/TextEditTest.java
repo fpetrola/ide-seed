@@ -47,4 +47,19 @@ class TextEditTest {
         assertThat(edit.violations().getFirst().code()).isEqualTo("projection.unparsable");
         assertThat(ws.source("a/P.java")).isEqualTo(P);
     }
+
+    @Test
+    void bindingsInUnchangedFilesFollowAChangeElsewhere() {
+        var ws = Workspace.of(Map.of(
+                "m/Entity.java", "package m;\n\npublic abstract class Entity {\n}\n",
+                "m/Customer.java", "package m;\n\npublic class Customer extends Entity {\n    public String name;\n}\n",
+                "m/Order.java", "package m;\n\npublic class Order {\n    public Customer customer;\n}\n",
+                "s/Billing.java", "package s;\n\nimport m.Order;\n\nclass Billing {\n    String label(Order order) {\n        return order.customer.name;\n    }\n}\n"));
+        assertThat(ws.references("m.Customer#name")).containsExactly("s.Billing#label(Order)");
+
+        ws.edit("m/Order.java", "package m;\n\npublic class Order {\n    public Entity customer;\n}\n");
+
+        // Billing was not re-parsed; types resolved on its nodes before the edit must not survive it
+        assertThat(ws.references("m.Customer#name")).isEmpty();
+    }
 }

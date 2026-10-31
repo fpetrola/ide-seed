@@ -60,7 +60,13 @@ class OrdersSampleTest {
                 arguments("rename a field that has no accessors",
                         "rename-field-with-accessors", Map.of("field", "orders.model.Customer#name", "name", "fullName"), "applied"),
                 arguments("encapsulate every public field of a type",
-                        "encapsulate-fields", Map.of("type", "orders.model.Order"), "applied"));
+                        "encapsulate-fields", Map.of("type", "orders.model.Order"), "applied"),
+                arguments("declare a parameter with a supertype it is only used as",
+                        "generalize-declared-type", Map.of("element", "orders.service.Billing#priced(Order)/order", "type", "orders.model.Priced"), "applied"),
+                arguments("declare a parameter with a supertype lacking what it uses",
+                        "generalize-declared-type", Map.of("element", "orders.service.Billing#label(Order)/order", "type", "orders.model.Priced"), "binding.unresolved"),
+                arguments("declare a field with a supertype from another package",
+                        "generalize-declared-type", Map.of("element", "orders.model.Order#customer", "type", "orders.model.Entity"), "binding.unresolved"));
     }
 
     @ParameterizedTest(name = "{0}")

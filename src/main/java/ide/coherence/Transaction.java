@@ -182,7 +182,15 @@ public final class Transaction implements Program {
     public void set(ElementId element, String attribute, String value) {
         var oldSuperclass = attribute.equals("superclass")
                 ? program.graph().find(String.valueOf(program.graph().element(element).attribute("superclass"))) : null;
+        var before = program.graph().element(element);
+        var oldDeclared = attribute.equals("type") ? program.graph().find(String.valueOf(before.attribute("declared"))) : null;
         program.set(element, attribute, value);
+        if (oldDeclared != null && oldDeclared.isPresent()) { // the declaration now names another type, on purpose
+            var site = before.kind() == ide.graph.Kind.PARAM ? before.parent() : element;
+            var now = program.graph().element(element).attribute("declared");
+            program.graph().find(String.valueOf(now))
+                    .ifPresent(to -> baseline = baseline.retargeted(site, oldDeclared.get().id(), to.id()));
+        }
         if (attribute.equals("visibility")) pin(element, "visibility");
         if (oldSuperclass != null && oldSuperclass.isPresent()) { // an intended rebinding of the extends clause
             program.graph().find(value).ifPresent(to -> baseline = baseline.retargeted(element, oldSuperclass.get().id(), to.id()));
