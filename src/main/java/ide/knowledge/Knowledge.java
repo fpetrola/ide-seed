@@ -35,7 +35,7 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     record Effect(String name, String title, Predicate makes, String when, String forVariable, String forItems,
-                  int cost, Script body) {
+                  List<Plan.Ask> asks, int cost, Script body) {
     }
 
     /** One step of a search, for {@code why}. */
@@ -99,7 +99,8 @@ public final class Knowledge implements Remedy, QuickFix {
                         if (effect.forVariable() != null) variables.put(effect.forVariable(), item);
                         var title = Script.render(effect.title(), ctx, variables);
                         lines.add("  ! " + title);
-                        candidates.add(Map.entry(effect.cost() * 100 + rank++, new Plan(title, p -> run(effect, p, rules, variables))));
+                        candidates.add(Map.entry(effect.cost() * 100 + rank++, new Plan(title, effect.asks(),
+                                (p, answers) -> run(effect, p, rules, variables, answers))));
                     }
                 } catch (RuntimeException inapplicable) { // e.g. the facts name elements that no longer exist
                     lines.add("  X " + effect.name() + ": " + inapplicable.getMessage());
@@ -110,9 +111,11 @@ public final class Knowledge implements Remedy, QuickFix {
         return new Trace(lines, candidates.stream().map(Map.Entry::getValue).toList());
     }
 
-    private void run(Effect effect, Program program, LanguageRules rules, Map<String, Object> variables) {
+    private void run(Effect effect, Program program, LanguageRules rules, Map<String, Object> variables,
+                     Map<String, String> answers) {
         var args = new HashMap<String, Object>();
         effect.body().params().forEach(p -> args.put(p.name(), variables.get(p.name())));
+        effect.asks().forEach(ask -> args.put(ask.name(), answers.getOrDefault(ask.name(), ask.defaultAnswer())));
         effect.body().apply(ctx(program, rules), new Args(args));
     }
 

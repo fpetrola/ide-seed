@@ -17,6 +17,7 @@ import java.util.function.Function;
  *   [when expr]
  *   [for v in expr]
  *   [cost n]
+ *   [ask name "question" "default"]   (a hole: quick fixes only)
  *   do
  *     ...script statements over the variables...
  *   end
@@ -47,12 +48,17 @@ final class KnowledgeParser {
                 Knowledge.Predicate makes = null;
                 String when = null, forVariable = null, forItems = null;
                 var cost = 1;
+                var asks = new ArrayList<ide.coherence.Plan.Ask>();
                 var body = new StringBuilder();
                 for (i++; !lines.get(i).strip().equals("end"); i++) {
                     var clause = lines.get(i).strip();
                     if (clause.startsWith("makes ")) makes = predicate(clause.substring(6));
                     else if (clause.startsWith("when ")) when = clause.substring(5);
                     else if (clause.startsWith("cost ")) cost = Integer.parseInt(clause.substring(5).strip());
+                    else if (clause.startsWith("ask ")) {
+                        var parts = clause.substring(4).strip().split("\"");
+                        asks.add(new ide.coherence.Plan.Ask(parts[0].strip(), parts[1], parts.length > 3 ? parts[3] : ""));
+                    }
                     else if (clause.startsWith("for ")) {
                         var in = clause.indexOf(" in ");
                         forVariable = clause.substring(4, in).strip();
@@ -73,7 +79,8 @@ final class KnowledgeParser {
                 var variables = new LinkedHashSet<>(List.of("site", "target", "symbol", "path", "line"));
                 variables.addAll(makes.args());
                 if (forVariable != null) variables.add(forVariable);
-                effects.add(new Knowledge.Effect(name, title, makes, when, forVariable, forItems, cost,
+                asks.forEach(ask -> variables.add(ask.name()));
+                effects.add(new Knowledge.Effect(name, title, makes, when, forVariable, forItems, List.copyOf(asks), cost,
                         Script.block(body.toString(), List.copyOf(variables))));
             } else {
                 throw new IllegalArgumentException("knowledge: unexpected line: " + line);

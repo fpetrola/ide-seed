@@ -43,13 +43,14 @@ public final class Repairer {
             var violations = verify(baseline, compiled, program);
             if (violations.isEmpty()) return new Outcome(repairs, List.of());
             var target = violations.getFirst();
-            var plans = remedies.stream().flatMap(r -> r.plans(target, program, rules).stream()).toList();
+            var plans = remedies.stream().flatMap(r -> r.plans(target, program, rules).stream())
+                    .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
             String kept = null;
             for (var plan : plans) {
                 if (branches++ >= MAX_BRANCHES) return new Outcome(repairs, violations);
                 var saved = program.checkpoint();
                 try {
-                    plan.apply().accept(program);
+                    plan.apply(program);
                 } catch (RuntimeException failed) {
                     program.rollback(saved);
                     continue;

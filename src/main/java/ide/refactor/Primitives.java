@@ -14,7 +14,7 @@ public final class Primitives {
 
     public static List<Refactoring> all() {
         return List.of(
-                primitive("create", "Creates an empty element", List.of(Param.of("kind", "choice", "CLASS", "METHOD", "PARAM"),
+                primitive("create", "Creates an empty element", List.of(Param.of("kind", "choice", "CLASS", "FIELD", "METHOD", "PARAM"),
                         Param.of("parent", "element"), Param.of("name", "text")), (ctx, args) -> {
                     var graph = ctx.program().graph();
                     return ctx.program().create(Kind.valueOf(args.text("kind")), args.element("parent", graph).id(),

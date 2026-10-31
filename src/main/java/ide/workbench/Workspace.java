@@ -288,25 +288,40 @@ public final class Workspace {
                 .map(Plan::title).distinct().toList();
     }
 
-    /** Applies a fix as a transaction that must make its diagnostic disappear. */
-    public Result fix(String path, int line, String title) {
+    /** The questions a fix asks: {@code name: question [default]}. */
+    public List<String> asks(String path, int line, String title) {
+        return plan(path, line, title).getValue().asks().stream()
+                .map(a -> a.name() + ": " + a.question() + " [" + a.defaultAnswer() + "]").toList();
+    }
+
+    private Map.Entry<Diagnostic, Plan> plan(String path, int line, String title) {
         for (var diagnostic : diagnosticsAt(path, line)) {
             for (var quickFix : quickFixes) {
                 for (var plan : quickFix.plans(diagnostic, project, rules)) {
-                    if (!plan.title().equals(title)) continue;
-                    var tx = new Transaction(project);
-                    tx.enter("fix " + title);
-                    plan.apply().accept(tx);
-                    tx.exit();
-                    var event = Map.of("event", "fix", "path", path, "line", line, "title", title);
-                    if (project.diagnostics().contains(diagnostic)) {
-                        return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
-                    }
-                    return record(tx, event, tx.commit(repairer));
+                    if (plan.title().equals(title)) return Map.entry(diagnostic, plan);
                 }
             }
         }
         throw new IllegalArgumentException("no fix '" + title + "' at " + path + ":" + line);
+    }
+
+    public Result fix(String path, int line, String title) {
+        return fix(path, line, title, Map.of());
+    }
+
+    /** Applies a fix (its questions answered, or defaulted) as a transaction that must make its diagnostic disappear. */
+    public Result fix(String path, int line, String title, Map<String, String> answers) {
+        var found = plan(path, line, title);
+        var diagnostic = found.getKey();
+        var tx = new Transaction(project);
+        tx.enter("fix " + title);
+        found.getValue().apply().accept(tx, answers);
+        tx.exit();
+        var event = Map.of("event", "fix", "path", path, "line", line, "title", title);
+        if (project.diagnostics().contains(diagnostic)) {
+            return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
+        }
+        return record(tx, event, tx.commit(repairer));
     }
 
     /** How fixes for the diagnostics on a line are deduced: {@code ?} goal, {@code !} plan, {@code X} rejected. */

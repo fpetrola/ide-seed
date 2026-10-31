@@ -34,3 +34,14 @@ effect import "import ${t}"
     set ${top-in(path)} import ${t}
   end
 end
+
+effect create-field "create field ${symbol}"
+  makes resolves(symbol)
+  when not(is-type-name(symbol))
+  ask type "type of the new field" "int"
+  cost 2
+  do
+    f := create FIELD ${top-in(path)} ${symbol}
+    set ${f} type ${type}
+  end
+end

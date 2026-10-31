@@ -188,6 +188,10 @@ public final class JavaProject implements Program {
                 load(path, "package " + owner.qualified() + ";\n\npublic class " + name + " {\n}\n");
                 yield idOf(owner.qualified() + "." + name, Kind.CLASS);
             }
+            case FIELD -> {
+                insertField(typeDeclaration(owner.qualified()), "Object " + name + ";");
+                yield idOf(owner.qualified() + "#" + name, Kind.FIELD);
+            }
             case METHOD -> {
                 insertMember(typeDeclaration(owner.qualified()), "void " + name + "() {\n" + " ".repeat(4) + "}");
                 yield idOf(owner.qualified() + "#" + name + "()", Kind.METHOD);
@@ -495,6 +499,7 @@ public final class JavaProject implements Program {
         var element = graph().element(id);
         var parsed = parser.parseType(type).getResult().orElseThrow();
         switch (element.kind()) {
+            case FIELD -> ((FieldDeclaration) declaration(element)).getVariables().forEach(v -> v.setType(parsed.clone()));
             case METHOD -> ((MethodDeclaration) declaration(element)).setType(parsed);
             case PARAM -> editMethod(graph().element(element.parent()),
                     m -> m.getParameterByName(element.name()).orElseThrow().setType(parsed));
@@ -887,6 +892,22 @@ public final class JavaProject implements Program {
         var offset = Text.lineStart(code, type.getEnd().orElseThrow().line);
         var indent = " ".repeat(4);
         load(path, code.substring(0, offset) + "\n" + indent + memberText + "\n" + code.substring(offset));
+    }
+
+    /** Inserts a field after the last field, or first in the body followed by a blank line; re-parses. */
+    private void insertField(TypeDeclaration<?> type, String fieldText) {
+        var path = pathOf(type.findCompilationUnit().orElseThrow());
+        var code = source(path);
+        var indent = " ".repeat(4);
+        var fields = type.getFields();
+        if (fields.isEmpty()) {
+            var offset = Text.lineStart(code, type.getName().getEnd().orElseThrow().line + 1);
+            var separate = type.getMembers().isEmpty() ? "" : "\n";
+            load(path, code.substring(0, offset) + indent + fieldText + "\n" + separate + code.substring(offset));
+        } else {
+            var offset = Text.lineStart(code, fields.get(fields.size() - 1).getEnd().orElseThrow().line + 1);
+            load(path, code.substring(0, offset) + indent + fieldText + "\n" + code.substring(offset));
+        }
     }
 
     /** Inserts a member as a text edit on the lines just above {@code anchor}, then re-parses the unit. */

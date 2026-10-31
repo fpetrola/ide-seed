@@ -94,6 +94,7 @@ class ImportQuickFixTest {
         assertThat(ws.why("a/U.java", 4)).containsExactly(
                 "javac.cant.resolve.location List",
                 "? resolves(List)",
-                "  ! import java.util.List");
+                "  ! import java.util.List",
+                "  X create-field: not(is-type-name(symbol))");
     }
 }
