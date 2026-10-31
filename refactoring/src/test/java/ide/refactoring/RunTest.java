@@ -60,9 +60,9 @@ class RunTest {
         var p = projection.program();
         var read = p.referencesFrom(id(p, "a.B#n()")).getFirst().id();
         var write = p.referencesFrom(id(p, "a.B#m()")).getFirst().id();
-        var tx = new Transaction(projection);
+        var tx = new Transaction(projection, new Repairer(List.of()));
 
-        Run.in(tx, new Repairer(List.of()), Library.standard()).call("encapsulate-field", Map.of("field", "a.A#x"));
+        Run.in(tx, Library.standard()).call("encapsulate-field", Map.of("field", "a.A#x"));
         var steps = tx.abort(null).steps(); // an expansion: what would run, with nothing kept
 
         assertThat(steps).filteredOn(line -> !line.startsWith("    ")).containsExactly(
@@ -117,10 +117,10 @@ class RunTest {
         var projection = fields();
         var library = Library.standard();
         library.define(MOVE_FIELDS);
-        var tx = new Transaction(projection);
+        var tx = new Transaction(projection, new Repairer(List.of()));
 
-        Run.in(tx, new Repairer(List.of()), library).call("move-fields", Map.of("from", "a.A", "to", "a.B"));
-        var result = tx.commit(new Repairer(List.of()));
+        Run.in(tx, library).call("move-fields", Map.of("from", "a.A", "to", "a.B"));
+        var result = tx.commit();
 
         assertThat(result.applied()).isTrue();
         assertThat(result.steps()).containsExactly(
@@ -156,9 +156,9 @@ class RunTest {
         var library = Library.standard();
         library.define(HIDE);
 
-        var tx = new Transaction(lone());
-        Run.in(tx, new Repairer(List.of()), library).call("hide", Map.of("field", "a.A#x"));
-        var result = tx.commit(new Repairer(List.of()));
+        var tx = new Transaction(lone(), new Repairer(List.of()));
+        Run.in(tx, library).call("hide", Map.of("field", "a.A#x"));
+        var result = tx.commit();
         assertThat(result.guarantee()).isEqualTo("assumed");
         assertThat(result.obligations()).containsExactly("nothing outside the workspace uses a.A#x");
 

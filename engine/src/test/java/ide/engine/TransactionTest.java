@@ -40,10 +40,10 @@ class TransactionTest {
     void whatAChangeDeclaresIsExpectedNotReported() {
         var projection = program();
         var p = projection.program();
-        var tx = new Transaction(projection);
+        var tx = new Transaction(projection, new Repairer(List.of()));
 
         tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
-        var result = tx.commit(new Repairer(List.of()));
+        var result = tx.commit();
 
         assertThat(result.applied()).isTrue();
         assertThat(result.steps()).singleElement().asString().startsWith("' retarget ").endsWith(" x -> a.B#y");
@@ -55,10 +55,10 @@ class TransactionTest {
     void whatAChangeDoesNotDeclareIsReportedAndTheStartRestored() {
         var projection = program();
         var p = projection.program();
-        var tx = new Transaction(silent(projection));
+        var tx = new Transaction(silent(projection), new Repairer(List.of()));
 
         tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
-        var result = tx.commit(new Repairer(List.of()));
+        var result = tx.commit();
 
         assertThat(result.applied()).isFalse();
         assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.unresolved");
@@ -71,11 +71,11 @@ class TransactionTest {
         var projection = program();
         var p = projection.program();
         var x = id(p, "a.B#x");
-        var tx = new Transaction(projection);
+        var moveBack = remedy("move back", violation -> new Primitive.Move(violation.target(), id(p, "a.B"), null));
+        var tx = new Transaction(projection, new Repairer(List.of(moveBack, Programs.open())));
 
         tx.apply(new Primitive.Move(x, id(p, "a.A"), null)); // B#n() now reads a private field of A
-        var moveBack = remedy("move back", violation -> new Primitive.Move(violation.target(), id(p, "a.B"), null));
-        var result = tx.commit(new Repairer(List.of(moveBack, Programs.open())));
+        var result = tx.commit();
 
         assertThat(result.applied()).isTrue();
         assertThat(result.repairs()).containsExactly("open a.A#x");
@@ -88,18 +88,17 @@ class TransactionTest {
         var projection = program();
         var start = projection.program();
         var y = id(start, "a.B#y");
-        var tx = new Transaction(projection);
-        var repairer = new Repairer(List.of());
+        var tx = new Transaction(projection, new Repairer(List.of()));
 
         tx.apply(new Primitive.Rename(y, "z"));
-        var refused = tx.attempt("rename onto x", () -> tx.apply(new Primitive.Rename(y, "x")), repairer);
-        var unverified = tx.attempt("move x up", () -> tx.apply(new Primitive.Move(id(start, "a.B#x"), id(start, "a.A"), null)), repairer);
-        var kept = tx.attempt("add w", () -> tx.apply(new Primitive.Create(ide.program.Kind.FIELD, id(start, "a.A"), "w")), repairer);
+        var refused = tx.attempt("rename onto x", () -> tx.apply(new Primitive.Rename(y, "x")));
+        var unverified = tx.attempt("move x up", () -> tx.apply(new Primitive.Move(id(start, "a.B#x"), id(start, "a.A"), null)));
+        var kept = tx.attempt("add w", () -> tx.apply(new Primitive.Create(ide.program.Kind.FIELD, id(start, "a.A"), "w")));
 
         assertThat(List.of(refused, unverified, kept)).containsExactly(false, false, true);
         assertThat(projection.program().find("a.A#w")).isPresent();
         assertThat(projection.program().find("a.B#x")).isPresent();
-        assertThat(tx.commit(repairer).steps()).contains(
+        assertThat(tx.commit().steps()).contains(
                 ". try rename onto x", "X rename onto x: projection.duplicate a.B#x already exists",
                 ". try move x up", "  ' move a.B#x -> a.A",
                 "X move x up: access.insufficient a.B#n() cannot access private a.A#x",
@@ -110,7 +109,7 @@ class TransactionTest {
     void abortReturnsToTheStart() {
         var projection = program();
         var start = projection.program();
-        var tx = new Transaction(projection);
+        var tx = new Transaction(projection, new Repairer(List.of()));
 
         tx.apply(new Primitive.Rename(id(start, "a.B#y"), "z"));
         tx.apply(new Primitive.Create(ide.program.Kind.FIELD, id(start, "a.A"), "w"));
@@ -123,12 +122,12 @@ class TransactionTest {
     void restoringAPointOfTheTransactionForgetsWhatWasDeclaredSince() {
         var projection = program();
         var p = projection.program();
-        var tx = new Transaction(projection);
+        var tx = new Transaction(projection, new Repairer(List.of()));
 
         var point = tx.snapshot();
         tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
         tx.restore(point); // as a plan applied to the transaction does when one of its attempts is refused
-        var result = tx.commit(new Repairer(List.of()));
+        var result = tx.commit();
 
         assertThat(result.applied()).isTrue();
         assertThat(projection.program().referencesFrom(id(p, "a.B#n()"))).extracting(Reference::target)

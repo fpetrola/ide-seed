@@ -22,6 +22,7 @@ import java.util.Set;
 public final class Transaction implements Projection {
 
     private final Projection projection;
+    private final Repairer repairer;
     private final Snapshot start;
     private Program baseline;
     private final boolean compiled;
@@ -30,15 +31,17 @@ public final class Transaction implements Projection {
     private final Set<String> obligations = new LinkedHashSet<>();
     private final Set<Change.Pin> pinned = new LinkedHashSet<>();
 
-    public Transaction(Projection projection) {
+    /** A transaction over {@code projection}, judged by {@code repairer} whenever it is checked. */
+    public Transaction(Projection projection, Repairer repairer) {
         this.projection = projection;
+        this.repairer = repairer;
         this.start = projection.snapshot();
         this.baseline = projection.program();
         this.compiled = projection.diagnostics().isEmpty();
     }
 
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else restores the start. */
-    public Result commit(Repairer repairer) {
+    public Result commit() {
         var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());
@@ -53,13 +56,13 @@ public final class Transaction implements Projection {
      * it did is undone and the attempt is recorded as dropped, with why; the transaction goes on. Answers whether it
      * stayed.
      */
-    public boolean attempt(String label, Runnable body, Repairer repairer) {
+    public boolean attempt(String label, Runnable body) {
         var point = snapshot();
         enter("try " + label);
         String failure;
         try {
             body.run();
-            var left = check(repairer);
+            var left = check();
             failure = left == null ? null : left.code() + " " + left.detail();
         } catch (PrimitiveRejected refused) {
             failure = refused.code() + " " + refused.getMessage();
@@ -77,7 +80,7 @@ public final class Transaction implements Projection {
     }
 
     /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
-    private Violation check(Repairer repairer) {
+    private Violation check() {
         var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());

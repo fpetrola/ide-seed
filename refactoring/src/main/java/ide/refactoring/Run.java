@@ -1,7 +1,6 @@
 package ide.refactoring;
 
 import ide.core.Param;
-import ide.engine.Repairer;
 import ide.engine.Transaction;
 import ide.program.ElementId;
 import ide.program.Program;
@@ -27,23 +26,21 @@ public final class Run {
     private final Library library;
     private final Projection projection;
     private final Transaction transaction;
-    private final Repairer repairer;
 
-    private Run(Library library, Projection projection, Transaction transaction, Repairer repairer) {
+    private Run(Library library, Projection projection, Transaction transaction) {
         this.library = library;
         this.projection = projection;
         this.transaction = transaction;
-        this.repairer = repairer;
     }
 
-    /** A run inside a transaction, whose attempts the repairer judges. */
-    public static Run in(Transaction transaction, Repairer repairer, Library library) {
-        return new Run(library, transaction, transaction, repairer);
+    /** A run inside a transaction, which judges its attempts. */
+    public static Run in(Transaction transaction, Library library) {
+        return new Run(library, transaction, transaction);
     }
 
     /** A run straight on a projection. */
     public static Run on(Projection projection, Library library) {
-        return new Run(library, projection, null, null);
+        return new Run(library, projection, null);
     }
 
     /** Where primitives go. */
@@ -78,7 +75,7 @@ public final class Run {
 
     /** Runs {@code body} as an attempt that is undone if it fails; answers whether it stayed. */
     public boolean attempt(String label, Runnable body) {
-        if (transaction != null) return transaction.attempt(label, body, repairer);
+        if (transaction != null) return transaction.attempt(label, body);
         var saved = projection.snapshot();
         try {
             body.run();

@@ -166,9 +166,9 @@ public final class Workspace {
 
     /** The step tree a refactoring would produce, without verifying or keeping anything. */
     public List<String> expand(String refactoring, Map<String, ?> args) {
-        var tx = new Transaction(project);
+        var tx = new Transaction(project, repairer);
         try {
-            Run.in(tx, repairer, library).call(refactoring, args);
+            Run.in(tx, library).call(refactoring, args);
         } catch (PrimitiveRejected rejected) {
             tx.discarded(rejected.code() + " " + rejected.getMessage());
         }
@@ -221,7 +221,7 @@ public final class Workspace {
 
     /** Applies a manual edit of a file's text as its own (undoable, logged) transaction. */
     public Result edit(String path, String text) {
-        var tx = new Transaction(project);
+        var tx = new Transaction(project, repairer);
         Result result;
         try {
             tx.edit(path, text);
@@ -245,11 +245,11 @@ public final class Workspace {
 
     /** Runs a refactoring naively in a transaction, then verifies and repairs; rolls back if violations remain. */
     public Result invoke(String refactoring, Map<String, ?> args) {
-        var tx = new Transaction(project);
+        var tx = new Transaction(project, repairer);
         Result result;
         try {
-            Run.in(tx, repairer, library).call(refactoring, args);
-            result = tx.commit(repairer);
+            Run.in(tx, library).call(refactoring, args);
+            result = tx.commit();
         } catch (PrimitiveRejected rejected) {
             result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
         }
@@ -383,7 +383,7 @@ public final class Workspace {
     public Result fix(String path, int line, String title, Map<String, String> answers) {
         var found = plan(path, line, title);
         var diagnostic = found.getKey();
-        var tx = new Transaction(project);
+        var tx = new Transaction(project, repairer);
         tx.enter("fix " + title);
         found.getValue().apply().accept(tx, answers);
         tx.exit();
@@ -391,7 +391,7 @@ public final class Workspace {
         if (project.diagnostics().contains(diagnostic)) {
             return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
         }
-        return record(tx, event, tx.commit(repairer));
+        return record(tx, event, tx.commit());
     }
 
     /** How the repairer searched in the last transaction: each violation, and each plan kept or undone. */

@@ -90,10 +90,10 @@ class KnowledgeTest {
         var projection = program();
         var p = projection.program();
         var x = id(p, "a.A#x");
-        var tx = new Transaction(projection);
+        var tx = new Transaction(projection, new Repairer(List.of(Knowledge.parse(REACH, Library.standard()))));
 
         tx.apply(new Primitive.Set(x, "visibility", "private")); // B#n() reads it: access.insufficient
-        var result = tx.commit(new Repairer(List.of(Knowledge.parse(REACH, Library.standard()))));
+        var result = tx.commit();
 
         assertThat(result.applied()).isTrue();
         assertThat(result.repairs()).containsExactly("bring a.A#x into a.B"); // widening would undo the change
