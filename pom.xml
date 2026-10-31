@@ -15,6 +15,7 @@
         <module>core</module>
         <module>program</module>
         <module>projection</module>
+        <module>projection-kit</module>
         <module>java</module>
         <module>engine</module>
         <module>refactoring</module>
@@ -45,6 +46,11 @@
             <dependency>
                 <groupId>ide</groupId>
                 <artifactId>ide-projection</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-projection-kit</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -82,6 +88,16 @@
                 <artifactId>archunit-junit5</artifactId>
                 <version>1.3.0</version>
             </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>5.11.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>3.26.3</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -90,13 +106,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.11.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.26.3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

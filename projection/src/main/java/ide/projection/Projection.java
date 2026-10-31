@@ -35,6 +35,9 @@ public interface Projection {
     /** Returns to a state captured by {@link #snapshot()} of this projection. */
     void restore(Snapshot snapshot);
 
+    /** The language's semantics the products above ask about: access, visibilities, imports. */
+    LanguageRules rules();
+
     /** Current compiler errors. */
     List<Diagnostic> diagnostics();
 

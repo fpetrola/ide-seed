@@ -161,6 +161,11 @@ public final class Transaction implements Projection {
     }
 
     @Override
+    public ide.projection.LanguageRules rules() {
+        return projection.rules();
+    }
+
+    @Override
     public List<Diagnostic> diagnostics() {
         return projection.diagnostics();
     }

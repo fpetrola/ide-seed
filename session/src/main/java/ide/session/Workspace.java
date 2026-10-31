@@ -16,7 +16,6 @@ import ide.projection.LanguageRules;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 import ide.java.JavaProject;
-import ide.java.JavaRules;
 import ide.refactoring.Args;
 import ide.refactoring.Ctx;
 import ide.refactoring.ChangeSignature;
@@ -33,9 +32,9 @@ import java.util.Map;
 public final class Workspace {
 
     private final JavaProject project;
-    private final LanguageRules rules = new JavaRules();
+    private final LanguageRules rules;
     private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), this::refactoring);
-    private final Repairer repairer = new Repairer(rules, List.of(knowledge));
+    private final Repairer repairer;
     private final List<QuickFix> quickFixes = List.of(knowledge);
     private final Map<String, Refactoring> refactorings = new java.util.TreeMap<>();
 
@@ -48,6 +47,8 @@ public final class Workspace {
 
     private Workspace(JavaProject project) {
         this.project = project;
+        this.rules = project.rules();
+        this.repairer = new Repairer(rules, List.of(knowledge));
         this.saved = sources();
         Primitives.all().forEach(this::register);
         register(new ChangeSignature());
@@ -213,9 +214,7 @@ public final class Workspace {
     }
 
     public Map<String, String> sources() {
-        var sources = new java.util.TreeMap<String, String>();
-        project.files().forEach(path -> sources.put(path, project.source(path)));
-        return sources;
+        return project.sources();
     }
 
     private static String diff(Map<String, String> before, Map<String, String> after) {

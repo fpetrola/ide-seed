@@ -22,5 +22,11 @@
             <groupId>com.github.javaparser</groupId>
             <artifactId>javaparser-symbol-solver-core</artifactId>
         </dependency>
+        <!-- the driver proves it honors the contract -->
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-projection-kit</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

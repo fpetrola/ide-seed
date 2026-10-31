@@ -70,6 +70,8 @@ public final class JavaProject implements Projection {
             implements Projection.Snapshot {
     }
 
+    private static final JavaRules RULES = new JavaRules();
+
     private static final Set<Modifier.Keyword> ACCESS =
             Set.of(Modifier.Keyword.PUBLIC, Modifier.Keyword.PROTECTED, Modifier.Keyword.PRIVATE);
 
@@ -104,6 +106,18 @@ public final class JavaProject implements Projection {
 
     public java.util.Set<String> files() {
         return java.util.Set.copyOf(units.keySet());
+    }
+
+    /** Path → text of every source file, sorted by path. */
+    public Map<String, String> sources() {
+        var sources = new TreeMap<String, String>();
+        units.keySet().forEach(path -> sources.put(path, source(path)));
+        return sources;
+    }
+
+    @Override
+    public ide.projection.LanguageRules rules() {
+        return RULES;
     }
 
     @Override
@@ -271,18 +285,26 @@ public final class JavaProject implements Projection {
         }
         requireIdentifier(name);
         var owner = program().element(parent);
+        Address address = switch (kind) {
+            case CLASS, INTERFACE -> new Address.Type(owner.qualified() + "." + name);
+            case FIELD -> new Address.Field(owner.id(), name);
+            case METHOD -> new Address.Callable(owner.id(), name, List.of());
+            case PARAM -> new Address.Param(owner.id(), name);
+            default -> throw new IllegalArgumentException("unsupported create: " + kind);
+        };
+        if (ids.has(address)) throw new PrimitiveRejected("projection.duplicate", ids.render(address) + " already exists");
         return switch (kind) {
             case CLASS -> {
                 if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("classes go in packages: " + owner);
                 var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
-                if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
+                if (units.containsKey(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
                 load(path, "package " + owner.qualified() + ";\n\npublic class " + name + " {\n}\n");
                 yield ids.of(new Address.Type(owner.qualified() + "." + name), Kind.CLASS);
             }
             case INTERFACE -> {
                 if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("interfaces go in packages: " + owner);
                 var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
-                if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
+                if (units.containsKey(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
                 load(path, "package " + owner.qualified() + ";\n\npublic interface " + name + " {\n}\n");
                 yield ids.of(new Address.Type(owner.qualified() + "." + name), Kind.CLASS);
             }
