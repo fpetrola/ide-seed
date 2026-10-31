@@ -49,4 +49,28 @@ class CompilerViewTest {
 
         assertThat(result.applied()).isTrue();
     }
+
+    @Test
+    void compilerErrorsAreRepairedFromKnowledgeLikeAnyViolation() {
+        var ws = Workspace.of(Map.of("a/P.java", """
+                package a;
+
+                class P {
+                    int x;
+                }
+                """));
+        ws.define("""
+                refactoring add-names "Adds a list of names, without caring about imports"
+                  param type : element(CLASS)
+                  f := create FIELD ${type} names
+                  set ${f} type List<String>
+                end
+                """);
+
+        var result = ws.invoke("add-names", Map.of("type", "a.P"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(result.repairs()).containsExactly("import java.util.List");
+        assertThat(ws.source("a/P.java")).contains("import java.util.List;", "List<String> names;");
+    }
 }
