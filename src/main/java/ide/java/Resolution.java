@@ -4,9 +4,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
-import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -23,7 +21,9 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 
 import ide.program.Fact;
@@ -33,21 +33,17 @@ import ide.program.Mode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-/** How uses resolve and how declarations are described in the graph: addresses, kinds, attributes. */
+/** How uses resolve and how declarations are described in the graph: kinds, modes, facts. */
 final class Resolution {
 
     private Resolution() {
     }
 
-    /** Address of the workspace constructor a {@code new} resolves to, or null. */
-    static String resolveConstructor(ObjectCreationExpr creation) {
+    /** The constructor a {@code new} resolves to, or null. */
+    static ResolvedConstructorDeclaration resolveConstructor(ObjectCreationExpr creation) {
         try {
-            var constructor = creation.resolve();
-            var params = new ArrayList<String>();
-            for (var i = 0; i < constructor.getNumberOfParams(); i++) params.add(simple(constructor.getParam(i).getType().describe()));
-            return constructor.declaringType().getQualifiedName() + "#new(" + String.join(",", params) + ")";
+            return creation.resolve();
         } catch (RuntimeException unresolved) {
             return null;
         }
@@ -97,24 +93,19 @@ final class Resolution {
         };
     }
 
-    /** Address of a method reference's method ({@code Book::code}), or null. */
-    static String resolveMethodReference(MethodReferenceExpr reference) {
+    /** The method a method reference ({@code Book::code}) resolves to, or null. */
+    static ResolvedMethodDeclaration resolveMethodReference(MethodReferenceExpr reference) {
         try {
-            var method = reference.resolve();
-            var params = new ArrayList<String>();
-            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(simple(method.getParam(i).getType().describe()));
-            return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
+            return reference.resolve();
         } catch (RuntimeException unresolved) {
             return null;
         }
     }
 
-    static String resolveMethodStrictly(MethodCallExpr call) {
+    /** The method a call resolves to, or null. */
+    static ResolvedMethodDeclaration resolveMethodStrictly(MethodCallExpr call) {
         try {
-            var method = call.resolve();
-            var params = new ArrayList<String>();
-            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(simple(method.getParam(i).getType().describe()));
-            return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
+            return call.resolve();
         } catch (RuntimeException unresolved) {
             return null;
         }
@@ -127,33 +118,17 @@ final class Resolution {
         return uses;
     }
 
-    /** Address of the field the expression resolves to, or null if it is not a (resolvable) field use. */
-    static String resolveField(Expression expr) {
+    /** The field the expression resolves to, or null if it is not a (resolvable) field use. */
+    static ResolvedFieldDeclaration resolveField(Expression expr) {
         try {
             ResolvedValueDeclaration decl = expr.isNameExpr() ? expr.asNameExpr().resolve() : expr.asFieldAccessExpr().resolve();
-            if (!decl.isField()) return null;
-            return ((ResolvedFieldDeclaration) decl).declaringType().getQualifiedName() + "#" + decl.getName();
+            return decl.isField() ? (ResolvedFieldDeclaration) decl : null;
         } catch (RuntimeException unresolved) {
             return null;
         }
     }
 
-    /**
-     * {@code a.B#m(int,String)}: parameter types resolved (so declarations and calls agree) and written with simple
-     * names (so moving a type does not change the address of the methods that take it).
-     */
-    static String methodAddress(String typeName, CallableDeclaration<?> method) {
-        var name = method instanceof ConstructorDeclaration ? "new" : method.getNameAsString();
-        return typeName + "#" + name + method.getParameters().stream()
-                .map(p -> simple(describe(p.getType()))).collect(Collectors.joining(",", "(", ")"));
-    }
-
-    static final java.util.regex.Pattern PACKAGE_PREFIX = java.util.regex.Pattern.compile("\\b(?:[a-z_$][\\w$]*\\.)+");
-
-    static String simple(String described) {
-        return PACKAGE_PREFIX.matcher(described).replaceAll("").replace(" ", "");
-    }
-
+    /** The resolved description of a declared type, or the type as written when it does not resolve. */
     static String describe(Type type) {
         try {
             return type.resolve().describe();

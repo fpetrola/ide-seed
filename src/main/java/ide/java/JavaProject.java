@@ -36,7 +36,9 @@ import ide.projection.Diagnostic;
 import ide.program.Element;
 
 import static ide.java.Resolution.*;
+import ide.program.Address;
 import ide.program.ElementId;
+import ide.program.Identity;
 import ide.program.Fact;
 import ide.program.Mode;
 import ide.program.Kind;
@@ -73,6 +75,7 @@ public final class JavaProject implements Projection {
     private final GraphReader reader;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
     private final Identity ids = new Identity();
+    private final Keys keys = new Keys(ids);
     private Program graph;
     private Map<String, Node> referenceNodes = Map.of();
     private List<Diagnostic> diagnostics;
@@ -82,7 +85,7 @@ public final class JavaProject implements Projection {
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
         typeSolver = solver;
-        reader = new GraphReader(ids, solver);
+        reader = new GraphReader(ids, keys, solver);
         parser = new JavaParser(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(solver)));
     }
 
@@ -163,11 +166,11 @@ public final class JavaProject implements Projection {
                 var typeName = access.getScope() instanceof NameExpr scopeName ? reader.resolveTypeName(scopeName) : null;
                 var receiver = typeName != null ? typeName
                         : access.getScope().calculateResolvedType().asReferenceType().getQualifiedName();
-                return Optional.ofNullable(ids.get(receiver))
+                return Optional.ofNullable(ids.get(new Address.Type(receiver)))
                         .map(r -> new CompletionContext(r, prefix, siteId, typeName != null, List.of()));
             }
             var enclosing = site.get().findAncestor(TypeDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow().toString();
-            return Optional.ofNullable(ids.get(enclosing))
+            return Optional.ofNullable(ids.get(new Address.Type(enclosing)))
                     .map(r -> new CompletionContext(r, prefix, siteId, false, localsBefore(site.get())));
         } catch (RuntimeException unresolved) {
             return Optional.empty();
@@ -207,10 +210,10 @@ public final class JavaProject implements Projection {
     public ElementId create(Kind kind, ElementId parent, String name) {
         if (kind == Kind.PACKAGE) { // a package exists while it is declared, even before it has files
             for (var part : name.split("\\.", -1)) requireIdentifier(part);
-            if (ids.has(name)) throw new PrimitiveRejected("projection.duplicate", name + " already exists");
+            if (ids.has(new Address.Package(name))) throw new PrimitiveRejected("projection.duplicate", name + " already exists");
             emptyPackages.add(name);
             invalidate();
-            return idOf(name, Kind.PACKAGE);
+            return ids.of(new Address.Package(name), Kind.PACKAGE);
         }
         requireIdentifier(name);
         var owner = graph().element(parent);
@@ -220,32 +223,32 @@ public final class JavaProject implements Projection {
                 var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
                 if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
                 load(path, "package " + owner.qualified() + ";\n\npublic class " + name + " {\n}\n");
-                yield idOf(owner.qualified() + "." + name, Kind.CLASS);
+                yield ids.of(new Address.Type(owner.qualified() + "." + name), Kind.CLASS);
             }
             case INTERFACE -> {
                 if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("interfaces go in packages: " + owner);
                 var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
                 if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
                 load(path, "package " + owner.qualified() + ";\n\npublic interface " + name + " {\n}\n");
-                yield idOf(owner.qualified() + "." + name, Kind.CLASS);
+                yield ids.of(new Address.Type(owner.qualified() + "." + name), Kind.CLASS);
             }
             case FIELD -> {
                 insertField(typeDeclaration(owner.qualified()), "Object " + name + ";");
-                yield idOf(owner.qualified() + "#" + name, Kind.FIELD);
+                yield ids.of(new Address.Field(owner.id(), name), Kind.FIELD);
             }
             case METHOD -> {
                 insertMember(typeDeclaration(owner.qualified()), "void " + name + "() {\n" + " ".repeat(4) + "}");
-                yield idOf(owner.qualified() + "#" + name + "()", Kind.METHOD);
+                yield ids.of(new Address.Callable(owner.id(), name, List.of()), Kind.METHOD);
             }
             case PARAM -> {
                 // calls get a placeholder argument until the parameter's default is set
-                var calls = callsTo(owner.qualified());
+                var calls = callsTo(owner.id());
                 var marker = new NameExpr(defaultMarker(owner.name(), name));
-                var method = editMethod(owner, m -> {
+                editMethod(owner, m -> {
                     m.addParameter("Object", name);
                     calls.forEach(call -> call.addArgument(marker.clone()));
                 });
-                yield idOf(method + "/" + name, Kind.PARAM);
+                yield ids.of(new Address.Param(owner.id(), name), Kind.PARAM);
             }
             default -> throw new IllegalArgumentException("unsupported create: " + kind);
         };
@@ -257,14 +260,13 @@ public final class JavaProject implements Projection {
         }
     }
 
-    /** Edits a method's declaration and carries its identity (and its parameters') to its new address. */
-    private String editMethod(Element method, java.util.function.Consumer<MethodDeclaration> edit) {
+    /** Edits a method's declaration; its identity follows the parameter list to the re-parsed declaration. */
+    private void editMethod(Element method, java.util.function.Consumer<MethodDeclaration> edit) {
         var node = (MethodDeclaration) declaration(method);
         edit.accept(node);
-        var address = methodAddress(method.qualified().substring(0, method.qualified().indexOf('#')), node);
+        var names = node.getParameters().stream().map(p -> p.getNameAsString()).toList();
         changed();
-        transfer(method.qualified(), address);
-        return address;
+        resign(method, names);
     }
 
     /** Moves a member into another type, keeping its identity. */
@@ -278,17 +280,15 @@ public final class JavaProject implements Projection {
             return;
         }
         var anchor = before == null ? null : g.element(before);
-        var signature = element.qualified().substring(element.qualified().indexOf('#'));
-        if (ids.has(target.qualified() + signature)) {
-            throw new PrimitiveRejected("projection.duplicate", target.qualified() + signature + " already exists");
-        }
+        var moved = ids.address(member).withOwner(newParent);
+        if (ids.has(moved)) throw new PrimitiveRejected("projection.duplicate", ids.render(moved) + " already exists");
         var node = declaration(element);
         var text = LexicalPreservingPrinter.print(node).strip();
         node.remove();
         changed();
         if (anchor == null) insertMember(typeDeclaration(target.qualified()), text);
         else insertBefore(declaration(anchor), text);
-        transfer(element.qualified(), target.qualified() + signature);
+        ids.move(member, newParent);
     }
 
     /**
@@ -348,7 +348,7 @@ public final class JavaProject implements Projection {
         units.put(newPath, parse(newPath, code));
         edits.forEach((path, edited) -> units.put(path, parse(path, edited)));
         invalidate();
-        transfer(type.qualified(), newQualified);
+        ids.rebindType(type.qualified(), newQualified);
     }
 
     private static ImportDeclaration redundantImport(CompilationUnit cu, String pkg) {
@@ -388,7 +388,7 @@ public final class JavaProject implements Projection {
         var first = node.getComment().flatMap(Node::getBegin).orElse(node.getBegin().orElseThrow()).line;
         var last = node.getEnd().orElseThrow().line;
         load(path, Text.collapseBlankAt(Text.removeLines(code, first, last), first));
-        ids.forget(element.qualified());
+        ids.forget(element.id());
     }
 
     /** Renames a field or method together with every use that resolves to it, keeping its identity. */
@@ -400,7 +400,9 @@ public final class JavaProject implements Projection {
             renameType(element, name);
             return;
         }
-        var uses = usesOf(element.qualified());
+        var renamed = ids.address(id).withName(name);
+        if (ids.has(renamed)) throw new PrimitiveRejected("projection.duplicate", ids.render(renamed) + " already exists");
+        var uses = usesOf(element);
         var node = declaration(element);
         switch (node) {
             case com.github.javaparser.ast.body.Parameter param -> param.setName(name);
@@ -409,14 +411,9 @@ public final class JavaProject implements Projection {
             case MethodDeclaration method -> method.setName(name);
             default -> throw new IllegalArgumentException("unsupported rename: " + element);
         }
-        var owner = element.qualified().substring(0, element.qualified().indexOf('#') + 1);
-        var rest = element.qualified().substring(owner.length() + element.name().length());
-        if (ids.has(owner + name + rest)) {
-            throw new PrimitiveRejected("projection.duplicate", owner + name + rest + " already exists");
-        }
         uses.forEach(use -> use.setName(name));
         methodReferencesTo(element).forEach(reference -> reference.setIdentifier(name));
-        transfer(element.qualified(), owner + name + rest);
+        ids.rename(id, name);
         changed();
     }
 
@@ -428,7 +425,7 @@ public final class JavaProject implements Projection {
     private void renameType(Element type, String name) {
         var dot = type.qualified().lastIndexOf('.');
         var renamed = type.qualified().substring(0, dot + 1) + name;
-        if (ids.has(renamed)) throw new PrimitiveRejected("projection.duplicate", renamed + " already exists");
+        if (ids.has(new Address.Type(renamed))) throw new PrimitiveRejected("projection.duplicate", renamed + " already exists");
         var g = graph();
         var names = new ArrayList<Node>();
         var targets = new ArrayList<ElementId>(List.of(type.id()));
@@ -465,17 +462,7 @@ public final class JavaProject implements Projection {
             parsedText.put(newPath, parsedText.remove(oldPath));
             invalidate();
         }
-        transfer(type.qualified(), renamed);
-        renameConstructorAddresses(renamed, type.name(), name);
-    }
-
-    /** Addresses under the renamed type whose parameter types name the type itself. */
-    private void renameConstructorAddresses(String type, String oldName, String newName) {
-        for (var address : ids.addresses()) {
-            if (!address.startsWith(type + "#")) continue;
-            var fixed = address.replaceAll("\\b" + java.util.regex.Pattern.quote(oldName) + "\\b", newName);
-            if (!fixed.equals(address)) transfer(address, fixed);
-        }
+        ids.rebindType(type.qualified(), renamed);
     }
 
     private List<MethodReferenceExpr> methodReferencesTo(Element element) {
@@ -487,12 +474,11 @@ public final class JavaProject implements Projection {
         return references;
     }
 
-    /** Expressions anywhere in the workspace that use the element at {@code address}, from the current graph. */
-    private List<NodeWithSimpleName<?>> usesOf(String address) {
+    /** Expressions anywhere in the workspace that use the element, from the current graph. */
+    private List<NodeWithSimpleName<?>> usesOf(Element element) {
         var g = graph();
-        var id = ids.get(address);
         var uses = new ArrayList<NodeWithSimpleName<?>>();
-        for (var ref : g.referencesTo(id)) {
+        for (var ref : g.referencesTo(element.id())) {
             if (referenceNodes.get(ref.id()) instanceof NodeWithSimpleName<?> named) uses.add(named);
         }
         return uses;
@@ -534,11 +520,11 @@ public final class JavaProject implements Projection {
         return "__ide_default_" + method + "_" + param + "__";
     }
 
-    /** Calls anywhere in the workspace that resolve to the method at {@code address}, from the current graph. */
-    private List<MethodCallExpr> callsTo(String address) {
+    /** Calls anywhere in the workspace that resolve to the method, from the current graph. */
+    private List<MethodCallExpr> callsTo(ElementId method) {
         var g = graph();
         var calls = new ArrayList<MethodCallExpr>();
-        for (var ref : g.referencesTo(ids.get(address))) {
+        for (var ref : g.referencesTo(method)) {
             if (referenceNodes.get(ref.id()) instanceof MethodCallExpr call) calls.add(call);
         }
         return calls;
@@ -562,11 +548,11 @@ public final class JavaProject implements Projection {
         var from = declaration.getParameters().indexOf(declaration.getParameterByName(param.name()).orElseThrow());
         var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
         reorder(edits, declaration.getParameters(), from, index);
-        for (var call : callsTo(method.qualified())) reorder(edits, call.getArguments(), from, index);
+        for (var call : callsTo(method.id())) reorder(edits, call.getArguments(), from, index);
         var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
         names.add(index, names.remove(from));
         applyEdits(edits);
-        retransferMethod(method, names);
+        resign(method, names);
     }
 
     /** Deletes a top-level type nothing uses: its file goes, and so do the imports that name it. */
@@ -585,9 +571,7 @@ public final class JavaProject implements Projection {
         parsedText.remove(path);
         edits.forEach((p, code) -> units.put(p, parse(p, code)));
         invalidate();
-        for (var address : ids.addresses()) {
-            if (address.equals(type.qualified()) || address.startsWith(type.qualified() + "#")) ids.forget(address);
-        }
+        ids.forget(type.id());
     }
 
     private static boolean inside(Program g, ElementId id, ElementId container) {
@@ -614,12 +598,12 @@ public final class JavaProject implements Projection {
         var index = declaration.getParameters().indexOf(declaration.getParameterByName(param.name()).orElseThrow());
         var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
         remove(edits, declaration.getParameters(), index);
-        for (var call : callsTo(method.qualified())) remove(edits, call.getArguments(), index);
+        for (var call : callsTo(method.id())) remove(edits, call.getArguments(), index);
         var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
         names.remove(index);
         applyEdits(edits);
-        ids.forget(param.qualified());
-        retransferMethod(method, names);
+        ids.forget(param.id());
+        resign(method, names);
     }
 
     private void reorder(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, int from, int to) {
@@ -656,13 +640,13 @@ public final class JavaProject implements Projection {
         invalidate();
     }
 
-    /** After a parameter list change, carries the method's identity to the address of its new declaration. */
-    private void retransferMethod(Element method, List<String> parameterNames) {
-        var owner = method.qualified().substring(0, method.qualified().indexOf('#'));
-        var declaration = typeDeclaration(owner).getMethodsByName(method.name()).stream()
+    /** After a parameter list change, the method's identity follows its re-parsed declaration (found by its parameter names). */
+    private void resign(Element method, List<String> parameterNames) {
+        var callable = (Address.Callable) ids.address(method.id());
+        var declaration = typeDeclaration(ids.render(ids.address(callable.owner()))).getMethodsByName(method.name()).stream()
                 .filter(m -> m.getParameters().stream().map(p -> p.getNameAsString()).toList().equals(parameterNames))
                 .findFirst().orElseThrow();
-        transfer(method.qualified(), methodAddress(owner, declaration));
+        ids.resign(method.id(), keys.of(declaration));
     }
 
     /** Adds an import to the unit of a top-level type. */
@@ -674,7 +658,7 @@ public final class JavaProject implements Projection {
 
     private void setType(ElementId id, String type) {
         var element = graph().element(id);
-        if (ids.has(type) && type.contains(".")) type = importing(element, type); // a workspace type by name
+        if (type.contains(".") && ids.has(new Address.Type(type))) type = importing(element, type); // a workspace type by name
         var parsed = parser.parseType(type).getResult().orElseThrow();
         switch (element.kind()) {
             case FIELD -> ((FieldDeclaration) declaration(element)).getVariables().forEach(v -> v.setType(parsed.clone()));
@@ -796,7 +780,7 @@ public final class JavaProject implements Projection {
         var modifiers = method.isStatic() ? "private static " : "private ";
         insertMember(typeDeclaration(owner.qualified()), modifiers + outputType + " " + name + "(" + params + ") {\n" + body + "    }");
         var created = typeDeclaration(owner.qualified()).getMethodsByName(name).getFirst();
-        return idOf(methodAddress(owner.qualified(), created), Kind.METHOD);
+        return ids.of(new Address.Callable(owner.id(), name, keys.of(created)), Kind.METHOD);
     }
 
     /**
@@ -818,7 +802,7 @@ public final class JavaProject implements Projection {
             throw new PrimitiveRejected("inline.body-shape", method.qualified() + " is not a single 'return expr;'");
         }
         var original = statements.get(0).asReturnStmt().getExpression().get(); // attached, so names resolve
-        if (original.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.qualified().equals(reader.resolveMethod(c)))) {
+        if (original.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.id().equals(reader.resolveMethod(c)))) {
             throw new PrimitiveRejected("inline.recursive", method.qualified() + " calls itself");
         }
         var thisMembers = original.findAll(NameExpr.class).stream().anyMatch(n -> resolveField(n) != null)
@@ -927,18 +911,6 @@ public final class JavaProject implements Projection {
         load(path, code);
     }
 
-    // ---- projection: graph from AST
-
-    // ---- identity
-
-    private ElementId idOf(String address, Kind kind) {
-        return ids.of(address, kind);
-    }
-
-    private void transfer(String oldAddress, String newAddress) {
-        ids.transfer(oldAddress, newAddress);
-    }
-
     // ---- AST lookup and text edits
 
     private Node declaration(Element element) {
@@ -951,15 +923,17 @@ public final class JavaProject implements Projection {
         return switch (element.kind()) {
             case FIELD -> type.getFieldByName(element.name()).orElseThrow();
             case CONSTRUCTOR -> type.getConstructors().stream()
-                    .filter(c -> methodAddress(element.qualified().substring(0, element.qualified().indexOf('#')), c)
-                            .equals(element.qualified()))
+                    .filter(c -> keys.of(c).equals(keysOf(element)))
                     .findFirst().orElseThrow();
             case METHOD -> type.getMethods().stream()
-                    .filter(m -> methodAddress(element.qualified().substring(0, element.qualified().indexOf('#')), m)
-                            .equals(element.qualified()))
+                    .filter(m -> m.getNameAsString().equals(element.name()) && keys.of(m).equals(keysOf(element)))
                     .findFirst().orElseThrow();
             default -> throw new IllegalArgumentException("not a member: " + element);
         };
+    }
+
+    private List<String> keysOf(Element callable) {
+        return ((Address.Callable) ids.address(callable.id())).keys();
     }
 
     private TypeDeclaration<?> typeDeclaration(String qualified) {

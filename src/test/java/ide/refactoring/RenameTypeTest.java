@@ -82,6 +82,35 @@ class RenameTypeTest {
     }
 
     @Test
+    void renamesATypeUsedAsAParameterTypeElsewhere() {
+        var ws = Workspace.of(Map.of(
+                "a/Money.java", """
+                        package a;
+
+                        public class Money {
+                            public long cents;
+                        }
+                        """,
+                "b/Shop.java", """
+                        package b;
+
+                        import a.Money;
+
+                        class Shop {
+                            long pay(Money m) {
+                                return m.cents;
+                            }
+                        }
+                        """));
+
+        var result = ws.invoke("rename", Map.of("element", "a.Money", "name", "Amount"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("b/Shop.java")).contains("import a.Amount;", "long pay(Amount m) {");
+        assertThat(ws.diagnostics()).isEmpty();
+    }
+
+    @Test
     void renamingOntoAnExistingTypeIsRefused() {
         var ws = Workspace.of(SOURCES);
 
