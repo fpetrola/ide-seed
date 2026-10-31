@@ -11,17 +11,20 @@ import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParse
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserInterfaceDeclaration;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Resolves types declared in the in-memory workspace, falling back to the JDK.
- * Deliberately uncached: units are replaced after every edit, so cached declarations would point into stale ASTs.
+ * Resolves types declared in the in-memory workspace, falling back to the JDK. The index of workspace types is
+ * dropped whenever units are replaced, so it never points into stale ASTs.
  */
 final class WorkspaceTypeSolver implements TypeSolver {
 
     private final Supplier<Collection<CompilationUnit>> units;
     private final TypeSolver jdk;
     private TypeSolver parent;
+    private Map<String, ResolvedReferenceTypeDeclaration> index;
 
     WorkspaceTypeSolver(Supplier<Collection<CompilationUnit>> units, TypeSolver jdk) {
         this.units = units;
@@ -39,22 +42,32 @@ final class WorkspaceTypeSolver implements TypeSolver {
         this.parent = parent;
     }
 
+    /** Forgets the index; called whenever units are replaced. */
+    void reset() {
+        index = null;
+    }
+
     @Override
     public SymbolReference<ResolvedReferenceTypeDeclaration> tryToSolveType(String name) {
+        if (index == null) index = buildIndex();
+        var type = index.get(name);
+        if (type != null) return SymbolReference.solved(type);
+        return jdk.tryToSolveType(name);
+    }
+
+    /** Qualified name → declaration for every class, interface and enum in the workspace. */
+    private Map<String, ResolvedReferenceTypeDeclaration> buildIndex() {
+        var built = new HashMap<String, ResolvedReferenceTypeDeclaration>();
         for (var cu : units.get()) {
             for (var type : cu.findAll(ClassOrInterfaceDeclaration.class)) {
-                if (type.getFullyQualifiedName().orElse("").equals(name)) {
-                    return SymbolReference.solved(type.isInterface()
-                            ? new JavaParserInterfaceDeclaration(type, getRoot())
-                            : new JavaParserClassDeclaration(type, getRoot()));
-                }
+                type.getFullyQualifiedName().ifPresent(name -> built.put(name, type.isInterface()
+                        ? new JavaParserInterfaceDeclaration(type, getRoot())
+                        : new JavaParserClassDeclaration(type, getRoot())));
             }
             for (var type : cu.findAll(EnumDeclaration.class)) {
-                if (type.getFullyQualifiedName().orElse("").equals(name)) {
-                    return SymbolReference.solved(new JavaParserEnumDeclaration(type, getRoot()));
-                }
+                type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserEnumDeclaration(type, getRoot())));
             }
         }
-        return jdk.tryToSolveType(name);
+        return built;
     }
 }

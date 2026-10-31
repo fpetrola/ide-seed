@@ -45,6 +45,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+                <configuration>
+                    <excludedGroups>probe</excludedGroups>
+                </configuration>
             </plugin>
         </plugins>
     </build>

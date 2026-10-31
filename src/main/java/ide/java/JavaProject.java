@@ -67,13 +67,14 @@ public final class JavaProject implements Program {
             Set.of(Modifier.Keyword.PUBLIC, Modifier.Keyword.PROTECTED, Modifier.Keyword.PRIVATE);
 
     private final JavaParser parser;
-    private final com.github.javaparser.resolution.TypeSolver typeSolver;
+    private final WorkspaceTypeSolver typeSolver;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
     private Map<String, ElementId> ids = new HashMap<>();
     private int nextId;
     private ProgramGraph graph;
     private Map<String, Node> referenceNodes = Map.of();
     private List<Diagnostic> diagnostics;
+    private final Map<String, String> parsedText = new HashMap<>();
 
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
@@ -103,6 +104,7 @@ public final class JavaProject implements Program {
 
     public void restore(Snapshot snapshot) {
         units.clear();
+        parsedText.clear();
         snapshot.sources().forEach(this::load);
         ids = new HashMap<>(snapshot.ids());
         nextId = snapshot.nextId();
@@ -285,8 +287,9 @@ public final class JavaProject implements Program {
         code = Text.replace(code, packageLine, "package " + pkg.qualified() + ";");
 
         units.remove(oldPath);
-        units.put(newPath, parse(code));
-        edits.forEach((path, edited) -> units.put(path, parse(edited)));
+        parsedText.remove(oldPath);
+        units.put(newPath, parse(newPath, code));
+        edits.forEach((path, edited) -> units.put(path, parse(path, edited)));
         invalidate();
         transfer(type.qualified(), newQualified);
     }
@@ -346,16 +349,13 @@ public final class JavaProject implements Program {
         changed();
     }
 
-    /** Expressions anywhere in the workspace that resolve to the field or method at {@code address}. */
+    /** Expressions anywhere in the workspace that use the element at {@code address}, from the current graph. */
     private List<NodeWithSimpleName<?>> usesOf(String address) {
+        var g = graph();
+        var id = ids.get(address);
         var uses = new ArrayList<NodeWithSimpleName<?>>();
-        for (var cu : units.values()) {
-            for (var expr : fieldUses(cu)) {
-                if (address.equals(resolveField(expr))) uses.add((NodeWithSimpleName<?>) expr);
-            }
-            for (var call : cu.findAll(MethodCallExpr.class)) {
-                if (address.equals(resolveMethod(call))) uses.add(call);
-            }
+        for (var ref : g.referencesTo(id)) {
+            if (referenceNodes.get(ref.id()) instanceof NodeWithSimpleName<?> named) uses.add(named);
         }
         return uses;
     }
@@ -381,11 +381,12 @@ public final class JavaProject implements Program {
         return "__ide_default_" + method + "_" + param + "__";
     }
 
-    /** Calls anywhere in the workspace that resolve to the method at {@code address}. */
+    /** Calls anywhere in the workspace that resolve to the method at {@code address}, from the current graph. */
     private List<MethodCallExpr> callsTo(String address) {
+        var g = graph();
         var calls = new ArrayList<MethodCallExpr>();
-        for (var cu : units.values()) {
-            for (var call : cu.findAll(MethodCallExpr.class)) if (address.equals(resolveMethod(call))) calls.add(call);
+        for (var ref : g.referencesTo(ids.get(address))) {
+            if (referenceNodes.get(ref.id()) instanceof MethodCallExpr call) calls.add(call);
         }
         return calls;
     }
@@ -469,7 +470,7 @@ public final class JavaProject implements Program {
             var sorted = new ArrayList<>(list);
             sorted.sort(Comparator.comparing((Map.Entry<Node, String> e) -> e.getKey().getBegin().orElseThrow()).reversed());
             for (var edit : sorted) code = Text.replace(code, edit.getKey(), edit.getValue());
-            units.put(path, parse(code));
+            units.put(path, parse(path, code));
         });
         invalidate();
     }
@@ -904,8 +905,15 @@ public final class JavaProject implements Program {
     }
 
     private void load(String path, String code) {
-        units.put(path, parse(code));
+        units.put(path, parse(path, code));
         invalidate();
+    }
+
+    /** Parses a unit and remembers the text it came from, to know later whether it changed. */
+    private CompilationUnit parse(String path, String code) {
+        var cu = parse(code);
+        parsedText.put(path, code);
+        return cu;
     }
 
     private CompilationUnit parse(String code) {
@@ -919,12 +927,16 @@ public final class JavaProject implements Program {
      * resolution runs on an edited AST.
      */
     private void changed() {
-        units.replaceAll((path, cu) -> parse(LexicalPreservingPrinter.print(cu)));
+        units.replaceAll((path, cu) -> {
+            var text = LexicalPreservingPrinter.print(cu);
+            return text.equals(parsedText.get(path)) ? cu : parse(path, text);
+        });
         invalidate();
     }
 
     private void invalidate() {
         JavaParserFacade.clearInstances(); // resolution caches point into replaced ASTs
+        typeSolver.reset();
         graph = null;
         referenceNodes = Map.of();
         diagnostics = null;
