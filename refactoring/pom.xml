@@ -18,5 +18,11 @@
             <groupId>ide</groupId>
             <artifactId>ide-projection</artifactId>
         </dependency>
+        <!-- refactorings are tested alone, over a projection with no language -->
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-projection-kit</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
