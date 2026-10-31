@@ -149,3 +149,18 @@ refactoring extract-interface "Creates an interface with some methods of a type,
   set ${type} implements ${qualified(i)}
   return ${i}
 end
+
+refactoring rename-field-with-accessors "Renames a field together with its getter and setter, if it has them"
+  param field : element(FIELD) "the field to rename"
+  param name : text "the new name"
+  let getter = first(methods(owner(field)) | named concat("get", cap(name(field))))
+  let setter = first(methods(owner(field)) | named concat("set", cap(name(field))))
+  rename ${field} ${name}
+  if nonempty(getter)
+    rename ${getter} get${cap(name)}
+  end
+  if nonempty(setter)
+    rename ${setter} set${cap(name)}
+  end
+  return ${field}
+end
