@@ -19,6 +19,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import ide.java.text.Unit;
 import ide.program.Address;
 import ide.program.Element;
 import ide.program.ElementId;
@@ -30,6 +31,7 @@ import ide.program.Program;
 import ide.program.Reference;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -56,20 +58,21 @@ final class GraphReader {
         this.typeSolver = typeSolver;
     }
 
-    /** The graph of {@code units} (path → unit), plus the node behind each reference id. */
-    Read read(Map<String, CompilationUnit> units, Set<String> emptyPackages) {
+    /** The graph of {@code units}, plus the node behind each reference id. */
+    Read read(Collection<Unit> units, Set<String> emptyPackages) {
         var elements = new ArrayList<Element>();
         var references = new ArrayList<Reference>();
         var nodes = new HashMap<String, Node>();
         var packages = new LinkedHashMap<String, ElementId>();
         // packages and types first: member addresses key their parameter types by id
-        for (var cu : units.values()) {
+        for (var unit : units) {
+            var cu = unit.tree();
             cu.getPackageDeclaration().ifPresent(p -> packages.computeIfAbsent(p.getNameAsString(), n -> addPackage(elements, n)));
             for (var type : types(cu)) ids.of(new Address.Type(qualifiedOf(type)), Kind.CLASS);
         }
         for (var name : emptyPackages) packages.computeIfAbsent(name, n -> addPackage(elements, n));
-        for (var unit : units.entrySet()) {
-            var cu = unit.getValue();
+        for (var unit : units) {
+            var cu = unit.tree();
             var pkg = cu.getPackageDeclaration().map(p -> packages.get(p.getNameAsString())).orElse(null);
             for (var type : types(cu)) {
                 var typeName = qualifiedOf(type);
@@ -77,7 +80,7 @@ final class GraphReader {
                 var parent = type.getParentNode().filter(TypeDeclaration.class::isInstance)
                         .map(t -> ids.get(new Address.Type(qualifiedOf((TypeDeclaration<?>) t)))).orElse(pkg);
                 var typeFacts = new HashMap<>(attributes(type));
-                if (type.isTopLevelType()) typeFacts.put(Fact.FILE, unit.getKey());
+                if (type.isTopLevelType()) typeFacts.put(Fact.FILE, unit.path());
                 if (type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration c && !c.isInterface()
                         && c.getExtendedTypes().isNonEmpty()) {
                     typeFacts.put(Fact.SUPERCLASS, c.getExtendedTypes(0).asString());
@@ -110,7 +113,8 @@ final class GraphReader {
             }
         }
         // references only once every element has its id: a use may point into a unit processed later
-        for (var cu : units.values()) {
+        for (var unit : units) {
+            var cu = unit.tree();
             var uses = new ArrayList<Node>();
             uses.addAll(fieldUses(cu));
             uses.addAll(cu.findAll(MethodCallExpr.class));

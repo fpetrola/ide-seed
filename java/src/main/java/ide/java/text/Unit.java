@@ -46,6 +46,11 @@ public final class Unit {
         return text.substring(offset(from), offset(to) + 1);
     }
 
+    /** Whole lines {@code first..last}, with their ends of line. */
+    public String lines(int first, int last) {
+        return text.substring(lineStart(first), lineStart(last + 1));
+    }
+
     /** Line {@code line} (1-based) without its end of line; empty past the end. */
     public String line(int line) {
         if (line < 1 || line > lineStarts().length) return "";
@@ -72,6 +77,18 @@ public final class Unit {
         var at = offset(after) + 1;
         while (at < text.length() && Character.isWhitespace(text.charAt(at))) at++;
         return position(at);
+    }
+
+    /** The position of the last character before {@code before} that is not a blank or an end of line. */
+    public Position previousToken(Position before) {
+        var at = offset(before) - 1;
+        while (at > 0 && Character.isWhitespace(text.charAt(at))) at--;
+        return position(at);
+    }
+
+    /** The position right after {@code position}, on the same line. */
+    public static Position after(Position position) {
+        return new Position(position.line, position.column + 1);
     }
 
     int offset(Position position) {

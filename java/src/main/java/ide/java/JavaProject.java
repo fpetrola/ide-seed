@@ -1,118 +1,118 @@
 package ide.java;
 
-import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.stmt.ExpressionStmt;
-
-import ide.projection.PrimitiveRejected;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
-import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
-
-import ide.projection.CompletionContext;
-import ide.projection.Diagnostic;
-import ide.program.Element;
-
-import static ide.java.Resolution.*;
+import ide.java.syntax.Imports;
+import ide.java.syntax.Lists;
+import ide.java.syntax.Members;
+import ide.java.syntax.Modifiers;
+import ide.java.syntax.Render;
+import ide.java.text.EditSet;
+import ide.java.text.Sources;
+import ide.java.text.Unit;
 import ide.program.Address;
 import ide.program.Change;
+import ide.program.Element;
 import ide.program.ElementId;
-import ide.program.Identity;
 import ide.program.Fact;
+import ide.program.Identity;
+import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Primitive;
-import ide.program.Kind;
-import ide.projection.Projection;
 import ide.program.Program;
 import ide.program.Reference;
+import ide.projection.CompletionContext;
+import ide.projection.Diagnostic;
+import ide.projection.PrimitiveRejected;
+import ide.projection.Projection;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import static ide.java.Resolution.*;
+
 /**
- * Java sources in memory, edited with lexical preservation, projected to a {@link Program}.
- * Identity is kept in {@code ids} (address → id): parsing never decides identity, primitives transfer it.
+ * Java sources in memory, projected to a {@link Program}. The text is the truth: every primitive is a set of text
+ * edits, after which only the touched units are parsed again. Identity is kept in {@code ids} (address → id):
+ * parsing never decides identity, primitives carry it along.
  */
 public final class JavaProject implements Projection {
 
-    /** Everything needed to roll back: source text and identity. */
-    public record Snapshot(Map<String, String> sources, Identity.State identity, java.util.Set<String> emptyPackages)
+    /** Everything needed to come back: source text and identity. */
+    public record Snapshot(Map<String, String> sources, Identity.State identity, Set<String> emptyPackages)
             implements Projection.Snapshot {
     }
 
     private static final JavaRules RULES = new JavaRules();
 
-    private static final Set<Modifier.Keyword> ACCESS =
-            Set.of(Modifier.Keyword.PUBLIC, Modifier.Keyword.PROTECTED, Modifier.Keyword.PRIVATE);
-
-    private final JavaParser parser;
     private final WorkspaceTypeSolver typeSolver;
     private final GraphReader reader;
-    private final Map<String, CompilationUnit> units = new TreeMap<>();
+    private final Sources sources;
     private final Identity ids = new Identity();
     private final Keys keys = new Keys(ids);
     private Program graph;
     private Map<String, Node> referenceNodes = Map.of();
     private List<Diagnostic> diagnostics;
-    private final Map<String, String> parsedText = new HashMap<>();
-    private java.util.Set<String> emptyPackages = new java.util.TreeSet<>();
+    private Set<String> emptyPackages = new TreeSet<>();
 
     private JavaProject() {
-        var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
-        typeSolver = solver;
-        reader = new GraphReader(ids, keys, solver);
-        parser = new JavaParser(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(solver)));
+        typeSolver = new WorkspaceTypeSolver(this::trees, new ReflectionTypeSolver());
+        reader = new GraphReader(ids, keys, typeSolver);
+        sources = new Sources(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
+    }
+
+    private java.util.Collection<CompilationUnit> trees() {
+        return sources.trees();
     }
 
     public static JavaProject of(Map<String, String> sources) {
         var project = new JavaProject();
-        sources.forEach(project::load);
+        project.sources.put(sources);
         return project;
     }
 
     public String source(String path) {
-        return LexicalPreservingPrinter.print(units.get(path));
+        return sources.unit(path).text();
     }
 
-    public java.util.Set<String> files() {
-        return java.util.Set.copyOf(units.keySet());
+    public Set<String> files() {
+        return Set.copyOf(sources.paths());
     }
 
     /** Path → text of every source file, sorted by path. */
     public Map<String, String> sources() {
-        var sources = new TreeMap<String, String>();
-        units.keySet().forEach(path -> sources.put(path, source(path)));
-        return sources;
+        return sources.texts();
     }
 
     @Override
@@ -122,29 +122,21 @@ public final class JavaProject implements Projection {
 
     @Override
     public Snapshot snapshot() {
-        var sources = new LinkedHashMap<String, String>();
-        units.keySet().forEach(path -> sources.put(path, source(path)));
-        return new Snapshot(sources, ids.save(), java.util.Set.copyOf(emptyPackages));
+        return new Snapshot(sources.texts(), ids.save(), Set.copyOf(emptyPackages));
     }
 
     @Override
     public void restore(Projection.Snapshot saved) {
         var snapshot = (Snapshot) saved;
-        units.clear();
-        parsedText.clear();
-        snapshot.sources().forEach(this::load);
+        sources.restore(snapshot.sources());
         ids.restore(snapshot.identity());
-        emptyPackages = new java.util.TreeSet<>(snapshot.emptyPackages());
+        emptyPackages = new TreeSet<>(snapshot.emptyPackages());
         invalidate();
     }
 
     @Override
     public List<Diagnostic> diagnostics() {
-        if (diagnostics == null) {
-            var sources = new LinkedHashMap<String, String>();
-            units.keySet().forEach(path -> sources.put(path, source(path)));
-            diagnostics = JavacCheck.errors(sources);
-        }
+        if (diagnostics == null) diagnostics = JavacCheck.errors(sources.texts());
         return diagnostics;
     }
 
@@ -160,13 +152,11 @@ public final class JavaProject implements Projection {
         var start = offset;
         while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) start--;
         var prefix = text.substring(start, offset);
-        var marked = text.substring(0, offset) + MARKER + text.substring(offset);
-        var parsed = parser.parse(marked);
-        if (!parsed.isSuccessful()) parsed = parser.parse(text.substring(0, offset) + MARKER + ";" + text.substring(offset));
-        if (!parsed.isSuccessful()) return Optional.empty();
-        var cu = parsed.getResult().orElseThrow();
+        var parsed = sources.parseDetached(text.substring(0, offset) + MARKER + text.substring(offset))
+                .or(() -> sources.parseDetached(text.substring(0, offset) + MARKER + ";" + text.substring(offset)));
+        if (parsed.isEmpty()) return Optional.empty();
         var name = prefix + MARKER;
-        var site = cu.findFirst(Node.class, n -> n instanceof NodeWithSimpleName<?> named
+        var site = parsed.get().findFirst(Node.class, n -> n instanceof NodeWithSimpleName<?> named
                 && named.getNameAsString().equals(name) && (n instanceof NameExpr || n instanceof FieldAccessExpr));
         if (site.isEmpty()) return Optional.empty();
         var siteId = reader.siteOf(site.get());
@@ -203,11 +193,16 @@ public final class JavaProject implements Projection {
     @Override
     public Program program() {
         if (graph == null) {
-            var read = reader.read(units, emptyPackages);
+            var read = reader.read(sources.units(), emptyPackages);
             graph = read.program();
             referenceNodes = read.nodes();
         }
         return graph;
+    }
+
+    @Override
+    public void edit(String path, String text) {
+        sources.put(Map.of(path, text));
     }
 
     // ---- primitives
@@ -272,12 +267,12 @@ public final class JavaProject implements Projection {
             case DECLARED -> setType(element, type);
             default -> throw new IllegalArgumentException("not a link: " + mode);
         }
-        changed();
     }
 
     /**
-     * Creates an empty element: a top-level class in its own unit, a {@code void} method without parameters at the
-     * end of a type, or an {@code Object} parameter at the end of a method.
+     * Creates an element: a top-level class or interface in its own file, an {@code Object} field after the last
+     * field, a {@code void} method without parameters at the end of a type, or an {@code Object} parameter at the end
+     * of a method (every call passes {@code argument} for it).
      */
     private ElementId create(Kind kind, ElementId parent, String name, String argument) {
         if (kind == Kind.PACKAGE) { // a package exists while it is declared, even before it has files
@@ -298,40 +293,40 @@ public final class JavaProject implements Projection {
         };
         if (ids.has(address)) throw new PrimitiveRejected("projection.duplicate", ids.render(address) + " already exists");
         return switch (kind) {
-            case CLASS -> {
-                if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("classes go in packages: " + owner);
+            case CLASS, INTERFACE -> {
+                if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("types go in packages: " + owner);
                 var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
-                if (units.containsKey(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
-                load(path, "package " + owner.qualified() + ";\n\npublic class " + name + " {\n}\n");
-                yield ids.of(new Address.Type(owner.qualified() + "." + name), Kind.CLASS);
-            }
-            case INTERFACE -> {
-                if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("interfaces go in packages: " + owner);
-                var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
-                if (units.containsKey(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
-                load(path, "package " + owner.qualified() + ";\n\npublic interface " + name + " {\n}\n");
-                yield ids.of(new Address.Type(owner.qualified() + "." + name), Kind.CLASS);
+                if (sources.has(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
+                sources.put(Map.of(path, Render.typeFile(owner.qualified(), kind == Kind.CLASS ? "class" : "interface", name)));
+                yield ids.of(address, Kind.CLASS);
             }
             case FIELD -> {
-                insertField(typeDeclaration(owner.qualified()), "Object " + name + ";");
-                yield ids.of(new Address.Field(owner.id(), name), Kind.FIELD);
+                var type = typeDeclaration(owner.qualified());
+                var unit = sources.unitOf(type);
+                sources.apply(edits(e -> Members.appendField(e, unit, type, "Object " + name + ";")));
+                yield ids.of(address, Kind.FIELD);
             }
             case METHOD -> {
-                insertMember(typeDeclaration(owner.qualified()), "void " + name + "() {\n" + " ".repeat(4) + "}");
-                yield ids.of(new Address.Callable(owner.id(), name, List.of()), Kind.METHOD);
+                var type = typeDeclaration(owner.qualified());
+                var unit = sources.unitOf(type);
+                sources.apply(edits(e -> Members.append(e, unit, type, Render.emptyMethod(name, Members.indentation(unit, type)))));
+                yield ids.of(address, Kind.METHOD);
             }
-            case PARAM -> {
+            default -> { // PARAM
                 var calls = callsTo(owner.id());
                 if (!calls.isEmpty() && argument == null) {
                     throw new PrimitiveRejected("create.argument", "the calls of " + owner.qualified() + " need an argument for " + name);
                 }
-                editMethod(owner, m -> {
-                    m.addParameter("Object", name);
-                    calls.forEach(call -> call.addArgument(parser.parseExpression(argument).getResult().orElseThrow()));
-                });
-                yield ids.of(new Address.Param(owner.id(), name), Kind.PARAM);
+                var method = (MethodDeclaration) declaration(owner);
+                var edits = new EditSet();
+                Lists.append(edits, sources.unitOf(method), method.getParameters(), method.getName(), "Object " + name);
+                for (var call : calls) Lists.append(edits, sources.unitOf(call), call.getArguments(), call.getName(), argument);
+                var names = new ArrayList<>(parameterNames(method));
+                names.add(name);
+                sources.apply(edits);
+                resign(owner, names);
+                yield ids.of(address, Kind.PARAM);
             }
-            default -> throw new IllegalArgumentException("unsupported create: " + kind);
         };
     }
 
@@ -341,16 +336,7 @@ public final class JavaProject implements Projection {
         }
     }
 
-    /** Edits a method's declaration; its identity follows the parameter list to the re-parsed declaration. */
-    private void editMethod(Element method, java.util.function.Consumer<MethodDeclaration> edit) {
-        var node = (MethodDeclaration) declaration(method);
-        edit.accept(node);
-        var names = node.getParameters().stream().map(p -> p.getNameAsString()).toList();
-        changed();
-        resign(method, names);
-    }
-
-    /** Moves a member into another type, keeping its identity. */
+    /** Moves a member into another type (just before another member, or at the end), keeping its identity. */
     private void move(ElementId member, ElementId newParent, ElementId before) {
         var g = program();
         var element = g.element(member);
@@ -366,15 +352,18 @@ public final class JavaProject implements Projection {
             moveParam(element, before == null ? null : g.element(before));
             return;
         }
-        var anchor = before == null ? null : g.element(before);
         var moved = ids.address(member).withOwner(newParent);
         if (ids.has(moved)) throw new PrimitiveRejected("projection.duplicate", ids.render(moved) + " already exists");
         var node = declaration(element);
-        var text = LexicalPreservingPrinter.print(node).strip();
-        node.remove();
-        changed();
-        if (anchor == null) insertMember(typeDeclaration(target.qualified()), text);
-        else insertBefore(declaration(anchor), text);
+        var from = sources.unitOf(node);
+        var type = typeDeclaration(target.qualified());
+        var to = sources.unitOf(type);
+        var text = Members.text(from, node, Members.indentation(to, type));
+        var edits = new EditSet();
+        Members.remove(edits, from, node);
+        if (before == null) Members.append(edits, to, type, text);
+        else Members.insertBefore(edits, to, declaration(g.element(before)), text);
+        sources.apply(edits);
         ids.move(member, newParent);
     }
 
@@ -388,58 +377,54 @@ public final class JavaProject implements Projection {
         var oldPath = type.fact(Fact.FILE);
         if (oldPath == null) throw new IllegalArgumentException("only top-level types move to packages: " + type);
         var newPath = pkg.qualified().replace('.', '/') + "/" + type.name() + ".java";
-        if (units.containsKey(newPath)) throw new IllegalArgumentException("already exists: " + newPath);
+        if (sources.has(newPath)) throw new IllegalArgumentException("already exists: " + newPath);
 
-        var needed = new java.util.TreeSet<String>();
-        for (var use : units.get(oldPath).findAll(ClassOrInterfaceType.class)) {
+        var moving = sources.unit(oldPath);
+        var needed = new TreeSet<String>();
+        for (var use : moving.tree().findAll(ClassOrInterfaceType.class)) {
             var resolved = resolveType(use);
             if (resolved != null && use.getScope().isEmpty() && packageOf(resolved).equals(oldPackage)
                     && !resolved.equals(type.qualified()) && !resolved.startsWith(type.qualified() + ".")) {
                 needed.add(resolved);
             }
         }
-        var usingUnits = new java.util.HashSet<CompilationUnit>(); // any use: declared types, new, static receivers
-        for (var ref : program().referencesTo(type.id())) {
-            referenceNodes.get(ref.id()).findCompilationUnit().ifPresent(usingUnits::add);
+        var users = new HashSet<String>(); // any use: declared types, new, static receivers
+        var targets = new ArrayList<>(List.of(type.id()));
+        program().children(type.id()).stream().filter(e -> e.kind() == Kind.CONSTRUCTOR).forEach(c -> targets.add(c.id()));
+        for (var target : targets) {
+            for (var ref : program().referencesTo(target)) users.add(sources.unitOf(referenceNodes.get(ref.id())).path());
         }
-        for (var constructor : program().children(type.id()).stream().filter(e -> e.kind() == Kind.CONSTRUCTOR).toList()) {
-            for (var ref : program().referencesTo(constructor.id())) {
-                referenceNodes.get(ref.id()).findCompilationUnit().ifPresent(usingUnits::add);
-            }
-        }
-        var edits = new LinkedHashMap<String, String>();
-        for (var entry : units.entrySet()) {
-            var path = entry.getKey();
-            var cu = entry.getValue();
-            if (path.equals(oldPath)) continue;
-            var unitPackage = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
-            var imported = cu.getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic()
-                    && i.getNameAsString().equals(type.qualified())).findFirst();
-            var uses = usingUnits.contains(cu);
-            var code = source(path);
-            if (imported.isPresent() && unitPackage.equals(pkg.qualified())) edits.put(path, Imports.remove(code, cu, imported.get()));
-            else if (imported.isPresent()) edits.put(path, Imports.replace(code, imported.get(), newQualified));
-            else if (uses && unitPackage.equals(oldPackage)) edits.put(path, Imports.add(code, cu, newQualified));
+        var edits = new EditSet();
+        for (var unit : sources.units()) {
+            if (unit.path().equals(oldPath)) continue;
+            var imported = Imports.of(unit, type.qualified());
+            if (imported.isPresent() && packageOf(unit).equals(pkg.qualified())) Imports.remove(edits, unit, imported.get());
+            else if (imported.isPresent()) Imports.replace(edits, unit, imported.get(), newQualified);
+            else if (users.contains(unit.path()) && packageOf(unit).equals(oldPackage)) Imports.add(edits, unit, newQualified);
         }
 
-        var code = source(oldPath);
-        for (var qualified : needed) code = Imports.add(code, parse(code), qualified);
-        for (var redundant = redundantImport(parse(code), pkg.qualified()); redundant != null; redundant = redundantImport(parse(code), pkg.qualified())) {
-            code = Imports.remove(code, parse(code), redundant); // the destination's types need no import there
+        // the moved file, step by step: imports for its old package, none for its new one, the new package line
+        var draft = moving;
+        for (var qualified : needed) {
+            var adding = new EditSet();
+            Imports.add(adding, draft, qualified);
+            draft = sources.draft(oldPath, adding.texts().get(oldPath));
         }
-        var packageLine = parse(code).getPackageDeclaration().orElseThrow();
-        code = Text.replace(code, packageLine, "package " + pkg.qualified() + ";");
+        for (var redundant = redundantImport(draft, pkg.qualified()); redundant != null; redundant = redundantImport(draft, pkg.qualified())) {
+            var removing = new EditSet();
+            Imports.remove(removing, draft, redundant);
+            draft = sources.draft(oldPath, removing.texts().get(oldPath));
+        }
+        var packageLine = new EditSet().replace(draft, draft.tree().getPackageDeclaration().orElseThrow(), "package " + pkg.qualified() + ";");
 
-        units.remove(oldPath);
-        parsedText.remove(oldPath);
-        units.put(newPath, parse(newPath, code));
-        edits.forEach((path, edited) -> units.put(path, parse(path, edited)));
-        invalidate();
+        var texts = new LinkedHashMap<>(edits.texts());
+        texts.put(newPath, packageLine.texts().get(oldPath));
+        sources.change(texts, List.of(oldPath));
         ids.rebindType(type.qualified(), newQualified);
     }
 
-    private static ImportDeclaration redundantImport(CompilationUnit cu, String pkg) {
-        return cu.getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic()
+    private static ImportDeclaration redundantImport(Unit unit, String pkg) {
+        return unit.tree().getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic()
                 && packageOf(i.getNameAsString()).equals(pkg)).findFirst().orElse(null);
     }
 
@@ -448,10 +433,11 @@ public final class JavaProject implements Projection {
         return dot < 0 ? "" : qualifiedType.substring(0, dot);
     }
 
-    /**
-     * Deletes a member (with its comment) that nothing references: its lines go, and a blank line left doubled
-     * or against a brace goes with them.
-     */
+    private static String packageOf(Unit unit) {
+        return unit.tree().getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
+    }
+
+    /** Deletes an element nothing references: a member's lines (with its comment), a parameter, or a type's file. */
     private void delete(ElementId id) {
         var g = program();
         var element = g.element(id);
@@ -469,15 +455,12 @@ public final class JavaProject implements Projection {
         if (node instanceof FieldDeclaration field && field.getVariables().size() > 1) {
             throw new IllegalArgumentException("deleting one of several variables is not supported: " + element);
         }
-        var path = pathOf(node.findCompilationUnit().orElseThrow());
-        var code = source(path);
-        var first = node.getComment().flatMap(Node::getBegin).orElse(node.getBegin().orElseThrow()).line;
-        var last = node.getEnd().orElseThrow().line;
-        load(path, Text.collapseBlankAt(Text.removeLines(code, first, last), first));
+        var unit = sources.unitOf(node);
+        sources.apply(edits(e -> Members.remove(e, unit, node)));
         ids.forget(element.id());
     }
 
-    /** Renames a field or method together with every use that resolves to it, keeping its identity. */
+    /** Renames a field, method or parameter and every use that resolves to it, keeping its identity. */
     private void rename(ElementId id, String name) {
         requireIdentifier(name);
         var element = program().element(id);
@@ -487,25 +470,38 @@ public final class JavaProject implements Projection {
         }
         var renamed = ids.address(id).withName(name);
         if (ids.has(renamed)) throw new PrimitiveRejected("projection.duplicate", ids.render(renamed) + " already exists");
-        var uses = usesOf(element);
         var node = declaration(element);
+        var unit = sources.unitOf(node);
+        var edits = new EditSet();
         switch (node) {
-            case com.github.javaparser.ast.body.Parameter param -> param.setName(name);
-            case FieldDeclaration field -> field.getVariables().stream()
-                    .filter(v -> v.getNameAsString().equals(element.name())).forEach(v -> v.setName(name));
-            case MethodDeclaration method -> method.setName(name);
+            case Parameter param -> edits.replace(unit, param.getName(), name);
+            case FieldDeclaration field -> field.getVariables().stream().filter(v -> v.getNameAsString().equals(element.name()))
+                    .forEach(v -> edits.replace(unit, v.getName(), name));
+            case MethodDeclaration method -> edits.replace(unit, method.getName(), name);
             default -> throw new IllegalArgumentException("unsupported rename: " + element);
         }
-        uses.forEach(use -> use.setName(name));
-        methodReferencesTo(element).forEach(reference -> reference.setIdentifier(name));
+        for (var ref : program().referencesTo(id)) renameUse(edits, referenceNodes.get(ref.id()), name);
+        sources.apply(edits);
         ids.rename(id, name);
-        changed();
+    }
+
+    /** A use now names {@code name}: the name of a field access, a call, a bare name or a method reference. */
+    private void renameUse(EditSet edits, Node use, String name) {
+        var unit = sources.unitOf(use);
+        switch (use) {
+            case MethodReferenceExpr reference -> {
+                var end = reference.getEnd().orElseThrow();
+                var begin = new com.github.javaparser.Position(end.line, end.column - reference.getIdentifier().length() + 1);
+                edits.replace(unit, begin, end, name);
+            }
+            case NodeWithSimpleName<?> named -> edits.replace(unit, named.getName(), name);
+            default -> throw new IllegalStateException("cannot rename the use " + use);
+        }
     }
 
     /**
      * Renames a type: its declaration and constructors, every use (declared types, {@code new}, static receivers),
-     * single-type imports of it, and its file when it is a top-level type named like the file. Done as text edits on
-     * the name tokens: the printer does not reflect renamed types inside field declarations.
+     * single-type imports of it, and its file when it is a top-level type named like the file.
      */
     private void renameType(Element type, String name) {
         var dot = type.qualified().lastIndexOf('.');
@@ -528,80 +524,47 @@ public final class JavaProject implements Projection {
         var declaration = typeDeclaration(type.qualified());
         declaration.getConstructors().forEach(c -> names.add(c.getName()));
         names.add(declaration.getName());
-        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
-        var seen = new java.util.HashSet<String>();
-        for (var node : names) {
-            var path = pathOf(node.findCompilationUnit().orElseThrow());
-            if (seen.add(path + node.getRange().orElseThrow())) {
-                edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(node, name));
-            }
-        }
-        units.forEach((path, cu) -> cu.getImports().stream()
-                .filter(i -> !i.isAsterisk() && !i.isStatic() && i.getNameAsString().equals(type.qualified()))
-                .forEach(i -> edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(i.getName(), renamed))));
+        var edits = new EditSet();
+        for (var node : names) edits.replace(sources.unitOf(node), node, name);
+        for (var unit : sources.units()) Imports.of(unit, type.qualified()).ifPresent(i -> edits.replace(unit, i.getName(), renamed));
+        sources.apply(edits);
         var oldPath = type.fact(Fact.FILE);
-        applyEdits(edits);
         if (oldPath != null && oldPath.endsWith("/" + type.name() + ".java")) {
-            var newPath = oldPath.substring(0, oldPath.length() - (type.name() + ".java").length()) + name + ".java";
-            units.put(newPath, units.remove(oldPath));
-            parsedText.put(newPath, parsedText.remove(oldPath));
-            invalidate();
+            sources.rename(oldPath, oldPath.substring(0, oldPath.length() - (type.name() + ".java").length()) + name + ".java");
         }
         ids.rebindType(type.qualified(), renamed);
     }
 
-    private List<MethodReferenceExpr> methodReferencesTo(Element element) {
-        var g = program();
-        var references = new ArrayList<MethodReferenceExpr>();
-        for (var ref : g.referencesTo(element.id())) {
-            if (referenceNodes.get(ref.id()) instanceof MethodReferenceExpr reference) references.add(reference);
-        }
-        return references;
-    }
-
-    /** Expressions anywhere in the workspace that use the element, from the current graph. */
-    private List<NodeWithSimpleName<?>> usesOf(Element element) {
-        var g = program();
-        var uses = new ArrayList<NodeWithSimpleName<?>>();
-        for (var ref : g.referencesTo(element.id())) {
-            if (referenceNodes.get(ref.id()) instanceof NodeWithSimpleName<?> named) uses.add(named);
-        }
-        return uses;
-    }
-
-    @Override
-    public void edit(String path, String text) {
-        var result = parser.parse(text);
-        if (!result.isSuccessful()) {
-            throw new PrimitiveRejected("projection.unparsable", path + ": " + result.getProblems().getFirst().getVerboseMessage());
-        }
-        load(path, text);
-    }
-
-    /** Changes an attribute of an element: {@code visibility} of a member, {@code superclass} of a class. */
+    /** Changes an attribute of an element, as text: modifiers, types, a body, an import, an initializer. */
     private void set(ElementId id, String attribute, String value) {
         switch (attribute) {
-            case "visibility" -> setVisibility(id, value);
+            case "visibility" -> modifiers(id, (edits, unit, node) -> Modifiers.visibility(edits, unit, node, value));
+            case "static" -> modifiers(id, (edits, unit, node) -> Modifiers.flag(edits, unit, node, Modifier.Keyword.STATIC, Boolean.parseBoolean(value)));
+            case "final" -> modifiers(id, (edits, unit, node) -> Modifiers.flag(edits, unit, node, Modifier.Keyword.FINAL, Boolean.parseBoolean(value)));
+            case "abstract" -> setAbstract(id, Boolean.parseBoolean(value));
             case "superclass" -> setSuperclass(id, value);
             case "type" -> setType(id, value);
             case "body" -> setBody(id, value);
             case "import" -> addImport(id, value);
-            case "static" -> setFlag(id, Modifier.Keyword.STATIC, Boolean.parseBoolean(value));
-            case "abstract" -> setAbstract(id, Boolean.parseBoolean(value));
-            case "final" -> setFlag(id, Modifier.Keyword.FINAL, Boolean.parseBoolean(value));
-            case "initializer" -> ((FieldDeclaration) declaration(program().element(id))).getVariables().stream()
-                    .filter(v -> v.getNameAsString().equals(program().element(id).name()))
-                    .forEach(v -> v.setInitializer(parser.parseExpression(value).getResult().orElseThrow()));
+            case "initializer" -> setInitializer(id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
-        changed();
+    }
+
+    private interface ModifierEdit {
+        void make(EditSet edits, Unit unit, NodeWithModifiers<?> declaration);
+    }
+
+    private void modifiers(ElementId id, ModifierEdit edit) {
+        var node = declaration(program().element(id));
+        var unit = sources.unitOf(node);
+        sources.apply(edits(e -> edit.make(e, unit, (NodeWithModifiers<?>) node)));
     }
 
     /** Calls anywhere in the workspace that resolve to the method, from the current graph. */
     private List<MethodCallExpr> callsTo(ElementId method) {
-        var g = program();
         var calls = new ArrayList<MethodCallExpr>();
-        for (var ref : g.referencesTo(method)) {
+        for (var ref : program().referencesTo(method)) {
             if (referenceNodes.get(ref.id()) instanceof MethodCallExpr call) calls.add(call);
         }
         return calls;
@@ -611,17 +574,17 @@ public final class JavaProject implements Projection {
     private void moveParam(Element param, Element before) {
         var method = program().element(param.parent());
         var declaration = (MethodDeclaration) declaration(method);
-        var names = declaration.getParameters().stream().map(p -> p.getNameAsString()).toList();
+        var names = parameterNames(declaration);
         var from = names.indexOf(param.name());
         var anchor = before == null ? names.size() : names.indexOf(before.name());
         var index = anchor > from ? anchor - 1 : anchor; // where it goes once it is out of the list
         if (index == from) return;
-        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
+        var edits = new EditSet();
         reorder(edits, declaration.getParameters(), from, index);
         for (var call : callsTo(method.id())) reorder(edits, call.getArguments(), from, index);
         var reordered = new ArrayList<>(names);
         reordered.add(index, reordered.remove(from));
-        applyEdits(edits);
+        sources.apply(edits);
         resign(method, reordered);
     }
 
@@ -633,14 +596,9 @@ public final class JavaProject implements Projection {
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", type.qualified() + " is used by " + uses);
         var path = type.fact(Fact.FILE);
         if (path == null) throw new IllegalArgumentException("only top-level types can be deleted so far: " + type);
-        var edits = new LinkedHashMap<String, String>();
-        units.forEach((p, cu) -> cu.getImports().stream()
-                .filter(i -> !i.isAsterisk() && !i.isStatic() && i.getNameAsString().equals(type.qualified()))
-                .findFirst().ifPresent(i -> edits.put(p, Imports.remove(source(p), cu, i))));
-        units.remove(path);
-        parsedText.remove(path);
-        edits.forEach((p, code) -> units.put(p, parse(p, code)));
-        invalidate();
+        var edits = new EditSet();
+        for (var unit : sources.units()) Imports.of(unit, type.qualified()).ifPresent(i -> Imports.remove(edits, unit, i));
+        sources.change(edits.texts(), List.of(path));
         ids.forget(type.id());
     }
 
@@ -658,94 +616,83 @@ public final class JavaProject implements Projection {
         var used = declaration.findAll(NameExpr.class, n -> n.getNameAsString().equals(param.name())).stream()
                 .anyMatch(n -> {
                     try {
-                        var decl = n.resolve();
-                        return decl.isParameter();
+                        return n.resolve().isParameter();
                     } catch (RuntimeException unresolved) {
                         return false;
                     }
                 });
         if (used) throw new PrimitiveRejected("delete.referenced", param.qualified() + " is used in the body of " + method.qualified());
-        var index = declaration.getParameters().indexOf(declaration.getParameterByName(param.name()).orElseThrow());
-        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
+        var names = new ArrayList<>(parameterNames(declaration));
+        var index = names.indexOf(param.name());
+        var edits = new EditSet();
         remove(edits, declaration.getParameters(), index);
         for (var call : callsTo(method.id())) remove(edits, call.getArguments(), index);
-        var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
         names.remove(index);
-        applyEdits(edits);
+        sources.apply(edits);
         ids.forget(param.id());
         resign(method, names);
     }
 
-    private void reorder(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, int from, int to) {
-        var texts = new ArrayList<>(items.stream().map(n -> LexicalPreservingPrinter.print(n)).toList());
+    private void reorder(EditSet edits, com.github.javaparser.ast.NodeList<? extends Node> items, int from, int to) {
+        var unit = sources.unitOf(items.getFirst().orElseThrow());
+        var texts = new ArrayList<>(Lists.texts(unit, items));
         texts.add(to, texts.remove(from));
-        rewriteList(edits, items, texts);
+        Lists.rewrite(edits, unit, items, texts);
     }
 
-    private void remove(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, int index) {
-        var texts = new ArrayList<>(items.stream().map(n -> LexicalPreservingPrinter.print(n)).toList());
+    private void remove(EditSet edits, com.github.javaparser.ast.NodeList<? extends Node> items, int index) {
+        var unit = sources.unitOf(items.getFirst().orElseThrow());
+        var texts = new ArrayList<>(Lists.texts(unit, items));
         texts.remove(index);
-        rewriteList(edits, items, texts);
+        Lists.rewrite(edits, unit, items, texts);
     }
 
-    /** Replaces the text from the first item to the last with {@code texts} joined by ", ". */
-    private void rewriteList(Map<String, List<Map.Entry<Node, String>>> edits, NodeList<? extends Node> items, List<String> texts) {
-        var first = items.getFirst().orElseThrow();
-        var last = items.getLast().orElseThrow();
-        var span = new NameExpr("span");
-        span.setRange(new com.github.javaparser.Range(first.getBegin().orElseThrow(), last.getEnd().orElseThrow()));
-        var path = pathOf(first.findCompilationUnit().orElseThrow());
-        edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(span, String.join(", ", texts)));
-    }
-
-    /** Applies text replacements per unit, last position first so earlier positions stay valid; re-parses. */
-    private void applyEdits(Map<String, List<Map.Entry<Node, String>>> edits) {
-        edits.forEach((path, list) -> {
-            var code = source(path);
-            var sorted = new ArrayList<>(list);
-            sorted.sort(Comparator.comparing((Map.Entry<Node, String> e) -> e.getKey().getBegin().orElseThrow()).reversed());
-            for (var edit : sorted) code = Text.replace(code, edit.getKey(), edit.getValue());
-            units.put(path, parse(path, code));
-        });
-        invalidate();
+    private static List<String> parameterNames(CallableDeclaration<?> callable) {
+        return callable.getParameters().stream().map(p -> p.getNameAsString()).toList();
     }
 
     /** After a parameter list change, the method's identity follows its re-parsed declaration (found by its parameter names). */
     private void resign(Element method, List<String> parameterNames) {
         var callable = (Address.Callable) ids.address(method.id());
         var declaration = typeDeclaration(ids.render(ids.address(callable.owner()))).getMethodsByName(method.name()).stream()
-                .filter(m -> m.getParameters().stream().map(p -> p.getNameAsString()).toList().equals(parameterNames))
+                .filter(m -> parameterNames(m).equals(parameterNames))
                 .findFirst().orElseThrow();
         ids.resign(method.id(), keys.of(declaration));
     }
 
     /** Adds an import to the unit of a top-level type. */
     private void addImport(ElementId id, String qualified) {
-        var cu = typeDeclaration(program().element(id).qualified()).findCompilationUnit().orElseThrow();
-        var path = pathOf(cu);
-        load(path, Imports.add(source(path), cu, qualified));
+        var type = typeDeclaration(program().element(id).qualified());
+        var unit = sources.unitOf(type);
+        sources.apply(edits(e -> Imports.add(e, unit, qualified)));
     }
 
+    /** The declared type, as written; a workspace type given by qualified name is imported and written simply. */
     private void setType(ElementId id, String type) {
         var element = program().element(id);
-        if (type.contains(".") && ids.has(new Address.Type(type))) type = importing(element, type); // a workspace type by name
-        var parsed = parser.parseType(type).getResult().orElseThrow();
-        switch (element.kind()) {
-            case FIELD -> ((FieldDeclaration) declaration(element)).getVariables().forEach(v -> v.setType(parsed.clone()));
-            case METHOD -> ((MethodDeclaration) declaration(element)).setType(parsed);
-            case PARAM -> editMethod(program().element(element.parent()),
-                    m -> m.getParameterByName(element.name()).orElseThrow().setType(parsed));
+        var node = declaration(element);
+        var unit = sources.unitOf(node);
+        // a parameter's type is part of its method's address: what the method is, is read before the text changes
+        var owner = element.kind() == Kind.PARAM ? program().element(element.parent()) : null;
+        var names = owner == null ? null : parameterNames((CallableDeclaration<?>) declaration(owner));
+        var edits = new EditSet();
+        var written = type.contains(".") && ids.has(new Address.Type(type)) ? importing(edits, unit, type) : type;
+        switch (node) {
+            case FieldDeclaration field -> field.getVariables().forEach(v -> edits.replace(unit, v.getType(), written));
+            case MethodDeclaration method -> edits.replace(unit, method.getType(), written);
+            case Parameter param -> edits.replace(unit, param.getType(), written);
             default -> throw new IllegalArgumentException("unsupported type change: " + element);
         }
+        sources.apply(edits);
+        if (owner != null) resign(owner, names);
     }
 
     /** Replaces a method body with a one-statement-per-line template; {@code #{id}} renders as the element's name. */
     private void setBody(ElementId id, String template) {
         var method = (MethodDeclaration) declaration(program().element(id));
-        var body = method.getBody().orElseThrow();
-        var indent = " ".repeat(method.getBegin().orElseThrow().column - 1);
-        var statements = render(template).lines().map(line -> indent + "    " + line + "\n").collect(Collectors.joining());
-        replaceText(body, "{\n" + statements + indent + "}");
+        var unit = sources.unitOf(method);
+        var indent = unit.indentation(method.getBegin().orElseThrow().line);
+        sources.apply(edits(e -> e.replace(unit, method.getBody().orElseThrow(), Render.block(render(template), indent))));
     }
 
     private String render(String template) {
@@ -756,13 +703,36 @@ public final class JavaProject implements Projection {
     /** Writes the extends clause: a qualified name of the same package as a simple name, any other text as it is. */
     private void setSuperclass(ElementId id, String superclass) {
         var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id).qualified());
-        var pkg = type.findCompilationUnit().flatMap(CompilationUnit::getPackageDeclaration)
-                .map(p -> p.getNameAsString() + ".").orElse("");
-        var name = superclass.startsWith(pkg) && superclass.indexOf('.', pkg.length()) < 0
-                ? superclass.substring(pkg.length()) : superclass;
-        var written = parser.parseClassOrInterfaceType(name).getResult().orElseThrow();
-        if (type.getExtendedTypes().isEmpty()) type.addExtendedType(written);
-        else type.getExtendedTypes(0).replace(written); // the whole type: its arguments belonged to the old one
+        var unit = sources.unitOf(type);
+        var name = simpleIfSamePackage(unit, superclass);
+        var edits = new EditSet();
+        if (type.getExtendedTypes().isEmpty()) edits.insertAt(unit, afterNameAndTypeParameters(unit, type), " extends " + name);
+        else edits.replace(unit, type.getExtendedTypes(0), name); // the whole type: its arguments belonged to the old one
+        sources.apply(edits);
+    }
+
+    /** One more interface a class implements (or an interface extends). */
+    private void addImplements(ElementId id, String qualified) {
+        var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id).qualified());
+        var unit = sources.unitOf(type);
+        var name = simpleIfSamePackage(unit, qualified);
+        var list = type.isInterface() ? type.getExtendedTypes() : type.getImplementedTypes();
+        var edits = new EditSet();
+        if (list.isNonEmpty()) edits.insertAfter(unit, list.getLast().orElseThrow(), ", " + name);
+        else if (type.getExtendedTypes().isNonEmpty()) edits.insertAfter(unit, type.getExtendedTypes().getLast().orElseThrow(), " implements " + name);
+        else edits.insertAt(unit, afterNameAndTypeParameters(unit, type), (type.isInterface() ? " extends " : " implements ") + name);
+        sources.apply(edits);
+    }
+
+    private static String simpleIfSamePackage(Unit unit, String qualified) {
+        var pkg = packageOf(unit);
+        return !pkg.isEmpty() && qualified.startsWith(pkg + ".") && qualified.indexOf('.', pkg.length() + 1) < 0
+                ? qualified.substring(pkg.length() + 1) : qualified;
+    }
+
+    private static com.github.javaparser.Position afterNameAndTypeParameters(Unit unit, ClassOrInterfaceDeclaration type) {
+        if (type.getTypeParameters().isEmpty()) return Unit.after(type.getName().getEnd().orElseThrow());
+        return Unit.after(unit.next('>', type.getTypeParameters().getLast().orElseThrow().getEnd().orElseThrow()));
     }
 
     /**
@@ -773,47 +743,38 @@ public final class JavaProject implements Projection {
         var element = program().element(id);
         if (!on) throw new IllegalArgumentException("unsupported: abstract=false on " + element);
         if (element.kind() == Kind.CLASS) {
-            setFlag(id, Modifier.Keyword.ABSTRACT, true);
+            modifiers(id, (edits, unit, node) -> Modifiers.flag(edits, unit, node, Modifier.Keyword.ABSTRACT, true));
             return;
         }
         if (element.kind() != Kind.METHOD) throw new IllegalArgumentException("unsupported: abstract on " + element);
+        var method = (MethodDeclaration) declaration(element);
+        var unit = sources.unitOf(method);
+        var edits = new EditSet();
         if (program().element(element.parent()).kind() != Kind.INTERFACE) {
-            setFlag(id, Modifier.Keyword.ABSTRACT, true);
-            changed(); // positions must match the text again before the next edit
+            Modifiers.flag(edits, unit, method, Modifier.Keyword.ABSTRACT, true);
         }
-        var method = (MethodDeclaration) declaration(program().element(id));
-        var signature = LexicalPreservingPrinter.print(method).strip();
-        replaceText(method, signature.substring(0, signature.indexOf('{')).stripTrailing() + ";");
+        var body = method.getBody().orElseThrow();
+        var signatureEnd = unit.previousToken(body.getBegin().orElseThrow());
+        edits.replace(unit, Unit.after(signatureEnd), body.getEnd().orElseThrow(), ";");
+        sources.apply(edits);
     }
 
-    /** Adds an implemented interface by qualified name; simple name when in the same package. */
-    private void addImplements(ElementId id, String qualified) {
-        var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id).qualified());
-        var pkg = type.findCompilationUnit().flatMap(CompilationUnit::getPackageDeclaration)
-                .map(p -> p.getNameAsString() + ".").orElse("");
-        var name = qualified.startsWith(pkg) && qualified.indexOf('.', pkg.length()) < 0 ? qualified.substring(pkg.length()) : qualified;
-        type.addImplementedType(name);
-    }
-
-    /** Adds or removes a modifier keyword, after the access modifier. */
-    private void setFlag(ElementId id, Modifier.Keyword keyword, boolean on) {
-        var modifiers = ((NodeWithModifiers<?>) declaration(program().element(id))).getModifiers();
-        modifiers.removeIf(m -> m.getKeyword() == keyword);
-        if (on) {
-            var index = (int) modifiers.stream().filter(m -> ACCESS.contains(m.getKeyword())).count();
-            modifiers.add(index, new Modifier(keyword));
-        }
-    }
-
-    private void setVisibility(ElementId id, String value) {
-        var modifiers = ((NodeWithModifiers<?>) declaration(program().element(id))).getModifiers();
-        modifiers.removeIf(m -> ACCESS.contains(m.getKeyword()));
-        if (!value.equals("package")) modifiers.addFirst(new Modifier(Modifier.Keyword.valueOf(value.toUpperCase())));
+    /** The initial value of a field, as written. */
+    private void setInitializer(ElementId id, String value) {
+        var element = program().element(id);
+        var field = (FieldDeclaration) declaration(element);
+        var unit = sources.unitOf(field);
+        var variable = field.getVariables().stream().filter(v -> v.getNameAsString().equals(element.name())).findFirst().orElseThrow();
+        var edits = new EditSet();
+        if (variable.getInitializer().isPresent()) edits.replace(unit, variable.getInitializer().get(), value);
+        else edits.insertAfter(unit, variable.getName(), " = " + value);
+        sources.apply(edits);
     }
 
     private ElementId extract(ElementId from, String fragment, String name) {
         requireIdentifier(name);
         var source = program().element(from);
+        var owner = program().element(source.parent());
         var method = (MethodDeclaration) declaration(source);
         var dash = fragment.indexOf('-');
         var first = Integer.parseInt(fragment.substring(0, dash).strip());
@@ -833,22 +794,21 @@ public final class JavaProject implements Projection {
         var outputType = output == null ? "void" : flow.outputs().get(output).asString();
         var params = flow.inputs().entrySet().stream().map(e -> e.getValue().asString() + " " + e.getKey())
                 .collect(Collectors.joining(", "));
-        var path = pathOf(method.findCompilationUnit().orElseThrow());
-        var code = source(path);
+        var unit = sources.unitOf(method);
+        var type = typeDeclaration(owner.qualified());
+        var indent = Members.indentation(unit, type);
         var begin = selected.getFirst().getBegin().orElseThrow().line;
         var end = selected.getLast().getEnd().orElseThrow().line;
-        var callIndent = code.substring(Text.lineStart(code, begin)).replaceFirst("(?s)^([ \\t]*).*", "$1");
-        var body = Bodies.reindent(code.substring(Text.lineStart(code, begin), Text.lineStart(code, end + 1)), " ".repeat(8));
-        if (output != null) body += " ".repeat(8) + "return " + output + ";\n";
+        var body = Bodies.reindent(unit.lines(begin, end), indent + "    ");
+        if (output != null) body += indent + "    return " + output + ";\n";
         var call = name + "(" + String.join(", ", flow.inputs().keySet()) + ")";
         var callLine = output == null ? call + ";"
                 : flow.declaredInside(output) ? outputType + " " + output + " = " + call + ";"
                 : output + " = " + call + ";";
-        var edited = code.substring(0, Text.lineStart(code, begin)) + callIndent + callLine + "\n" + code.substring(Text.lineStart(code, end + 1));
-        load(path, edited);
-        var owner = program().element(source.parent());
         var modifiers = method.isStatic() ? "private static " : "private ";
-        insertMember(typeDeclaration(owner.qualified()), modifiers + outputType + " " + name + "(" + params + ") {\n" + body + "    }");
+        var edits = new EditSet().replaceLines(unit, begin, end, unit.indentation(begin) + callLine + "\n");
+        Members.append(edits, unit, type, modifiers + outputType + " " + name + "(" + params + ") {\n" + body + indent + "}");
+        sources.apply(edits);
         var created = typeDeclaration(owner.qualified()).getMethodsByName(name).getFirst();
         return ids.of(new Address.Callable(owner.id(), name, keys.of(created)), Kind.METHOD);
     }
@@ -876,10 +836,10 @@ public final class JavaProject implements Projection {
         }
         var thisMembers = original.findAll(NameExpr.class).stream().anyMatch(n -> resolveField(n) != null)
                 || original.findAll(MethodCallExpr.class).stream().anyMatch(c -> c.getScope().isEmpty());
-        var body = original.clone();
         if (thisMembers && call.getScope().filter(scope -> !scope.isThisExpr()).isPresent()) {
             throw new PrimitiveRejected("inline.receiver", method.qualified() + " uses members of this; the call has another receiver");
         }
+        var body = original.clone(); // a detached copy, rewritten and printed: the text it becomes
         var params = declaration.getParameters();
         var args = call.getArguments();
         for (var i = 0; i < params.size(); i++) {
@@ -901,14 +861,15 @@ public final class JavaProject implements Projection {
             }
         }
         var text = Bodies.needsParentheses(result, call) ? "(" + result + ")" : result.toString();
-        var path = pathOf(call.findCompilationUnit().orElseThrow());
-        load(path, Text.replace(source(path), call, text));
+        var unit = sources.unitOf(call);
+        sources.apply(edits(e -> e.replace(unit, call, text)));
     }
 
     /**
-     * Retargets a field use to an accessor: a read becomes {@code getter()}, a write {@code x = v} used as a statement
-     * becomes {@code setter(v)}. Updates (compound assignment, ++/--) and assignments whose value is used are rejected:
-     * they would change how many times things are evaluated.
+     * Points a use at another element. A use of the same kind just names the other one; a field read becomes
+     * {@code getter()}, a write {@code x = v} used as a statement {@code setter(v)}, a {@code new} a factory call.
+     * Updates (compound assignment, ++/--) and assignments whose value is used are rejected: they would change how
+     * many times things are evaluated.
      */
     private void retarget(String refId, ElementId targetId) {
         var ref = program().reference(refId);
@@ -919,67 +880,57 @@ public final class JavaProject implements Projection {
         var node = (Expression) referenceNodes.get(refId);
         if (node.isObjectCreationExpr() && ref.mode() != Mode.NEW) throw new IllegalStateException(ref.toString());
         var target = program().element(targetId);
+        var unit = sources.unitOf(node);
+        var edits = new EditSet();
         if (target.kind() == program().element(ref.target()).kind()) { // same kind: the use just names the other one
-            switch (referenceNodes.get(refId)) {
-                case MethodReferenceExpr reference -> reference.setIdentifier(target.name());
-                case NodeWithSimpleName<?> named -> named.setName(target.name());
-                default -> throw new IllegalStateException("cannot rename the use " + refId);
-            }
-            changed();
+            renameUse(edits, node, target.name());
+            sources.apply(edits);
             return;
         }
         if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
-        var scope = node.isFieldAccessExpr() ? node.asFieldAccessExpr().getScope() : null;
-        if (node.isObjectCreationExpr()) scope = null;
+        var receiver = node.isFieldAccessExpr() ? unit.textOf(node.asFieldAccessExpr().getScope()) + "." : "";
         switch (ref.mode()) {
-            case READ -> node.replace(new MethodCallExpr(scope, target.name()));
+            case READ -> edits.replace(unit, node, receiver + target.name() + "()");
             case NEW -> {
                 var creation = (ObjectCreationExpr) node;
                 if (creation.getAnonymousClassBody().isPresent()) {
                     throw new PrimitiveRejected("retarget.anonymous-class", "cannot turn " + creation + " into a call");
                 }
-                creation.replace(new MethodCallExpr(new NameExpr(creation.getType().asString()), target.name(),
-                        creation.getArguments()));
+                var arguments = creation.getArguments().isEmpty() ? "" : unit.textBetween(
+                        creation.getArguments().getFirst().orElseThrow().getBegin().orElseThrow(),
+                        creation.getArguments().getLast().orElseThrow().getEnd().orElseThrow());
+                edits.replace(unit, creation, creation.getType().getNameWithScope() + "." + target.name() + "(" + arguments + ")");
             }
             case WRITE -> {
                 var assign = (AssignExpr) node.getParentNode().orElseThrow();
                 if (!(assign.getParentNode().orElseThrow() instanceof ExpressionStmt)) {
                     throw new PrimitiveRejected("retarget.value-used", "the value of " + assign + " is used");
                 }
-                assign.replace(new MethodCallExpr(scope, target.name(), new NodeList<>(assign.getValue())));
+                edits.replace(unit, assign, receiver + target.name() + "(" + unit.textOf(assign.getValue()) + ")");
             }
             default -> throw new PrimitiveRejected("retarget." + ref.mode().label(),
                     "cannot express " + node.getParentNode().orElseThrow() + " with " + target.qualified());
         }
-        changed();
+        sources.apply(edits);
     }
 
-    /** Makes {@code qualified} nameable by its simple name where {@code element} is declared; returns that name. */
-    private String importing(Element element, String qualified) {
-        var unit = typeDeclaration(program().topLevel(element.id()).qualified()).findCompilationUnit().orElseThrow();
-        var unitPackage = unit.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
-        var imported = unit.getImports().stream().anyMatch(i -> i.getNameAsString().equals(qualified));
-        if (!packageOf(qualified).equals(unitPackage) && !imported) {
-            var path = pathOf(unit);
-            load(path, Imports.add(source(path), unit, qualified));
-        }
+    /** Makes {@code qualified} nameable by its simple name in {@code unit}, importing it if needed; returns that name. */
+    private static String importing(EditSet edits, Unit unit, String qualified) {
+        if (!Imports.names(unit, qualified)) Imports.add(edits, unit, qualified);
         return qualified.substring(qualified.lastIndexOf('.') + 1);
     }
 
     /** A type use now names {@code type}: its simple name, imported when another package declares it. */
     private void retargetType(Reference ref, Element type) {
         var node = referenceNodes.get(ref.id());
-        var cu = node.findCompilationUnit().orElseThrow();
-        var path = pathOf(cu);
-        var nameNode = node instanceof ClassOrInterfaceType t ? t.getName() : node;
-        var code = Text.replace(source(path), nameNode, type.name());
-        var unitPackage = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
-        var imported = cu.getImports().stream().anyMatch(i -> i.getNameAsString().equals(type.qualified()));
-        if (!packageOf(type.qualified()).equals(unitPackage) && !imported) code = Imports.add(code, parse(code), type.qualified());
-        load(path, code);
+        var unit = sources.unitOf(node);
+        var edits = new EditSet();
+        edits.replace(unit, node instanceof ClassOrInterfaceType t ? t.getName() : node, type.name());
+        if (!Imports.names(unit, type.qualified())) Imports.add(edits, unit, type.qualified());
+        sources.apply(edits);
     }
 
-    // ---- AST lookup and text edits
+    // ---- declarations and edits
 
     private Node declaration(Element element) {
         if (element.kind() == Kind.PARAM) {
@@ -1005,85 +956,22 @@ public final class JavaProject implements Projection {
     }
 
     private TypeDeclaration<?> typeDeclaration(String qualified) {
-        return units.values().stream()
+        return sources.trees().stream()
                 .flatMap(cu -> types(cu).stream())
                 .filter(t -> t.getFullyQualifiedName().map(Object::toString).orElse("").equals(qualified))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("no type " + qualified));
     }
 
-    /** Inserts a member as a text edit just before the type's closing brace, then re-parses the unit. */
-    private void insertMember(TypeDeclaration<?> type, String memberText) {
-        var path = pathOf(type.findCompilationUnit().orElseThrow());
-        var code = source(path);
-        var offset = Text.lineStart(code, type.getEnd().orElseThrow().line);
-        var indent = " ".repeat(4);
-        load(path, code.substring(0, offset) + "\n" + indent + memberText + "\n" + code.substring(offset));
+    private static EditSet edits(java.util.function.Consumer<EditSet> making) {
+        var edits = new EditSet();
+        making.accept(edits);
+        return edits;
     }
 
-    /** Inserts a field after the last field, or first in the body followed by a blank line; re-parses. */
-    private void insertField(TypeDeclaration<?> type, String fieldText) {
-        var path = pathOf(type.findCompilationUnit().orElseThrow());
-        var code = source(path);
-        var indent = " ".repeat(4);
-        var fields = type.getFields();
-        if (fields.isEmpty()) {
-            var offset = Text.lineStart(code, type.getName().getEnd().orElseThrow().line + 1);
-            var separate = type.getMembers().isEmpty() ? "" : "\n";
-            load(path, code.substring(0, offset) + indent + fieldText + "\n" + separate + code.substring(offset));
-        } else {
-            var offset = Text.lineStart(code, fields.get(fields.size() - 1).getEnd().orElseThrow().line + 1);
-            load(path, code.substring(0, offset) + indent + fieldText + "\n" + code.substring(offset));
-        }
-    }
-
-    /** Inserts a member as a text edit on the lines just above {@code anchor}, then re-parses the unit. */
-    private void insertBefore(Node anchor, String memberText) {
-        var path = pathOf(anchor.findCompilationUnit().orElseThrow());
-        var code = source(path);
-        var offset = Text.lineStart(code, anchor.getBegin().orElseThrow().line);
-        var indent = " ".repeat(4);
-        load(path, code.substring(0, offset) + indent + memberText + "\n\n" + code.substring(offset));
-    }
-
-    /** Replaces the text of a node, then re-parses its unit. */
-    private void replaceText(Node node, String text) {
-        var path = pathOf(node.findCompilationUnit().orElseThrow());
-        load(path, Text.replace(source(path), node, text));
-    }
-
-    private void load(String path, String code) {
-        units.put(path, parse(path, code));
-        invalidate();
-    }
-
-    /** Parses a unit and remembers the text it came from, to know later whether it changed. */
-    private CompilationUnit parse(String path, String code) {
-        var cu = parse(code);
-        parsedText.put(path, code);
-        return cu;
-    }
-
-    private CompilationUnit parse(String code) {
-        var result = parser.parse(code);
-        if (!result.isSuccessful()) throw new IllegalStateException("unparsable result: " + result.getProblems() + "\n" + code);
-        return LexicalPreservingPrinter.setup(result.getResult().orElseThrow());
-    }
-
-    /**
-     * After an in-place AST edit: re-parses every unit from its text, so positions match the text again and no
-     * resolution runs on an edited AST.
-     */
-    private void changed() {
-        units.replaceAll((path, cu) -> {
-            var text = LexicalPreservingPrinter.print(cu);
-            return text.equals(parsedText.get(path)) ? cu : parse(path, text);
-        });
-        invalidate();
-    }
-
+    /** After any change: what was read or resolved before describes another program. */
     private void invalidate() {
-        JavaParserFacade.clearInstances(); // resolution caches point into replaced ASTs
-        units.values().forEach(JavaProject::forgetResolvedTypes);
+        JavaParserFacade.clearInstances(); // resolution caches point into replaced trees
+        sources.trees().forEach(JavaProject::forgetResolvedTypes);
         typeSolver.reset();
         graph = null;
         referenceNodes = Map.of();
@@ -1091,7 +979,7 @@ public final class JavaProject implements Projection {
     }
 
     /**
-     * The facade also caches resolved types on the nodes themselves; in units that were not re-parsed they would
+     * The facade also caches resolved types on the nodes themselves; in units that were not parsed again they would
      * still describe the program before the change (e.g. a field whose declared type changed elsewhere).
      */
     private static void forgetResolvedTypes(CompilationUnit cu) {
@@ -1101,10 +989,4 @@ public final class JavaProject implements Projection {
             }
         });
     }
-
-    private String pathOf(CompilationUnit cu) {
-        return units.entrySet().stream().filter(e -> e.getValue() == cu)
-                .map(Map.Entry::getKey).findFirst().orElseThrow();
-    }
-
 }

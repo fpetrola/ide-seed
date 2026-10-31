@@ -52,6 +52,11 @@ public final class EditSet {
         return add(unit, at, at, text);
     }
 
+    /** Replaces whole lines {@code first..last}, their ends of line included. */
+    public EditSet replaceLines(Unit unit, int first, int last, String text) {
+        return add(unit, unit.lineStart(first), unit.lineStart(last + 1), text);
+    }
+
     /** Removes a node and the blanks that follow it on its line, as a modifier goes. */
     public EditSet removeWithSpaceAfter(Unit unit, Node node) {
         var range = node.getRange().orElseThrow();
@@ -84,12 +89,14 @@ public final class EditSet {
     }
 
     /** The new text of every unit touched: each unit's edits, back to front. */
-    Map<String, String> texts() {
+    public Map<String, String> texts() {
         var byUnit = new LinkedHashMap<Unit, List<Edit>>();
         for (var edit : edits) byUnit.computeIfAbsent(edit.unit(), u -> new ArrayList<>()).add(edit);
         var texts = new LinkedHashMap<String, String>();
         byUnit.forEach((unit, list) -> {
-            var sorted = list.stream().distinct().sorted(Comparator.comparingInt(Edit::start).reversed()
+            var once = new LinkedHashMap<List<Object>, Edit>(); // the same edit made twice is made once
+            for (var edit : list) once.putIfAbsent(List.of(edit.start(), edit.end(), edit.text()), edit);
+            var sorted = once.values().stream().sorted(Comparator.comparingInt(Edit::start).reversed()
                     .thenComparing(Comparator.comparingInt((Edit e) -> e.end() - e.start()).reversed())
                     .thenComparing(Comparator.comparingInt(Edit::order).reversed())).toList();
             var text = new StringBuilder(unit.text());

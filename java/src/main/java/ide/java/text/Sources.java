@@ -109,6 +109,11 @@ public final class Sources {
         changed.run();
     }
 
+    /** A unit for a text in the making: parsed like the sources, but not one of them. */
+    public Unit draft(String path, String text) {
+        return parse(Map.of(path, text)).get(path);
+    }
+
     /** Parses a text that is not one of the sources (an editor's copy, a text in the making). */
     public Optional<CompilationUnit> parseDetached(String text) {
         var result = parser.parse(text);
