@@ -45,3 +45,11 @@ Realistic sample: `src/test/resources/samples/orders` (case table in `OrdersSamp
   make it green, then improve the model while green. One commit per cycle.
 - Catalog scripts stay within 20 statements (CatalogBudgetTest).
 - UI and MCP come last.
+
+## Architecture and migration
+
+`ARCHITECTURE.md` (Spanish) is the design reference: every module is treated as an autonomous product with its
+own domain (core, program, projection, java, engine, refactoring, knowledge, session, adapters), with a ficha per
+module, the decisions taken and a phased migration plan from the current packages. Read it before touching a
+module boundary, and update it in the same commit that changes one. The map above describes the code as it is
+today; the fichas describe where it is going.
