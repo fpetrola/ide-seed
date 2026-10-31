@@ -37,6 +37,14 @@ public final class JavaRules implements LanguageRules {
         return List.of("private", "package", "protected", "public");
     }
 
+    /** Top-level types are package-private or public; members may be anything. */
+    @Override
+    public List<String> visibilities(ProgramGraph graph, ElementId element) {
+        var e = graph.element(element);
+        var topLevel = e.kind().isType() && e.parent() != null && graph.element(e.parent()).kind() == ide.graph.Kind.PACKAGE;
+        return topLevel ? List.of("package", "public") : visibilities();
+    }
+
     private static boolean samePackage(ProgramGraph graph, ElementId a, ElementId b) {
         return packageOf(graph.topLevel(a)).equals(packageOf(graph.topLevel(b)));
     }

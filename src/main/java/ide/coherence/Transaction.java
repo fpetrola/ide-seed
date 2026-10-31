@@ -19,6 +19,7 @@ public final class Transaction implements Program {
     private ProgramGraph baseline;
     private final boolean compiled;
     private final List<String> steps = new ArrayList<>();
+    private final List<String> search = new ArrayList<>();
     private int depth;
 
     public Transaction(Program program) {
@@ -32,9 +33,10 @@ public final class Transaction implements Program {
     public Result commit(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, compiled, program);
         outcome.repairs().forEach(repair -> steps.add("! " + repair));
-        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps);
+        search.addAll(outcome.search());
+        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps, search);
         program.rollback(checkpoint);
-        return Result.aborted(outcome.violations(), steps);
+        return Result.aborted(outcome.violations(), steps, search);
     }
 
     /** A point inside the transaction to come back to: program state and the baseline's expectations. */
@@ -55,6 +57,7 @@ public final class Transaction implements Program {
     public Violation check(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, compiled, program);
         outcome.repairs().forEach(repair -> log("! " + repair));
+        search.addAll(outcome.search());
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
     }
 
@@ -71,7 +74,7 @@ public final class Transaction implements Program {
     /** Rolls back; {@code reason} may be null when nothing went wrong (e.g. an expansion). */
     public Result abort(Violation reason) {
         program.rollback(checkpoint);
-        return Result.aborted(reason == null ? List.of() : List.of(reason), steps);
+        return Result.aborted(reason == null ? List.of() : List.of(reason), steps, search);
     }
 
     /** Marks the start of a refactoring call; primitives until {@link #exit()} are nested under it. */
@@ -139,7 +142,7 @@ public final class Transaction implements Program {
 
     /** Keeps a manual edit as it is: the user's text is the authority, there is nothing to verify against. */
     public Result keep() {
-        return Result.ok(List.of(), steps);
+        return Result.ok(List.of(), steps, search);
     }
 
     @Override

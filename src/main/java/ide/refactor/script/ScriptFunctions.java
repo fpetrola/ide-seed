@@ -42,7 +42,7 @@ final class ScriptFunctions {
             case "top-in" -> graph.typesIn(text(args, 0)).getFirst().id().value();
             // language
             case "wider" -> {
-                var all = rules.visibilities();
+                var all = rules.visibilities(graph, element(args, 0).id());
                 yield all.subList(all.indexOf(element(args, 0).attribute("visibility")) + 1, all.size());
             }
             case "import-candidates" -> rules.importCandidates(graph, text(args, 0));

@@ -13,4 +13,9 @@ public interface LanguageRules {
 
     /** Visibility values from most to least restrictive. */
     List<String> visibilities();
+
+    /** The visibilities this element may have, from most to least restrictive. */
+    default List<String> visibilities(ProgramGraph graph, ElementId element) {
+        return visibilities();
+    }
 }

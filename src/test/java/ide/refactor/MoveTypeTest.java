@@ -99,6 +99,12 @@ class MoveTypeTest {
                 }
                 """);
         assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.whyRepair()).contains(
+                "? access.insufficient a.Shop#total() cannot access package b.Money#cents",
+                "  X open-visibility b.Money#cents package -> protected: still access.insufficient",
+                "  ! open-visibility b.Money#cents package -> public",
+                "? access.insufficient b.Money#currency cannot access package a.Currency",
+                "  ! open-visibility a.Currency package -> public");
     }
 
     @Test

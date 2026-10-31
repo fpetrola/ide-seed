@@ -41,6 +41,7 @@ public final class Workspace {
 
     private final java.util.Deque<Object> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
+    private List<String> lastSearch = List.of();
 
     /** The sources as they are on disk (as loaded, or as last saved). */
     private Map<String, String> saved;
@@ -126,6 +127,8 @@ public final class Workspace {
                             answer.put("diff", preview.diff());
                             return answer;
                         }))
+                .register(Capability.of("why-repair", "How the last transaction's repairs were searched", List.of(),
+                        args -> whyRepair()))
                 .register(Capability.of("callers", "Who calls a method (polymorphically)", List.of(Param.of("method", "element", "METHOD")),
                         args -> callers(text(args, "method"))))
                 .register(Capability.of("hierarchy", "Supertypes and subtypes of a type", List.of(Param.of("type", "element", "CLASS", "INTERFACE", "ENUM")),
@@ -268,6 +271,7 @@ public final class Workspace {
     /** Logs a finished transaction and makes it undoable if it applied. */
     private Result record(Transaction tx, Map<String, ?> event, Result result) {
         if (result.applied()) undo.push(tx.before());
+        lastSearch = result.search();
         var entry = new java.util.LinkedHashMap<String, Object>(event);
         entry.put("applied", result.applied());
         entry.put("violations", result.violations().stream().map(v -> v.code() + ": " + v.detail()).toList());
@@ -392,6 +396,11 @@ public final class Workspace {
             return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
         }
         return record(tx, event, tx.commit(repairer));
+    }
+
+    /** How the repairer searched in the last transaction: {@code ?} violation, {@code !} kept, {@code X} undone. */
+    public List<String> whyRepair() {
+        return lastSearch;
     }
 
     /** How fixes for the diagnostics on a line are deduced: {@code ?} goal, {@code !} plan, {@code X} rejected. */

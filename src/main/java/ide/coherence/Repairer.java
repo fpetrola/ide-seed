@@ -18,8 +18,11 @@ public final class Repairer {
     static final int MAX_ROUNDS = 10;
     static final int MAX_BRANCHES = 16;
 
-    /** Repairs applied, plus the violations left (empty if the transaction can close). */
-    public record Outcome(List<String> repairs, List<Violation> violations) {
+    /**
+     * Repairs applied, the violations left (empty if the transaction can close), and the search as readable
+     * lines: {@code ?} violation, {@code !} plan kept, {@code X} plan undone and why.
+     */
+    public record Outcome(List<String> repairs, List<Violation> violations, List<String> search) {
     }
 
     private final Verifier verifier;
@@ -38,33 +41,42 @@ public final class Repairer {
      */
     public Outcome stabilize(ProgramGraph baseline, boolean compiled, Program program) {
         var repairs = new ArrayList<String>();
+        var search = new ArrayList<String>();
         var branches = 0;
         for (var round = 0; round < MAX_ROUNDS; round++) {
             var violations = verify(baseline, compiled, program);
-            if (violations.isEmpty()) return new Outcome(repairs, List.of());
+            if (violations.isEmpty()) return new Outcome(repairs, List.of(), search);
             var target = violations.getFirst();
+            search.add("? " + target.code() + " " + target.detail());
             var plans = remedies.stream().flatMap(r -> r.plans(target, program, rules).stream())
                     .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
             String kept = null;
+            if (plans.isEmpty()) search.add("  (no plan)");
             for (var plan : plans) {
-                if (branches++ >= MAX_BRANCHES) return new Outcome(repairs, violations);
+                if (branches++ >= MAX_BRANCHES) {
+                    search.add("  X branch cap reached");
+                    return new Outcome(repairs, violations, search);
+                }
                 var saved = program.checkpoint();
                 try {
                     plan.apply(program);
                 } catch (RuntimeException failed) {
                     program.rollback(saved);
+                    search.add("  X " + plan.title() + ": " + String.valueOf(failed.getMessage()).lines().findFirst().orElse(""));
                     continue;
                 }
                 if (!same(target, verify(baseline, compiled, program))) {
                     kept = plan.title();
+                    search.add("  ! " + plan.title());
                     break;
                 }
                 program.rollback(saved);
+                search.add("  X " + plan.title() + ": still " + target.code());
             }
-            if (kept == null) return new Outcome(repairs, violations);
+            if (kept == null) return new Outcome(repairs, violations, search);
             repairs.add(kept);
         }
-        return new Outcome(repairs, verify(baseline, compiled, program));
+        return new Outcome(repairs, verify(baseline, compiled, program), search);
     }
 
     private List<Violation> verify(ProgramGraph baseline, boolean compiled, Program program) {
