@@ -1,5 +1,6 @@
 package ide.refactor;
 
+import ide.coherence.Violation;
 import ide.workbench.Workspace;
 import org.junit.jupiter.api.Test;
 
@@ -32,8 +33,9 @@ class PullUpFieldTest {
                         }
                         """));
 
-        ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
+        var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
 
+        assertThat(result.applied()).isTrue();
         assertThat(ws.source("a/A.java")).isEqualTo("""
                 package a;
 
@@ -53,5 +55,38 @@ class PullUpFieldTest {
                     }
                 }
                 """);
+    }
+
+    @Test
+    void pullUpPrivateFieldUsedInSubclassAbortsWithAccessViolation() {
+        var a = """
+                package a;
+
+                public class A {
+                }
+                """;
+        var b = """
+                package a;
+
+                public class B extends A {
+
+                    private int x;
+
+                    int get() {
+                        return x;
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/A.java", a, "a/B.java", b));
+
+        var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations())
+                .extracting(Violation::code)
+                .containsExactly("access.insufficient");
+        assertThat(result.violations().getFirst().detail()).contains("a.B", "x");
+        assertThat(ws.source("a/A.java")).isEqualTo(a);
+        assertThat(ws.source("a/B.java")).isEqualTo(b);
     }
 }
