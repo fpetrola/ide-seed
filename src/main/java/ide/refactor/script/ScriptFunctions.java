@@ -63,6 +63,7 @@ final class ScriptFunctions {
             case "methods" -> ids(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("METHOD")).toList());
             case "params" -> ids(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList());
             case "paramnames" -> graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).map(Element::name).toList();
+            case "constructors" -> ids(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "subclasses" -> ids(graph.types().stream()
                     .filter(t -> element(args, 0).qualified().equals(t.attribute("superclass"))).toList());
             case "family" -> ids(graph.family(element(args, 0)));

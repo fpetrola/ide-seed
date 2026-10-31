@@ -351,6 +351,10 @@ public final class JavaProject implements Program {
             deleteParam(element);
             return;
         }
+        if (element.kind().isType()) {
+            deleteType(element);
+            return;
+        }
         var uses = g.referencesTo(id).stream().map(r -> g.element(r.site()).qualified()).distinct().toList();
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", element.qualified() + " is used by " + uses);
         var node = declaration(element);
@@ -541,6 +545,34 @@ public final class JavaProject implements Program {
         names.add(index, names.remove(from));
         applyEdits(edits);
         retransferMethod(method, names);
+    }
+
+    /** Deletes a top-level type nothing uses: its file goes, and so do the imports that name it. */
+    private void deleteType(Element type) {
+        var g = graph();
+        var uses = g.referencesTo(type.id()).stream().filter(r -> !inside(g, r.site(), type.id()))
+                .map(r -> g.element(r.site()).qualified()).distinct().toList();
+        if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", type.qualified() + " is used by " + uses);
+        var path = type.attribute("file");
+        if (path == null) throw new IllegalArgumentException("only top-level types can be deleted so far: " + type);
+        var edits = new LinkedHashMap<String, String>();
+        units.forEach((p, cu) -> cu.getImports().stream()
+                .filter(i -> !i.isAsterisk() && !i.isStatic() && i.getNameAsString().equals(type.qualified()))
+                .findFirst().ifPresent(i -> edits.put(p, Imports.remove(source(p), cu, i))));
+        units.remove(path);
+        parsedText.remove(path);
+        edits.forEach((p, code) -> units.put(p, parse(p, code)));
+        invalidate();
+        for (var address : List.copyOf(ids.keySet())) {
+            if (address.equals(type.qualified()) || address.startsWith(type.qualified() + "#")) ids.remove(address);
+        }
+    }
+
+    private static boolean inside(ProgramGraph g, ElementId id, ElementId container) {
+        for (var e = g.element(id); ; e = g.element(e.parent())) {
+            if (e.id().equals(container)) return true;
+            if (e.parent() == null) return false;
+        }
     }
 
     /** Removes a parameter the body does not use, and the matching argument from every call. */
@@ -805,6 +837,10 @@ public final class JavaProject implements Program {
     @Override
     public void retarget(String refId, ElementId targetId) {
         var ref = graph().reference(refId);
+        if (ref.mode().equals("type")) {
+            retargetType(ref, graph().element(targetId));
+            return;
+        }
         var node = (Expression) referenceNodes.get(refId);
         if (node.isObjectCreationExpr() && !ref.mode().equals("new")) throw new IllegalStateException(ref.toString());
         var target = graph().element(targetId);
@@ -832,6 +868,19 @@ public final class JavaProject implements Program {
                     "cannot express " + node.getParentNode().orElseThrow() + " with " + target.qualified());
         }
         changed();
+    }
+
+    /** A type use now names {@code type}: its simple name, imported when another package declares it. */
+    private void retargetType(Reference ref, Element type) {
+        var node = referenceNodes.get(ref.id());
+        var cu = node.findCompilationUnit().orElseThrow();
+        var path = pathOf(cu);
+        var nameNode = node instanceof ClassOrInterfaceType t ? t.getName() : node;
+        var code = Text.replace(source(path), nameNode, type.name());
+        var unitPackage = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
+        var imported = cu.getImports().stream().anyMatch(i -> i.getNameAsString().equals(type.qualified()));
+        if (!packageOf(type.qualified()).equals(unitPackage) && !imported) code = Imports.add(code, parse(code), type.qualified());
+        load(path, code);
     }
 
     // ---- projection: graph from AST

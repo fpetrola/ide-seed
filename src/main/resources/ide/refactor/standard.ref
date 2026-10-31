@@ -194,3 +194,17 @@ refactoring push-down-member "Moves a member into the only subclass of its type"
   move ${member} ${first(subs)}
   return ${member}
 end
+
+refactoring collapse-hierarchy "Merges a class into its superclass: its members go up and its uses use the superclass"
+  param type : element(CLASS) "the class to merge away"
+  let sup = superclass(type)
+  require nonempty(sup) "${qualified(type)} has no superclass in the workspace"
+  require empty(constructors(type)) "${qualified(type)} has constructors; ${sup} has no equivalent"
+  for m in members(type)
+    move ${m} ${sup}
+  end
+  for r in refs(type)
+    retarget ${r} ${sup}
+  end
+  delete ${type}
+end
