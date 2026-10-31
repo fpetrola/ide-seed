@@ -31,10 +31,13 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
   with a Builder; the stand-in for a driver in the tests of engine and refactoring).
-- `java` (projection, JavaParser) — the Java driver: JavaProject (units, `apply` dispatching to the primitives as
-  minimal text edits, re-parse after each; runs ProjectionContract in its tests), GraphReader (packages and types, then members, then references), Keys (parameter type keys),
-  Resolution (kinds, modes, facts), Bodies (data flow and precedence for extract/inline), JavaRules,
-  WorkspaceTypeSolver, JavacCheck, Imports/Text. The only module that compiles against JavaParser.
+- `java` (projection, JavaParser) — the Java driver, in layers that only know the ones below (LayersTest):
+  `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses),
+  `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
+  `ide.java.semantics` (Reader: program + declarations + use nodes; Resolution, Keys, WorkspaceTypeSolver,
+  JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
+  `ide.java.JavaProjection` (sources, identity, reading, invalidation). The AST is never edited. Other modules use
+  only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
 - `engine` (projection) — Verifier (binding, access, dispatch views; javac view when the code compiled before),
   Repairer (plans from saved points, typed pins), Transaction (intercepts `apply`, folds each declared Change into
   the baseline, step tree), Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
@@ -43,7 +46,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   language in `ide.refactoring.script`; the catalog `refactoring/src/main/resources/ide/refactoring/standard.ref`.
 - `knowledge` (engine, refactoring) — goals/effects planner over
   `knowledge/src/main/resources/ide/knowledge/knowledge.ref`; no remedy or quick fix is written in Java.
-- `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — `Workspace`: transactions,
+- `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — `Workspace` over a
+  `JavaProjection`: transactions,
   library, undo, log, fixes, completion, navigation, capabilities.
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,
   completion over Java text), the samples in `acceptance/src/test/resources/samples` (case tables in

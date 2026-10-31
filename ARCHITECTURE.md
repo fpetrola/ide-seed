@@ -244,29 +244,33 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   javac.
 - **Para qué lo usarías.** Codemods, migraciones masivas, cualquier automatización sobre un codebase Java, sin
   verificación ni scripts.
-- **Dominio**, en capas internas, cada una con su vocabulario:
-  1. Texto. `Unit` (ruta, texto, AST parseado con posiciones), `Edit` (reemplazo por rango), `EditSet` (ediciones
-     por unidad, aplicadas de atrás hacia adelante, reparseo solo de la unidad tocada). Es la única vía de cambio:
-     no hay mutación in-place del AST ni printer con preservación léxica; el texto es el que tenemos.
-  2. Sintaxis. `Decl` (handle a la declaración de un elemento: unidad, nodo, rango, modificadores, cabecera, cuerpo,
-     punto de inserción), `Render` (texto de un miembro nuevo, un archivo nuevo, un import, una llamada, con la
-     indentación del contexto), `Imports`.
-  3. Semántica. `Resolution` (a qué resuelve cada uso), `Reader` (grafo desde las unidades, en dos pasadas:
-     elementos y después referencias), `WorkspaceTypeSolver`, `JavacCheck`, `Bodies` (flujo de datos y precedencia
-     para extract e inline).
-  4. Primitivos. Una clase por primitivo, todas con la misma forma: precondiciones, ediciones, transferencia de
+- **Dominio**, en capas internas, cada una un paquete con su vocabulario; `LayersTest` hace cumplir que cada una
+  conozca solo las de abajo:
+  1. Texto, `ide.java.text`. `Unit` (un archivo: ruta, texto y el árbol leído de ese texto; los offsets viven solo
+     acá), `EditSet` (ediciones hechas sobre el texto como estaba, aplicadas de atrás hacia adelante), `Sources`
+     (los archivos cambian solo como texto, todo o nada, se reparsean solo los tocados; el único lugar que parsea).
+     Es la única vía de cambio: no hay mutación del árbol ni printer léxico.
+  2. Sintaxis, `ide.java.syntax`. `Decl` (dónde está declarado un elemento: nodo y unidad), `Members` (dónde va un
+     miembro, cómo se va, su texto con el comentario), `Modifiers`, `Lists` (parámetros y argumentos), `Imports`,
+     `Render` (texto de código nuevo).
+  3. Semántica, `ide.java.semantics`. `Reader` (la lectura: programa, nodo de cada uso, declaración de cada
+     elemento), `Resolution`, `Keys`, `WorkspaceTypeSolver`, `JavacCheck`, `Bodies` (flujo de datos y precedencia
+     para extract e inline), `Completion`.
+  4. Primitivos, `ide.java.primitives`. Un `Context` (el programa leído, las declaraciones, las fuentes, la
+     identidad) y una clase por primitivo, todas con la misma forma: precondiciones, ediciones, transferencia de
      identidad, `Change` declarado.
-  5. Fachada. `JavaProjection`: unidades, identidad, lectura cacheada, invalidación, instantáneas. Unas 150 líneas.
+  5. Fachada, `ide.java.JavaProjection`: lo que las capas comparten (fuentes, identidad, lectura) y lo que cada
+     cambio vuelve viejo. Unas 200 líneas, 45 de ellas el contexto que ven los primitivos.
 - **Qué ignora.** Transacciones, verificación, refactorings, scripts, sesión.
 - **Prueba de autonomía.** Aplicar un primitivo sobre texto y comparar texto; el kit de conformidad de `projection`.
-- **Estado actual** (después de la fase 2). `JavaProject` tiene unas 1100 líneas: un `apply` que despacha a los
-  primitivos como métodos privados. Pasa el contrato. Ya no hay marcadores de texto ni `set default`/`set order`;
-  `set` quedó con nueve casos, de los cuales `import` e `initializer` todavía son operaciones. Siguen conviviendo
-  dos mecanismos de edición (mutación del AST seguida de `changed()`, que reimprime y reparsea todas las unidades,
-  y empalme de texto), y la búsqueda de la declaración, la unidad y la ruta se repite en cada primitivo: es la
-  fase 3. El bug del rename de un tipo usado como parámetro se resolvió en la fase 1.
-- **Abierto.** Invalidación selectiva del grafo (hoy se reconstruye entero; rename sobre 2400 elementos tarda unos
-  4 s); borrado de tipos anidados; reconciliación estructural de identidad en `edit`.
+- **Estado actual** (fase 3 cerrada, 2026-10-31). Las cinco capas existen y ningún archivo pasa de 275 líneas.
+  Cada capa tiene tests propios: `SourcesTest` (texto), `SyntaxTest` (sintaxis), el contrato (el driver entero) y
+  `LayersTest`. Un miembro movido lleva su comentario. Un texto que no parsea se rechaza como
+  `projection.unparsable`, en vez de romper. `set` todavía tiene dos casos que solo entiende Java: `import` e
+  `initializer`.
+- **Abierto.** Invalidación selectiva: se reparsea solo lo tocado, pero el grafo se relee entero. Borrado de tipos
+  anidados. Reconciliación estructural de identidad en `edit`. Renombrar un parámetro no renombra sus usos en el
+  cuerpo, porque esos usos no son referencias del grafo.
 
 ### 5.5 `engine`: motor de transacciones verificadas
 
@@ -406,16 +410,16 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo                                    | Tests al empezar la fase 2 | Al cerrarla |
-|-------------------------------------------|----------------------------|-------------|
-| program                                   | 8                          | 12          |
-| projection-kit                            | (no existía)               | 8           |
-| java                                      | 0                          | 8           |
-| engine                                    | 0                          | 9           |
-| refactoring                               | 1                          | 3           |
-| core, projection, knowledge               | 0                          | 0           |
-| session                                   | 13                         | 13          |
-| acceptance                                | 102                        | 103         |
+| Módulo                                    | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 |
+|-------------------------------------------|----------------------|---------------------|---------------------|
+| program                                   | 8                    | 12                  | 12                  |
+| projection-kit                            | (no existía)         | 8                   | 8                   |
+| java                                      | 0                    | 8                   | 24                  |
+| engine                                    | 0                    | 9                   | 9                   |
+| refactoring                               | 1                    | 3                   | 3                   |
+| core, projection, knowledge               | 0                    | 0                   | 0                   |
+| session                                   | 13                   | 13                  | 13                  |
+| acceptance                                | 102                  | 103                 | 104                 |
 
 ## 7. Decisiones
 
@@ -425,7 +429,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 2  | Forma de los primitivos  | `Primitive` sellado y `apply(Primitive)` que devuelve `Change`; cada primitivo declara su intención | tomada, 2026-10-31 (1524f0c) |
 | 3  | Vínculos                 | extends, implements y declared son referencias; `Link` reemplaza los `set` de tipos        | tomada, 2026-10-31 (4d16bfe, 5cceb1a) |
 | 4  | Identidad                | `Address` tipada con ids de dueño y de tipos de parámetro; reconciliación estructural después | tomada, 2026-10-31 (67901c9) |
-| 5  | Edición                  | solo `EditSet` de texto; sin mutación del AST ni printer léxico                            | propuesta   |
+| 5  | Edición                  | solo `EditSet` de texto; sin mutación del AST ni printer léxico                            | tomada, 2026-10-31 (3f994c2) |
 | 6  | Hechos                   | conjunto cerrado y tipado (claves `Fact`; los valores siguen siendo texto)                 | tomada, 2026-10-31 (4d16bfe) |
 | 7  | Cuerpos                  | fuera del grafo; el fragmento es una dirección opaca de la proyección (líneas en Java, posiciones de usos en memoria) | tomada, 2026-10-31 (f64f7dd) |
 | 8  | Creación                 | `Create` recibe los hechos con que nace y, para un parámetro, el argumento de las llamadas  | tomada, 2026-10-31 (8f0ed6a) |
@@ -451,10 +455,10 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Interfaz mutable con nueve firmas y checkpoint sin tipo (resuelto en 1524f0c)      | `ide.projection`       | 2    |
 | La Transaction interpreta atributos para deducir la intención (resuelto en 1524f0c y 5cceb1a) | `ide.engine`    | 2    |
 | Registro manual de los primitivos como refactorings (resuelto en 351d5c2)          | `ide.refactoring`      | 2    |
-| Dos mecanismos de edición; `changed()` reimprime todas las unidades                | `ide.java.JavaProject` | 3    |
-| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; quedan `import` e `initializer`) | `ide.java.JavaProject` | 3 |
-| `MemoryProjection` en un solo archivo grande (los nueve primitivos y el constructor de programas) | `projection-kit` | 3 |
-| Búsqueda de declaración, unidad y ruta repetida por primitivo                      | `ide.java.JavaProject` | 3    |
+| Dos mecanismos de edición; `changed()` reimprime todas las unidades (resuelto en 3f994c2) | `ide.java` | 3 |
+| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; quedan `import` e `initializer`) | `ide.java.primitives.SetAttribute` | etapa 2 |
+| `MemoryProjection` en un solo archivo grande (resuelto en 9c507a0)                  | `projection-kit`       | 3    |
+| Búsqueda de declaración, unidad y ruta repetida por primitivo (resuelto en 646c9bc) | `ide.java`             | 3    |
 | Vistas no enchufables; vista del compilador dentro del reparador                   | `ide.coherence`        | 4    |
 | Rastro como strings con sigilos                                                    | `ide.coherence`        | 4    |
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge  | `ide.workbench`, `ide.knowledge` | 5 |
@@ -515,7 +519,12 @@ argumentos de tipo del anterior). Los tests de `engine` fijan comportamiento exi
 - Criterio de cierre: `Transaction` no menciona ningún atributo; `Primitives` no registra nada a mano; el motor
   corre entero contra la proyección falsa.
 
-### Fase 3: `java` en capas
+### Fase 3: `java` en capas (cerrada, 2026-10-31)
+
+Hecha en cinco ciclos, del 86422b5 al 9c507a0. La fachada quedó en unas 200 líneas y no en 150: 45 son el
+contexto que ven los primitivos. Además de lo planeado: el lector numeraba cada referencia contando todas las
+anteriores, y ahora es lineal. Con eso y sin printer léxico, cargar el sample grande pasó de 1,5 s a 0,25 s y el
+rename de 2,1 s a 1,1 s.
 
 - Objetivo: una sola vía de edición, un primitivo por clase, identidad tipada, fachada chica.
 - Tests rojos:
