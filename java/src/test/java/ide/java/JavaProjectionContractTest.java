@@ -61,12 +61,12 @@ class JavaProjectionContractTest extends ProjectionContract {
 
     @Override
     protected Projection fixture() {
-        return JavaProject.of(FIXTURE_SOURCES);
+        return JavaProjection.of(FIXTURE_SOURCES);
     }
 
     @Override
     protected Projection reread(Projection projection) {
-        return JavaProject.of(((JavaProject) projection).sources());
+        return JavaProjection.of(((JavaProjection) projection).sources());
     }
 
     @Override

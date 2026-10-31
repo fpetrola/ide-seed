@@ -36,11 +36,21 @@ public final class Imports {
                 .filter(i -> !i.isAsterisk() && !i.isStatic() && i.getNameAsString().equals(qualified)).findFirst();
     }
 
+    /** Makes {@code qualified} nameable by its simple name in {@code unit}, importing it if needed; answers that name. */
+    public static String nameable(EditSet edits, Unit unit, String qualified) {
+        if (!names(unit, qualified)) add(edits, unit, qualified);
+        return qualified.substring(qualified.lastIndexOf('.') + 1);
+    }
+
+    /** The package a unit declares (empty for the default package). */
+    public static String packageOf(Unit unit) {
+        return unit.tree().getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
+    }
+
     /** Whether the unit names {@code qualified} by its simple name already: same package, or imported. */
     public static boolean names(Unit unit, String qualified) {
         var dot = qualified.lastIndexOf('.');
         var pkg = dot < 0 ? "" : qualified.substring(0, dot);
-        var own = unit.tree().getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
-        return pkg.equals(own) || unit.tree().getImports().stream().anyMatch(i -> i.getNameAsString().equals(qualified));
+        return pkg.equals(packageOf(unit)) || unit.tree().getImports().stream().anyMatch(i -> i.getNameAsString().equals(qualified));
     }
 }

@@ -22,6 +22,12 @@ class ArchitectureTest {
             .should().dependOnClassesThat().resideInAnyPackage("com.github.javaparser..", "javax.tools..", "com.sun.source..");
 
     @ArchTest
+    static final ArchRule theJavaDriverIsUsedOnlyThroughItsFacade = noClasses()
+            .that().resideOutsideOfPackage("ide.java..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "ide.java.text..", "ide.java.syntax..", "ide.java.semantics..", "ide.java.primitives..");
+
+    @ArchTest
     static final ArchRule noRemedyIsWrittenInJava = classes()
             .that().implement(ide.engine.Remedy.class).or().implement(ide.engine.QuickFix.class)
             .should().haveFullyQualifiedName("ide.knowledge.Knowledge");

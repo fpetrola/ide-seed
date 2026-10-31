@@ -15,7 +15,7 @@ import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
-import ide.java.JavaProject;
+import ide.java.JavaProjection;
 import ide.refactoring.Args;
 import ide.refactoring.Ctx;
 import ide.refactoring.ChangeSignature;
@@ -31,7 +31,7 @@ import java.util.Map;
 /** Entry point: invokes refactorings as transactions over a Java project. */
 public final class Workspace {
 
-    private final JavaProject project;
+    private final JavaProjection project;
     private final LanguageRules rules;
     private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), this::refactoring);
     private final Repairer repairer;
@@ -45,7 +45,7 @@ public final class Workspace {
     /** The sources as they are on disk (as loaded, or as last saved). */
     private Map<String, String> saved;
 
-    private Workspace(JavaProject project) {
+    private Workspace(JavaProjection project) {
         this.project = project;
         this.rules = project.rules();
         this.repairer = new Repairer(rules, List.of(knowledge));
@@ -81,7 +81,7 @@ public final class Workspace {
     }
 
     public static Workspace of(Map<String, String> sources) {
-        return new Workspace(JavaProject.of(sources));
+        return new Workspace(JavaProjection.of(sources));
     }
 
     public String source(String path) {

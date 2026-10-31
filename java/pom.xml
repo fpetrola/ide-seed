@@ -28,5 +28,11 @@
             <artifactId>ide-projection-kit</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- and keeps its layers -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
