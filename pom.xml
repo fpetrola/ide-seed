@@ -7,6 +7,21 @@
     <groupId>ide</groupId>
     <artifactId>ide-seed</artifactId>
     <version>0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <!-- One module per product (see ARCHITECTURE.md): a product compiles only against the products it declares and
+         the ones below them. acceptance is not a product: it is where the products meet. -->
+    <modules>
+        <module>core</module>
+        <module>program</module>
+        <module>projection</module>
+        <module>java</module>
+        <module>engine</module>
+        <module>refactoring</module>
+        <module>knowledge</module>
+        <module>session</module>
+        <module>acceptance</module>
+    </modules>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
@@ -15,22 +30,67 @@
         <excludedGroups>probe</excludedGroups>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-program</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-projection</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-java</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-refactoring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-knowledge</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-session</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.javaparser</groupId>
+                <artifactId>javaparser-symbol-solver-core</artifactId>
+                <version>3.26.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>1.3.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- every product is tested alone with JUnit and AssertJ -->
     <dependencies>
-        <dependency>
-            <groupId>com.github.javaparser</groupId>
-            <artifactId>javaparser-symbol-solver-core</artifactId>
-            <version>3.26.2</version>
-        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>5.11.3</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.tngtech.archunit</groupId>
-            <artifactId>archunit-junit5</artifactId>
-            <version>1.3.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -42,15 +102,19 @@
     </dependencies>
 
     <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.2</version>
-                <configuration>
-                    <excludedGroups>${excludedGroups}</excludedGroups>
-                </configuration>
-            </plugin>
-        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.2</version>
+                    <configuration>
+                        <excludedGroups>${excludedGroups}</excludedGroups>
+                        <!-- mvn test -Dtest=X from the root runs X in the module that has it -->
+                        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
 </project>

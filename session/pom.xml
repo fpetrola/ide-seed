@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>ide</groupId>
+        <artifactId>ide-seed</artifactId>
+        <version>0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ide-session</artifactId>
+    <description>The workspace: assembles every product; transactions, undo, log, navigation, completion, capabilities.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-refactoring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-knowledge</artifactId>
+        </dependency>
+        <!-- the Java driver needs JavaParser to run; nothing above the driver may compile against it -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-symbol-solver-core</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+</project>
