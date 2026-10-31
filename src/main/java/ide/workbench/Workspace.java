@@ -20,6 +20,7 @@ import ide.refactor.EncapsulateField;
 import ide.refactor.ExtractSuperclass;
 import ide.refactor.GenerateGetter;
 import ide.refactor.GenerateSetter;
+import ide.refactor.MoveType;
 import ide.refactor.PullUp;
 import ide.refactor.Refactoring;
 import ide.refactor.Rename;
@@ -39,7 +40,7 @@ public final class Workspace {
     private final Repairer repairer = new Repairer(rules, List.of(new OpenVisibility(), new PullUpDependency()));
     private final List<QuickFix> quickFixes = List.of(new ImportFix());
     private final Map<String, Refactoring> refactorings = Stream.of(new Rename(), new RenameMethodFamily(), PullUp.field(), PullUp.method(), new ExtractSuperclass(),
-                    new GenerateGetter(), new GenerateSetter(), new EncapsulateField())
+                    new GenerateGetter(), new GenerateSetter(), new EncapsulateField(), new MoveType())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
 
     private Workspace(JavaProject project) {
@@ -52,6 +53,10 @@ public final class Workspace {
 
     public String source(String path) {
         return project.source(path);
+    }
+
+    public java.util.Set<String> files() {
+        return project.files();
     }
 
     /** Runs a refactoring naively in a transaction, then verifies and repairs; rolls back if violations remain. */

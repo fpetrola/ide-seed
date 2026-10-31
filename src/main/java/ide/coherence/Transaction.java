@@ -106,7 +106,12 @@ public final class Transaction implements Program {
 
     @Override
     public void set(ElementId element, String attribute, String value) {
+        var oldSuperclass = attribute.equals("superclass")
+                ? program.graph().find(String.valueOf(program.graph().element(element).attribute("superclass"))) : null;
         program.set(element, attribute, value);
+        if (oldSuperclass != null && oldSuperclass.isPresent()) { // an intended rebinding of the extends clause
+            program.graph().find(value).ifPresent(to -> baseline = baseline.retargeted(element, oldSuperclass.get().id(), to.id()));
+        }
         log("' set " + name(element) + " " + attribute + " = " + value);
     }
 

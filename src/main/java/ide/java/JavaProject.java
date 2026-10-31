@@ -18,6 +18,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
@@ -81,6 +82,10 @@ public final class JavaProject implements Program {
 
     public String source(String path) {
         return LexicalPreservingPrinter.print(units.get(path));
+    }
+
+    public java.util.Set<String> files() {
+        return java.util.Set.copyOf(units.keySet());
     }
 
     public Snapshot snapshot() {
@@ -201,6 +206,10 @@ public final class JavaProject implements Program {
         var g = graph();
         var element = g.element(member);
         var target = g.element(newParent);
+        if (target.kind() == Kind.PACKAGE) {
+            moveType(element, target);
+            return;
+        }
         var anchor = before == null ? null : g.element(before);
         var node = declaration(element);
         var text = LexicalPreservingPrinter.print(node).strip();
@@ -210,6 +219,58 @@ public final class JavaProject implements Program {
         else insertBefore(declaration(anchor), text);
         var signature = element.qualified().substring(element.qualified().indexOf('#'));
         transfer(element.qualified(), target.qualified() + signature);
+    }
+
+    /**
+     * Moves a top-level type to another package: new file and package line; imports for what it used from its old
+     * package; in other units the import is rewritten, added (old package users) or dropped (new package users).
+     */
+    private void moveType(Element type, Element pkg) {
+        var oldPackage = packageOf(type.qualified());
+        var newQualified = pkg.qualified() + "." + type.name();
+        var oldPath = type.attribute("file");
+        if (oldPath == null) throw new IllegalArgumentException("only top-level types move to packages: " + type);
+        var newPath = pkg.qualified().replace('.', '/') + "/" + type.name() + ".java";
+        if (units.containsKey(newPath)) throw new IllegalArgumentException("already exists: " + newPath);
+
+        var needed = new java.util.TreeSet<String>();
+        for (var use : units.get(oldPath).findAll(ClassOrInterfaceType.class)) {
+            var resolved = resolveType(use);
+            if (resolved != null && use.getScope().isEmpty() && packageOf(resolved).equals(oldPackage)
+                    && !resolved.equals(type.qualified()) && !resolved.startsWith(type.qualified() + ".")) {
+                needed.add(resolved);
+            }
+        }
+        var edits = new LinkedHashMap<String, String>();
+        for (var entry : units.entrySet()) {
+            var path = entry.getKey();
+            var cu = entry.getValue();
+            if (path.equals(oldPath)) continue;
+            var unitPackage = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
+            var imported = cu.getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic()
+                    && i.getNameAsString().equals(type.qualified())).findFirst();
+            var uses = cu.findAll(ClassOrInterfaceType.class).stream().anyMatch(t -> type.qualified().equals(resolveType(t)));
+            var code = source(path);
+            if (imported.isPresent() && unitPackage.equals(pkg.qualified())) edits.put(path, Imports.remove(code, cu, imported.get()));
+            else if (imported.isPresent()) edits.put(path, Imports.replace(code, imported.get(), newQualified));
+            else if (uses && unitPackage.equals(oldPackage)) edits.put(path, Imports.add(code, cu, newQualified));
+        }
+
+        var code = source(oldPath);
+        for (var qualified : needed) code = Imports.add(code, parse(code), qualified);
+        var packageLine = parse(code).getPackageDeclaration().orElseThrow();
+        code = Text.replace(code, packageLine, "package " + pkg.qualified() + ";");
+
+        units.remove(oldPath);
+        units.put(newPath, parse(code));
+        edits.forEach((path, edited) -> units.put(path, parse(edited)));
+        invalidate();
+        transfer(type.qualified(), newQualified);
+    }
+
+    private static String packageOf(String qualifiedType) {
+        var dot = qualifiedType.lastIndexOf('.');
+        return dot < 0 ? "" : qualifiedType.substring(0, dot);
     }
 
     /** Renames a field or method together with every use that resolves to it, keeping its identity. */
@@ -260,19 +321,11 @@ public final class JavaProject implements Program {
         changed();
     }
 
-    /** Adds an import to the unit of a top-level type: after the last import, or after the package line. */
+    /** Adds an import to the unit of a top-level type. */
     private void addImport(ElementId id, String qualified) {
         var cu = typeDeclaration(graph().element(id).qualified()).findCompilationUnit().orElseThrow();
         var path = pathOf(cu);
-        var code = source(path);
-        if (cu.getImports().isNonEmpty()) {
-            var offset = lineStart(code, cu.getImports().getLast().orElseThrow().getEnd().orElseThrow().line + 1);
-            load(path, code.substring(0, offset) + "import " + qualified + ";\n" + code.substring(offset));
-        } else {
-            var line = cu.getPackageDeclaration().map(p -> p.getEnd().orElseThrow().line).orElse(0);
-            var offset = lineStart(code, line + 1);
-            load(path, code.substring(0, offset) + "\nimport " + qualified + ";\n" + code.substring(offset));
-        }
+        load(path, Imports.add(source(path), cu, qualified));
     }
 
     private void setType(ElementId id, String type) {
@@ -393,9 +446,14 @@ public final class JavaProject implements Program {
             var uses = new ArrayList<Node>();
             uses.addAll(fieldUses(cu));
             uses.addAll(cu.findAll(MethodCallExpr.class));
+            uses.addAll(cu.findAll(ClassOrInterfaceType.class));
             uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
             for (var use : uses) {
-                var target = use instanceof MethodCallExpr call ? resolveMethod(call) : resolveField((Expression) use);
+                var target = switch (use) {
+                    case MethodCallExpr call -> resolveMethod(call);
+                    case ClassOrInterfaceType type -> resolveType(type);
+                    default -> resolveField((Expression) use);
+                };
                 addReference(references, nodes, use, target);
             }
         }
@@ -416,8 +474,18 @@ public final class JavaProject implements Program {
         references.add(new Reference(id, site, ids.get(target), ((NodeWithSimpleName<?>) use).getNameAsString(), modeOf(use)));
     }
 
+    /** Qualified name of the type a type use resolves to, or null. */
+    private static String resolveType(ClassOrInterfaceType type) {
+        try {
+            return type.resolve().asReferenceType().getQualifiedName();
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
     private static String modeOf(Node use) {
         if (use instanceof MethodCallExpr) return "call";
+        if (use instanceof ClassOrInterfaceType) return "type";
         var parent = use.getParentNode().orElseThrow();
         if (parent instanceof AssignExpr assign && assign.getTarget() == use) {
             return assign.getOperator() == AssignExpr.Operator.ASSIGN ? "write" : "update";
@@ -524,6 +592,7 @@ public final class JavaProject implements Program {
             return ((MethodDeclaration) declaration(graph().element(element.parent())))
                     .getParameterByName(element.name()).orElseThrow();
         }
+        if (element.kind() == Kind.CLASS || element.kind() == Kind.INTERFACE) return typeDeclaration(element.qualified());
         var type = typeDeclaration(graph().element(element.parent()).qualified());
         return switch (element.kind()) {
             case FIELD -> type.getFieldByName(element.name()).orElseThrow();
@@ -546,7 +615,7 @@ public final class JavaProject implements Program {
     private void insertMember(ClassOrInterfaceDeclaration type, String memberText) {
         var path = pathOf(type.findCompilationUnit().orElseThrow());
         var code = source(path);
-        var offset = lineStart(code, type.getEnd().orElseThrow().line);
+        var offset = Text.lineStart(code, type.getEnd().orElseThrow().line);
         var indent = " ".repeat(4);
         load(path, code.substring(0, offset) + "\n" + indent + memberText + "\n" + code.substring(offset));
     }
@@ -555,7 +624,7 @@ public final class JavaProject implements Program {
     private void insertBefore(Node anchor, String memberText) {
         var path = pathOf(anchor.findCompilationUnit().orElseThrow());
         var code = source(path);
-        var offset = lineStart(code, anchor.getBegin().orElseThrow().line);
+        var offset = Text.lineStart(code, anchor.getBegin().orElseThrow().line);
         var indent = " ".repeat(4);
         load(path, code.substring(0, offset) + indent + memberText + "\n\n" + code.substring(offset));
     }
@@ -563,11 +632,7 @@ public final class JavaProject implements Program {
     /** Replaces the text of a node, then re-parses its unit. */
     private void replaceText(Node node, String text) {
         var path = pathOf(node.findCompilationUnit().orElseThrow());
-        var code = source(path);
-        var range = node.getRange().orElseThrow();
-        var start = lineStart(code, range.begin.line) + range.begin.column - 1;
-        var end = lineStart(code, range.end.line) + range.end.column;
-        load(path, code.substring(0, start) + text + code.substring(end));
+        load(path, Text.replace(source(path), node, text));
     }
 
     private void load(String path, String code) {
@@ -602,9 +667,4 @@ public final class JavaProject implements Program {
                 .map(Map.Entry::getKey).findFirst().orElseThrow();
     }
 
-    private static int lineStart(String code, int line) {
-        var offset = 0;
-        for (var i = 1; i < line; i++) offset = code.indexOf('\n', offset) + 1;
-        return offset;
-    }
 }
