@@ -1,9 +1,14 @@
 package ide.graph;
 
+import java.util.List;
+
 /** A program that can be changed only through primitives; every change is visible in the next {@link #graph()}. */
 public interface Program {
 
     ProgramGraph graph();
+
+    /** Current compiler errors. */
+    List<Diagnostic> diagnostics();
 
     /** Captures the whole program state (text and identity). */
     Object checkpoint();

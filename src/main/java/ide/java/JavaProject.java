@@ -27,6 +27,7 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import ide.graph.Diagnostic;
 import ide.graph.Element;
 import ide.graph.ElementId;
 import ide.graph.Kind;
@@ -63,6 +64,7 @@ public final class JavaProject implements Program {
     private int nextId;
     private ProgramGraph graph;
     private Map<String, Node> referenceNodes = Map.of();
+    private List<Diagnostic> diagnostics;
 
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
@@ -101,6 +103,16 @@ public final class JavaProject implements Program {
     @Override
     public void rollback(Object checkpoint) {
         restore((Snapshot) checkpoint);
+    }
+
+    @Override
+    public List<Diagnostic> diagnostics() {
+        if (diagnostics == null) {
+            var sources = new LinkedHashMap<String, String>();
+            units.keySet().forEach(path -> sources.put(path, source(path)));
+            diagnostics = JavacCheck.errors(sources);
+        }
+        return diagnostics;
     }
 
     @Override
@@ -207,9 +219,25 @@ public final class JavaProject implements Program {
             case "superclass" -> setSuperclass(id, value);
             case "type" -> setType(id, value);
             case "body" -> setBody(id, value);
+            case "import" -> addImport(id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
         changed();
+    }
+
+    /** Adds an import to the unit of a top-level type: after the last import, or after the package line. */
+    private void addImport(ElementId id, String qualified) {
+        var cu = typeDeclaration(graph().element(id).qualified()).findCompilationUnit().orElseThrow();
+        var path = pathOf(cu);
+        var code = source(path);
+        if (cu.getImports().isNonEmpty()) {
+            var offset = lineStart(code, cu.getImports().getLast().orElseThrow().getEnd().orElseThrow().line + 1);
+            load(path, code.substring(0, offset) + "import " + qualified + ";\n" + code.substring(offset));
+        } else {
+            var line = cu.getPackageDeclaration().map(p -> p.getEnd().orElseThrow().line).orElse(0);
+            var offset = lineStart(code, line + 1);
+            load(path, code.substring(0, offset) + "\nimport " + qualified + ";\n" + code.substring(offset));
+        }
     }
 
     private void setType(ElementId id, String type) {
@@ -302,8 +330,10 @@ public final class JavaProject implements Program {
                 var parent = type.findAncestor(ClassOrInterfaceDeclaration.class)
                         .map(t -> idOf(t.getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(pkg);
                 var typeId = idOf(typeName, Kind.CLASS);
+                var typeAttributes = new HashMap<>(typeAttributes(type));
+                if (type.isTopLevelType()) typeAttributes.put("file", pathOf(cu));
                 elements.add(new Element(typeId, type.isInterface() ? Kind.INTERFACE : Kind.CLASS,
-                        type.getNameAsString(), parent, typeName, typeAttributes(type)));
+                        type.getNameAsString(), parent, typeName, Map.copyOf(typeAttributes)));
                 for (var field : type.getFields()) {
                     for (var variable : field.getVariables()) {
                         var address = typeName + "#" + variable.getNameAsString();
@@ -529,6 +559,7 @@ public final class JavaProject implements Program {
         JavaParserFacade.clearInstances(); // resolution caches point into replaced ASTs
         graph = null;
         referenceNodes = Map.of();
+        diagnostics = null;
     }
 
     private String pathOf(CompilationUnit cu) {

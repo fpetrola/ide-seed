@@ -64,6 +64,11 @@ public final class Transaction implements Program {
     }
 
     @Override
+    public List<ide.graph.Diagnostic> diagnostics() {
+        return program.diagnostics();
+    }
+
+    @Override
     public Object checkpoint() {
         return program.checkpoint();
     }

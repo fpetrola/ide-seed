@@ -1,11 +1,15 @@
 package ide.workbench;
 
+import ide.coherence.ImportFix;
 import ide.coherence.OpenVisibility;
+import ide.coherence.QuickFix;
 import ide.coherence.PullUpDependency;
 import ide.coherence.Repairer;
 import ide.coherence.Result;
 import ide.coherence.Transaction;
 import ide.coherence.Violation;
+import ide.graph.Diagnostic;
+import ide.graph.LanguageRules;
 import ide.graph.PrimitiveRejected;
 import ide.graph.Program;
 import ide.java.JavaProject;
@@ -31,7 +35,9 @@ import java.util.stream.Stream;
 public final class Workspace {
 
     private final JavaProject project;
-    private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility(), new PullUpDependency()));
+    private final LanguageRules rules = new JavaRules();
+    private final Repairer repairer = new Repairer(rules, List.of(new OpenVisibility(), new PullUpDependency()));
+    private final List<QuickFix> quickFixes = List.of(new ImportFix());
     private final Map<String, Refactoring> refactorings = Stream.of(new Rename(), new RenameMethodFamily(), PullUp.field(), PullUp.method(), new ExtractSuperclass(),
                     new GenerateGetter(), new GenerateSetter(), new EncapsulateField())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
@@ -73,6 +79,39 @@ public final class Workspace {
             return tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
         }
         return tx.commit(repairer);
+    }
+
+    public List<Diagnostic> diagnostics() {
+        return project.diagnostics();
+    }
+
+    /** Titles of the fixes offered for the diagnostics on a line. */
+    public List<String> fixes(String path, int line) {
+        return diagnosticsAt(path, line).stream()
+                .flatMap(d -> quickFixes.stream().flatMap(f -> f.titles(d, project, rules).stream()))
+                .distinct().toList();
+    }
+
+    /** Applies a fix as a transaction that must make its diagnostic disappear. */
+    public Result fix(String path, int line, String title) {
+        for (var diagnostic : diagnosticsAt(path, line)) {
+            for (var quickFix : quickFixes) {
+                if (!quickFix.titles(diagnostic, project, rules).contains(title)) continue;
+                var tx = new Transaction(project);
+                tx.enter("fix " + title);
+                quickFix.apply(title, diagnostic, tx);
+                tx.exit();
+                if (project.diagnostics().contains(diagnostic)) {
+                    return tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic));
+                }
+                return tx.commit(repairer);
+            }
+        }
+        throw new IllegalArgumentException("no fix '" + title + "' at " + path + ":" + line);
+    }
+
+    private List<Diagnostic> diagnosticsAt(String path, int line) {
+        return project.diagnostics().stream().filter(d -> d.path().equals(path) && d.line() == line).toList();
     }
 
     private Refactoring refactoring(String id) {

@@ -112,6 +112,15 @@ public final class ProgramGraph {
         return family;
     }
 
+    /** Top-level types declared in the source file {@code path}. */
+    public List<Element> typesIn(String path) {
+        return elements.values().stream().filter(e -> path.equals(e.attribute("file"))).toList();
+    }
+
+    public List<Element> types() {
+        return elements.values().stream().filter(e -> e.kind() == Kind.CLASS || e.kind() == Kind.INTERFACE).toList();
+    }
+
     public List<Element> methods() {
         return elements.values().stream().filter(e -> e.kind() == Kind.METHOD).toList();
     }
