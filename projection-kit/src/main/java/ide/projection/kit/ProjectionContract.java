@@ -13,6 +13,7 @@ import ide.projection.Projection;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -75,6 +76,8 @@ public abstract class ProjectionContract {
                 new Scenario("retarget a call", p -> new Primitive.Retarget(reference(p, "a.B#n()", "a.A#m(int)"), id(p, "a.A#k(int)"))),
                 new Scenario("delete an unused method", p -> new Primitive.Delete(id(p, "a.A#k(int)"))),
                 new Scenario("create a method", p -> new Primitive.Create(Kind.METHOD, id(p, "a.B"), "fresh")),
+                new Scenario("add a parameter", p -> new Primitive.Create(Kind.PARAM, id(p, "a.A#m(int)"), "q",
+                        Map.of(Fact.TYPE, "long"), "0")),
                 new Scenario("inline a call", p -> new Primitive.Inline(reference(p, "a.B#n()", "a.A#m(int)"))),
                 new Scenario("extract a statement", p -> new Primitive.Extract(id(p, "a.A#total()"), fragmentOfTotalCallingM(), "add")),
                 new Scenario("rename a type", p -> new Primitive.Rename(id(p, "a.A"), "Base")),
@@ -157,6 +160,23 @@ public abstract class ProjectionContract {
         }
     }
 
+    /** A parameter comes with the argument its calls pass, and moves within its method. */
+    @Test
+    void aParameterComesWithTheArgumentItsCallsPassAndMovesWithinItsMethod() {
+        var projection = fixture();
+        var before = projection.program();
+        var m = id(before, "a.A#m(int)");
+
+        var q = projection.apply(new Primitive.Create(Kind.PARAM, m, "q", Map.of(Fact.TYPE, "long"), "0")).produced();
+        projection.apply(new Primitive.Move(q, m, id(before, "a.A#m(int)/p")));
+
+        var after = projection.program();
+        assertThat(after.find("a.A#m(long,int)")).map(Element::id).contains(m);
+        assertThat(after.children(m)).extracting(Element::name).containsExactly("q", "p");
+        assertThat(before.diff(after).lost()).isEmpty();
+        assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+    }
+
     /** Obligation 4: restoring a snapshot gives back the same program, ids included. */
     @Test
     void restoringASnapshotReturnsToItExactly() {
@@ -184,6 +204,7 @@ public abstract class ProjectionContract {
         assertRejected(projection, new Primitive.Rename(id(before, "a.A#k(int)"), "m"), "projection.duplicate");
         assertRejected(projection, new Primitive.Create(Kind.FIELD, id(before, "a.A"), "x"), "projection.duplicate");
         assertRejected(projection, new Primitive.Rename(id(before, "a.A"), "B"), "projection.duplicate");
+        assertRejected(projection, new Primitive.Create(Kind.PARAM, id(before, "a.A#m(int)"), "q"), "create.argument");
 
         assertThat(projection.program().elements()).containsExactlyElementsOf(before.elements());
         assertThat(projection.program().references()).containsExactlyElementsOf(before.references());

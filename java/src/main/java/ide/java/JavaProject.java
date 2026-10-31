@@ -220,7 +220,11 @@ public final class JavaProject implements Projection {
     public Change apply(Primitive primitive) {
         var before = program();
         return switch (primitive) {
-            case Primitive.Create c -> c.intent(before, create(c.kind(), c.parent(), c.name()));
+            case Primitive.Create c -> {
+                var created = create(c.kind(), c.parent(), c.name(), c.argument());
+                c.facts().forEach((fact, value) -> set(created, fact.label(), value)); // born with them
+                yield c.intent(before, created);
+            }
             case Primitive.Delete d -> {
                 delete(d.element());
                 yield d.intent(before, null);
@@ -275,7 +279,7 @@ public final class JavaProject implements Projection {
      * Creates an empty element: a top-level class in its own unit, a {@code void} method without parameters at the
      * end of a type, or an {@code Object} parameter at the end of a method.
      */
-    private ElementId create(Kind kind, ElementId parent, String name) {
+    private ElementId create(Kind kind, ElementId parent, String name, String argument) {
         if (kind == Kind.PACKAGE) { // a package exists while it is declared, even before it has files
             for (var part : name.split("\\.", -1)) requireIdentifier(part);
             if (ids.has(new Address.Package(name))) throw new PrimitiveRejected("projection.duplicate", name + " already exists");
@@ -317,12 +321,13 @@ public final class JavaProject implements Projection {
                 yield ids.of(new Address.Callable(owner.id(), name, List.of()), Kind.METHOD);
             }
             case PARAM -> {
-                // calls get a placeholder argument until the parameter's default is set
                 var calls = callsTo(owner.id());
-                var marker = new NameExpr(defaultMarker(owner.name(), name));
+                if (!calls.isEmpty() && argument == null) {
+                    throw new PrimitiveRejected("create.argument", "the calls of " + owner.qualified() + " need an argument for " + name);
+                }
                 editMethod(owner, m -> {
                     m.addParameter("Object", name);
-                    calls.forEach(call -> call.addArgument(marker.clone()));
+                    calls.forEach(call -> call.addArgument(parser.parseExpression(argument).getResult().orElseThrow()));
                 });
                 yield ids.of(new Address.Param(owner.id(), name), Kind.PARAM);
             }
@@ -352,6 +357,13 @@ public final class JavaProject implements Projection {
         var target = g.element(newParent);
         if (target.kind() == Kind.PACKAGE) {
             moveType(element, target);
+            return;
+        }
+        if (element.kind() == Kind.PARAM) {
+            if (!newParent.equals(element.parent())) {
+                throw new PrimitiveRejected("projection.unsupported", "a parameter moves within its method");
+            }
+            moveParam(element, before == null ? null : g.element(before));
             return;
         }
         var anchor = before == null ? null : g.element(before);
@@ -574,21 +586,15 @@ public final class JavaProject implements Projection {
             case "type" -> setType(id, value);
             case "body" -> setBody(id, value);
             case "import" -> addImport(id, value);
-            case "default" -> setDefault(id, value);
             case "static" -> setFlag(id, Modifier.Keyword.STATIC, Boolean.parseBoolean(value));
             case "abstract" -> setAbstract(id, Boolean.parseBoolean(value));
             case "final" -> setFlag(id, Modifier.Keyword.FINAL, Boolean.parseBoolean(value));
             case "initializer" -> ((FieldDeclaration) declaration(program().element(id))).getVariables().stream()
                     .filter(v -> v.getNameAsString().equals(program().element(id).name()))
                     .forEach(v -> v.setInitializer(parser.parseExpression(value).getResult().orElseThrow()));
-            case "order" -> setOrder(id, Integer.parseInt(value));
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
         changed();
-    }
-
-    private static String defaultMarker(String method, String param) {
-        return "__ide_default_" + method + "_" + param + "__";
     }
 
     /** Calls anywhere in the workspace that resolve to the method, from the current graph. */
@@ -601,29 +607,22 @@ public final class JavaProject implements Projection {
         return calls;
     }
 
-    /** The argument the calls pass for a parameter created in this transaction. */
-    private void setDefault(ElementId id, String value) {
-        var param = program().element(id);
-        var marker = defaultMarker(program().element(param.parent()).name(), param.name());
-        var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
-        units.forEach((path, cu) -> cu.findAll(NameExpr.class, n -> n.getNameAsString().equals(marker))
-                .forEach(n -> edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(n, value))));
-        applyEdits(edits);
-    }
-
-    /** Moves a parameter to position {@code index}, in the declaration and in every call. */
-    private void setOrder(ElementId id, int index) {
-        var param = program().element(id);
+    /** Moves a parameter just before another (or last), in the declaration and in every call. */
+    private void moveParam(Element param, Element before) {
         var method = program().element(param.parent());
         var declaration = (MethodDeclaration) declaration(method);
-        var from = declaration.getParameters().indexOf(declaration.getParameterByName(param.name()).orElseThrow());
+        var names = declaration.getParameters().stream().map(p -> p.getNameAsString()).toList();
+        var from = names.indexOf(param.name());
+        var anchor = before == null ? names.size() : names.indexOf(before.name());
+        var index = anchor > from ? anchor - 1 : anchor; // where it goes once it is out of the list
+        if (index == from) return;
         var edits = new LinkedHashMap<String, List<Map.Entry<Node, String>>>();
         reorder(edits, declaration.getParameters(), from, index);
         for (var call : callsTo(method.id())) reorder(edits, call.getArguments(), from, index);
-        var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
-        names.add(index, names.remove(from));
+        var reordered = new ArrayList<>(names);
+        reordered.add(index, reordered.remove(from));
         applyEdits(edits);
-        resign(method, names);
+        resign(method, reordered);
     }
 
     /** Deletes a top-level type nothing uses: its file goes, and so do the imports that name it. */

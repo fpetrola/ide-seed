@@ -165,7 +165,11 @@ public final class MemoryProjection implements Projection {
         var saved = snapshot();
         try {
             var change = switch (primitive) {
-                case Primitive.Create c -> c.intent(before, create(c.kind(), c.parent(), c.name()));
+                case Primitive.Create c -> {
+                    var created = create(c.kind(), c.parent(), c.name(), c.argument());
+                    c.facts().forEach((fact, value) -> set(created, fact.label(), value)); // born with them
+                    yield c.intent(before, created);
+                }
                 case Primitive.Delete d -> {
                     delete(d.element());
                     yield d.intent(before, null);
@@ -244,8 +248,11 @@ public final class MemoryProjection implements Projection {
 
     // ---- the primitives, on the graph
 
-    private ElementId create(Kind kind, ElementId parent, String name) {
+    private ElementId create(Kind kind, ElementId parent, String name, String argument) {
         requireName(name, kind == Kind.PACKAGE);
+        if (kind == Kind.PARAM && argument == null && uses.stream().anyMatch(u -> u.target().equals(parent) && u.mode() == Mode.CALL)) {
+            throw new PrimitiveRejected("create.argument", "the calls of " + render(parent) + " need an argument for " + name);
+        }
         Address address = switch (kind) {
             case PACKAGE -> new Address.Package(name);
             case CLASS, INTERFACE, ENUM -> new Address.Type(ids.render(ids.address(parent)) + "." + name);

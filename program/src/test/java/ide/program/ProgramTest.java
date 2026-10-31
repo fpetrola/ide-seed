@@ -145,6 +145,9 @@ class ProgramTest {
         assertThat(new Primitive.Create(Kind.FIELD, A, "y").intent(p, created)).isEqualTo(Change.produced(created)
                 .pin(created, Change.Aspect.PARENT, Change.Aspect.NAME));
         assertThat(new Primitive.Create(Kind.PACKAGE, null, "b").intent(p, created)).isEqualTo(Change.produced(created));
+        assertThat(new Primitive.Create(Kind.METHOD, A, "get", Map.of(Fact.VISIBILITY, "public"), null).intent(p, created).pins())
+                .containsExactly(new Change.Pin(created, Change.Aspect.PARENT), new Change.Pin(created, Change.Aspect.NAME),
+                        new Change.Pin(created, Change.Aspect.VISIBILITY));
     }
 
     @Test

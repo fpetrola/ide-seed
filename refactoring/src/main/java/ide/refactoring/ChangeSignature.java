@@ -3,16 +3,18 @@ package ide.refactoring;
 import ide.core.Param;
 import ide.program.Element;
 import ide.program.ElementId;
+import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Primitive;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The one composite written in Java, because its parameter is a list of records: {@code "b, a, scale:int=1"} keeps
  * {@code b} and {@code a} in that order, adds {@code scale} (calls pass {@code 1}) and removes the rest.
- * Only primitives underneath: create/set(type, default, order)/delete of parameters.
+ * Only primitives underneath: create (with the argument calls pass), move and delete of parameters.
  */
 public final class ChangeSignature implements Refactoring {
 
@@ -44,18 +46,22 @@ public final class ChangeSignature implements Refactoring {
             if (item.type() == null || item.defaultValue() == null) {
                 throw new IllegalArgumentException("new parameter needs name:type=default: " + item.name());
             }
-            var created = projection.apply(new Primitive.Create(Kind.PARAM, method, item.name())).produced();
-            projection.apply(new Primitive.Set(created, "type", item.type()));
-            projection.apply(new Primitive.Set(created, "default", item.defaultValue()));
+            projection.apply(new Primitive.Create(Kind.PARAM, method, item.name(), Map.of(Fact.TYPE, item.type()), item.defaultValue()));
         }
-        for (var i = 0; i < items.size(); i++) {
-            projection.apply(new Primitive.Set(param(ctx, method, items.get(i).name()).id(), "order", String.valueOf(i)));
+        for (var i = 0; i < items.size(); i++) { // each kept parameter goes before the one now at its place
+            var wanted = param(ctx, method, items.get(i).name());
+            var there = params(ctx, method).get(i);
+            if (!there.equals(wanted)) projection.apply(new Primitive.Move(wanted.id(), method, there.id()));
         }
         var kept = items.stream().map(Item::name).toList();
-        for (var param : List.copyOf(projection.program().children(method))) {
+        for (var param : params(ctx, method)) {
             if (!kept.contains(param.name())) projection.apply(new Primitive.Delete(param.id()));
         }
         return method.value();
+    }
+
+    private static List<Element> params(Ctx ctx, ElementId method) {
+        return ctx.projection().program().children(method).stream().filter(p -> p.kind() == Kind.PARAM).toList();
     }
 
     private static Element param(Ctx ctx, ElementId method, String name) {

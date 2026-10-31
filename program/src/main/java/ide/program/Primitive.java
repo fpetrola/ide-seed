@@ -15,8 +15,11 @@ public sealed interface Primitive {
      */
     default Change intent(Program before, ElementId produced) {
         return switch (this) {
-            case Create c -> c.kind() == Kind.PACKAGE ? Change.produced(produced)
-                    : Change.produced(produced).pin(produced, Change.Aspect.PARENT, Change.Aspect.NAME);
+            case Create c -> {
+                if (c.kind() == Kind.PACKAGE) yield Change.produced(produced);
+                var change = Change.produced(produced).pin(produced, Change.Aspect.PARENT, Change.Aspect.NAME);
+                yield c.facts().containsKey(Fact.VISIBILITY) ? change.pin(produced, Change.Aspect.VISIBILITY) : change;
+            }
             case Delete d -> Change.NONE.expect(new Change.UsesGone(d.element()));
             case Move m -> Change.NONE.pin(m.element(), Change.Aspect.PARENT);
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
@@ -44,15 +47,31 @@ public sealed interface Primitive {
         };
     }
 
-    /** An empty element of {@code kind} named {@code name} inside {@code parent} (null for a package). */
-    record Create(Kind kind, ElementId parent, String name) implements Primitive {
+    /**
+     * An element of {@code kind} named {@code name} inside {@code parent} (null for a package), born with
+     * {@code facts} (a type as written, a visibility...) or the language's defaults. A parameter of a method that is
+     * called needs the {@code argument} every call passes for it.
+     */
+    record Create(Kind kind, ElementId parent, String name, java.util.Map<Fact, String> facts, String argument)
+            implements Primitive {
+
+        public Create {
+            facts = java.util.Map.copyOf(facts);
+        }
+
+        public Create(Kind kind, ElementId parent, String name) {
+            this(kind, parent, name, java.util.Map.of(), null);
+        }
     }
 
     /** Deletes an element that nothing references. */
     record Delete(ElementId element) implements Primitive {
     }
 
-    /** Moves an element into {@code parent}, just before {@code before} (a child there), or at the end if null. */
+    /**
+     * Moves an element into {@code parent}, just before {@code before} (a child there), or at the end if null. A
+     * parameter moves within its method, and every call's arguments follow.
+     */
     record Move(ElementId element, ElementId parent, ElementId before) implements Primitive {
     }
 
