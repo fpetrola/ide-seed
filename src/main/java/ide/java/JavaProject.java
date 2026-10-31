@@ -3,6 +3,7 @@ package ide.java;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.AssignExpr;
@@ -61,7 +62,7 @@ import java.util.stream.Collectors;
 public final class JavaProject implements Program {
 
     /** Everything needed to roll back: source text and identity. */
-    public record Snapshot(Map<String, String> sources, Map<String, ElementId> ids, int nextId) {
+    public record Snapshot(Map<String, String> sources, Map<String, ElementId> ids, int nextId, java.util.Set<String> emptyPackages) {
     }
 
     private static final Set<Modifier.Keyword> ACCESS =
@@ -76,6 +77,7 @@ public final class JavaProject implements Program {
     private Map<String, Node> referenceNodes = Map.of();
     private List<Diagnostic> diagnostics;
     private final Map<String, String> parsedText = new HashMap<>();
+    private java.util.Set<String> emptyPackages = new java.util.TreeSet<>();
 
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
@@ -100,7 +102,7 @@ public final class JavaProject implements Program {
     public Snapshot snapshot() {
         var sources = new LinkedHashMap<String, String>();
         units.keySet().forEach(path -> sources.put(path, source(path)));
-        return new Snapshot(sources, Map.copyOf(ids), nextId);
+        return new Snapshot(sources, Map.copyOf(ids), nextId, java.util.Set.copyOf(emptyPackages));
     }
 
     public void restore(Snapshot snapshot) {
@@ -109,6 +111,7 @@ public final class JavaProject implements Program {
         snapshot.sources().forEach(this::load);
         ids = new HashMap<>(snapshot.ids());
         nextId = snapshot.nextId();
+        emptyPackages = new java.util.TreeSet<>(snapshot.emptyPackages());
         invalidate();
     }
 
@@ -198,6 +201,13 @@ public final class JavaProject implements Program {
      */
     @Override
     public ElementId create(Kind kind, ElementId parent, String name) {
+        if (kind == Kind.PACKAGE) { // a package exists while it is declared, even before it has files
+            for (var part : name.split("\\.", -1)) requireIdentifier(part);
+            if (ids.containsKey(name)) throw new PrimitiveRejected("projection.duplicate", name + " already exists");
+            emptyPackages.add(name);
+            invalidate();
+            return idOf(name, Kind.PACKAGE);
+        }
         requireIdentifier(name);
         var owner = graph().element(parent);
         return switch (kind) {
@@ -323,6 +333,9 @@ public final class JavaProject implements Program {
 
         var code = source(oldPath);
         for (var qualified : needed) code = Imports.add(code, parse(code), qualified);
+        for (var redundant = redundantImport(parse(code), pkg.qualified()); redundant != null; redundant = redundantImport(parse(code), pkg.qualified())) {
+            code = Imports.remove(code, parse(code), redundant); // the destination's types need no import there
+        }
         var packageLine = parse(code).getPackageDeclaration().orElseThrow();
         code = Text.replace(code, packageLine, "package " + pkg.qualified() + ";");
 
@@ -332,6 +345,11 @@ public final class JavaProject implements Program {
         edits.forEach((path, edited) -> units.put(path, parse(path, edited)));
         invalidate();
         transfer(type.qualified(), newQualified);
+    }
+
+    private static ImportDeclaration redundantImport(CompilationUnit cu, String pkg) {
+        return cu.getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic()
+                && packageOf(i.getNameAsString()).equals(pkg)).findFirst().orElse(null);
     }
 
     private static String packageOf(String qualifiedType) {
@@ -960,6 +978,13 @@ public final class JavaProject implements Program {
                             method.getNameAsString(), typeId, address, Map.copyOf(methodAttributes)));
                     addParams(elements, method, address, methodId);
                 }
+            }
+        }
+        for (var name : emptyPackages) {
+            if (!packages.containsKey(name)) {
+                var id = idOf(name, Kind.PACKAGE);
+                packages.put(name, id);
+                elements.add(new Element(id, Kind.PACKAGE, name, null, name, Map.of()));
             }
         }
         // references only once every element has its id: a use may point into a unit processed later

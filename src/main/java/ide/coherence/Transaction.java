@@ -138,7 +138,7 @@ public final class Transaction implements Program {
     @Override
     public ElementId create(Kind kind, ElementId parent, String name) {
         var id = program.create(kind, parent, name);
-        pin(id, "parent", "name");
+        if (kind != ide.graph.Kind.PACKAGE) pin(id, "parent", "name");
         log("' create " + kind + " " + name(id));
         return id;
     }

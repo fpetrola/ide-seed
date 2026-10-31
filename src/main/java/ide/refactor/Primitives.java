@@ -14,10 +14,11 @@ public final class Primitives {
 
     public static List<Refactoring> all() {
         return List.of(
-                primitive("create", "Creates an empty element", List.of(Param.of("kind", "choice", "CLASS", "INTERFACE", "FIELD", "METHOD", "PARAM"),
-                        Param.of("parent", "element"), Param.of("name", "text")), (ctx, args) -> {
+                primitive("create", "Creates an empty element", List.of(Param.of("kind", "choice", "PACKAGE", "CLASS", "INTERFACE", "FIELD", "METHOD", "PARAM"),
+                        Param.of("parent", "element").optional(), Param.of("name", "text")), (ctx, args) -> {
                     var graph = ctx.program().graph();
-                    return ctx.program().create(Kind.valueOf(args.text("kind")), args.element("parent", graph).id(),
+                    var parent = args.optionalElement("parent", graph);
+                    return ctx.program().create(Kind.valueOf(args.text("kind")), parent == null ? null : parent.id(),
                             args.text("name")).value();
                 }),
                 primitive("move", "Moves an element into another parent", List.of(Param.of("element", "element"),

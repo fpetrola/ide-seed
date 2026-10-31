@@ -233,3 +233,13 @@ refactoring generalize-declared-type "Declares a field or parameter with one of 
   set ${element} type ${qualified(type)}
   return ${element}
 end
+
+refactoring rename-package "Moves every type of a package to a new package"
+  param package : element(PACKAGE) "the package to rename"
+  param name : text "the new qualified name"
+  p := create PACKAGE name=${name}
+  for t in types-of(package)
+    move-type ${t} ${p}
+  end
+  return ${p}
+end
