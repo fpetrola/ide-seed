@@ -7,13 +7,11 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
+
 import ide.graph.PrimitiveRejected;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -26,18 +24,18 @@ import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
-import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+
 import ide.graph.CompletionContext;
 import ide.graph.Diagnostic;
 import ide.graph.Element;
+
+import static ide.java.Resolution.*;
 import ide.graph.ElementId;
 import ide.graph.Kind;
 import ide.graph.Program;
@@ -62,7 +60,7 @@ import java.util.stream.Collectors;
 public final class JavaProject implements Program {
 
     /** Everything needed to roll back: source text and identity. */
-    public record Snapshot(Map<String, String> sources, Map<String, ElementId> ids, int nextId, java.util.Set<String> emptyPackages) {
+    public record Snapshot(Map<String, String> sources, Identity.State identity, java.util.Set<String> emptyPackages) {
     }
 
     private static final Set<Modifier.Keyword> ACCESS =
@@ -71,8 +69,7 @@ public final class JavaProject implements Program {
     private final JavaParser parser;
     private final WorkspaceTypeSolver typeSolver;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
-    private Map<String, ElementId> ids = new HashMap<>();
-    private int nextId;
+    private final Identity ids = new Identity();
     private ProgramGraph graph;
     private Map<String, Node> referenceNodes = Map.of();
     private List<Diagnostic> diagnostics;
@@ -102,15 +99,14 @@ public final class JavaProject implements Program {
     public Snapshot snapshot() {
         var sources = new LinkedHashMap<String, String>();
         units.keySet().forEach(path -> sources.put(path, source(path)));
-        return new Snapshot(sources, Map.copyOf(ids), nextId, java.util.Set.copyOf(emptyPackages));
+        return new Snapshot(sources, ids.save(), java.util.Set.copyOf(emptyPackages));
     }
 
     public void restore(Snapshot snapshot) {
         units.clear();
         parsedText.clear();
         snapshot.sources().forEach(this::load);
-        ids = new HashMap<>(snapshot.ids());
-        nextId = snapshot.nextId();
+        ids.restore(snapshot.identity());
         emptyPackages = new java.util.TreeSet<>(snapshot.emptyPackages());
         invalidate();
     }
@@ -203,7 +199,7 @@ public final class JavaProject implements Program {
     public ElementId create(Kind kind, ElementId parent, String name) {
         if (kind == Kind.PACKAGE) { // a package exists while it is declared, even before it has files
             for (var part : name.split("\\.", -1)) requireIdentifier(part);
-            if (ids.containsKey(name)) throw new PrimitiveRejected("projection.duplicate", name + " already exists");
+            if (ids.has(name)) throw new PrimitiveRejected("projection.duplicate", name + " already exists");
             emptyPackages.add(name);
             invalidate();
             return idOf(name, Kind.PACKAGE);
@@ -275,7 +271,7 @@ public final class JavaProject implements Program {
         }
         var anchor = before == null ? null : g.element(before);
         var signature = element.qualified().substring(element.qualified().indexOf('#'));
-        if (ids.containsKey(target.qualified() + signature)) {
+        if (ids.has(target.qualified() + signature)) {
             throw new PrimitiveRejected("projection.duplicate", target.qualified() + signature + " already exists");
         }
         var node = declaration(element);
@@ -384,7 +380,7 @@ public final class JavaProject implements Program {
         var first = node.getComment().flatMap(Node::getBegin).orElse(node.getBegin().orElseThrow()).line;
         var last = node.getEnd().orElseThrow().line;
         load(path, Text.collapseBlankAt(Text.removeLines(code, first, last), first));
-        ids.remove(element.qualified());
+        ids.forget(element.qualified());
     }
 
     /** Renames a field or method together with every use that resolves to it, keeping its identity. */
@@ -407,7 +403,7 @@ public final class JavaProject implements Program {
         }
         var owner = element.qualified().substring(0, element.qualified().indexOf('#') + 1);
         var rest = element.qualified().substring(owner.length() + element.name().length());
-        if (ids.containsKey(owner + name + rest)) {
+        if (ids.has(owner + name + rest)) {
             throw new PrimitiveRejected("projection.duplicate", owner + name + rest + " already exists");
         }
         uses.forEach(use -> use.setName(name));
@@ -424,7 +420,7 @@ public final class JavaProject implements Program {
     private void renameType(Element type, String name) {
         var dot = type.qualified().lastIndexOf('.');
         var renamed = type.qualified().substring(0, dot + 1) + name;
-        if (ids.containsKey(renamed)) throw new PrimitiveRejected("projection.duplicate", renamed + " already exists");
+        if (ids.has(renamed)) throw new PrimitiveRejected("projection.duplicate", renamed + " already exists");
         var g = graph();
         var names = new ArrayList<Node>();
         var targets = new ArrayList<ElementId>(List.of(type.id()));
@@ -467,7 +463,7 @@ public final class JavaProject implements Program {
 
     /** Addresses under the renamed type whose parameter types name the type itself. */
     private void renameConstructorAddresses(String type, String oldName, String newName) {
-        for (var address : List.copyOf(ids.keySet())) {
+        for (var address : ids.addresses()) {
             if (!address.startsWith(type + "#")) continue;
             var fixed = address.replaceAll("\\b" + java.util.regex.Pattern.quote(oldName) + "\\b", newName);
             if (!fixed.equals(address)) transfer(address, fixed);
@@ -581,8 +577,8 @@ public final class JavaProject implements Program {
         parsedText.remove(path);
         edits.forEach((p, code) -> units.put(p, parse(p, code)));
         invalidate();
-        for (var address : List.copyOf(ids.keySet())) {
-            if (address.equals(type.qualified()) || address.startsWith(type.qualified() + "#")) ids.remove(address);
+        for (var address : ids.addresses()) {
+            if (address.equals(type.qualified()) || address.startsWith(type.qualified() + "#")) ids.forget(address);
         }
     }
 
@@ -614,7 +610,7 @@ public final class JavaProject implements Program {
         var names = new ArrayList<>(declaration.getParameters().stream().map(p -> p.getNameAsString()).toList());
         names.remove(index);
         applyEdits(edits);
-        ids.remove(param.qualified());
+        ids.forget(param.qualified());
         retransferMethod(method, names);
     }
 
@@ -670,7 +666,7 @@ public final class JavaProject implements Program {
 
     private void setType(ElementId id, String type) {
         var element = graph().element(id);
-        if (ids.containsKey(type) && type.contains(".")) type = importing(element, type); // a workspace type by name
+        if (ids.has(type) && type.contains(".")) type = importing(element, type); // a workspace type by name
         var parsed = parser.parseType(type).getResult().orElseThrow();
         switch (element.kind()) {
             case FIELD -> ((FieldDeclaration) declaration(element)).getVariables().forEach(v -> v.setType(parsed.clone()));
@@ -1019,7 +1015,7 @@ public final class JavaProject implements Program {
      * Its id is the site plus the ordinal of the use within the site, in source order.
      */
     private void addReference(List<Reference> references, Map<String, Node> nodes, Node use, String target) {
-        if (target == null || !ids.containsKey(target)) return;
+        if (target == null || !ids.has(target)) return;
         var site = siteOf(use);
         var ordinal = references.stream().filter(r -> r.site().equals(site)).count();
         var id = site + "@" + ordinal;
@@ -1043,44 +1039,6 @@ public final class JavaProject implements Program {
         }
     }
 
-    /** Address of the workspace constructor a {@code new} resolves to, or null. */
-    private static String resolveConstructor(ObjectCreationExpr creation) {
-        try {
-            var constructor = creation.resolve();
-            var params = new ArrayList<String>();
-            for (var i = 0; i < constructor.getNumberOfParams(); i++) params.add(simple(constructor.getParam(i).getType().describe()));
-            return constructor.declaringType().getQualifiedName() + "#new(" + String.join(",", params) + ")";
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    /** Qualified name of the type a type use resolves to, or null. */
-    private static String resolveType(ClassOrInterfaceType type) {
-        try {
-            return type.resolve().asReferenceType().getQualifiedName();
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    private static String modeOf(Node use) {
-        if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr) return "call";
-        if (use instanceof ObjectCreationExpr) return "new";
-        if (use instanceof ClassOrInterfaceType) return "type";
-        var parent = use.getParentNode().orElseThrow();
-        if (parent instanceof AssignExpr assign && assign.getTarget() == use) {
-            return assign.getOperator() == AssignExpr.Operator.ASSIGN ? "write" : "update";
-        }
-        if (parent instanceof UnaryExpr unary && (unary.getOperator().isPrefix() || unary.getOperator().isPostfix())
-                && unary.getOperator() != UnaryExpr.Operator.MINUS && unary.getOperator() != UnaryExpr.Operator.PLUS
-                && unary.getOperator() != UnaryExpr.Operator.LOGICAL_COMPLEMENT
-                && unary.getOperator() != UnaryExpr.Operator.BITWISE_COMPLEMENT) {
-            return "update";
-        }
-        return "read";
-    }
-
     /** Address of the method the call resolves to, or null if unresolvable. */
     private String resolveMethod(MethodCallExpr call) {
         var resolved = resolveMethodStrictly(call);
@@ -1100,7 +1058,7 @@ public final class JavaProject implements Program {
             for (var bound : type.asTypeParameter().getBounds()) {
                 var owner = bound.getType().asReferenceType().getQualifiedName();
                 var prefix = owner + "#" + call.getNameAsString() + "(";
-                for (var address : ids.keySet()) {
+                for (var address : ids.addresses()) {
                     if (!address.startsWith(prefix) || address.contains("/")) continue;
                     var params = address.substring(prefix.length(), address.length() - 1);
                     var arity = params.isEmpty() ? 0 : params.split(",").length;
@@ -1108,47 +1066,6 @@ public final class JavaProject implements Program {
                 }
             }
             return candidates.size() == 1 ? candidates.getFirst() : null;
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    /** Address of a method reference's method ({@code Book::code}), or null. */
-    private static String resolveMethodReference(MethodReferenceExpr reference) {
-        try {
-            var method = reference.resolve();
-            var params = new ArrayList<String>();
-            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(simple(method.getParam(i).getType().describe()));
-            return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    private static String resolveMethodStrictly(MethodCallExpr call) {
-        try {
-            var method = call.resolve();
-            var params = new ArrayList<String>();
-            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(simple(method.getParam(i).getType().describe()));
-            return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
-        } catch (RuntimeException unresolved) {
-            return null;
-        }
-    }
-
-    private static List<Expression> fieldUses(CompilationUnit cu) {
-        var uses = new ArrayList<Expression>();
-        uses.addAll(cu.findAll(NameExpr.class));
-        uses.addAll(cu.findAll(FieldAccessExpr.class));
-        return uses;
-    }
-
-    /** Address of the field the expression resolves to, or null if it is not a (resolvable) field use. */
-    private static String resolveField(Expression expr) {
-        try {
-            ResolvedValueDeclaration decl = expr.isNameExpr() ? expr.asNameExpr().resolve() : expr.asFieldAccessExpr().resolve();
-            if (!decl.isField()) return null;
-            return ((ResolvedFieldDeclaration) decl).declaringType().getQualifiedName() + "#" + decl.getName();
         } catch (RuntimeException unresolved) {
             return null;
         }
@@ -1167,30 +1084,6 @@ public final class JavaProject implements Program {
         return field.map(v -> ids.get(typeName + "#" + v.getNameAsString())).orElseGet(() -> ids.get(typeName));
     }
 
-    /**
-     * {@code a.B#m(int,String)}: parameter types resolved (so declarations and calls agree) and written with simple
-     * names (so moving a type does not change the address of the methods that take it).
-     */
-    private static String methodAddress(String typeName, CallableDeclaration<?> method) {
-        var name = method instanceof ConstructorDeclaration ? "new" : method.getNameAsString();
-        return typeName + "#" + name + method.getParameters().stream()
-                .map(p -> simple(describe(p.getType()))).collect(Collectors.joining(",", "(", ")"));
-    }
-
-    private static final java.util.regex.Pattern PACKAGE_PREFIX = java.util.regex.Pattern.compile("\\b(?:[a-z_$][\\w$]*\\.)+");
-
-    private static String simple(String described) {
-        return PACKAGE_PREFIX.matcher(described).replaceAll("").replace(" ", "");
-    }
-
-    private static String describe(Type type) {
-        try {
-            return type.resolve().describe();
-        } catch (RuntimeException unresolved) {
-            return type.asString();
-        }
-    }
-
     private void addParams(List<Element> elements, CallableDeclaration<?> callable, String address, ElementId owner) {
         for (var param : callable.getParameters()) {
             var paramAddress = address + "/" + param.getNameAsString();
@@ -1202,67 +1095,14 @@ public final class JavaProject implements Program {
         }
     }
 
-    /** The qualified name of the type a declaration names, when it is a plain class or interface type. */
-    private static Optional<String> declared(Type type) {
-        return type instanceof ClassOrInterfaceType named ? Optional.ofNullable(resolveType(named)) : Optional.empty();
-    }
-
-    /** Classes, interfaces and enums of a unit, outermost first. */
-    private static List<TypeDeclaration<?>> types(CompilationUnit cu) {
-        var types = new ArrayList<TypeDeclaration<?>>();
-        cu.findAll(TypeDeclaration.class).forEach(t -> {
-            if (t instanceof ClassOrInterfaceDeclaration || t instanceof EnumDeclaration) types.add(t);
-        });
-        return types;
-    }
-
-    private static Kind kindOf(TypeDeclaration<?> type) {
-        if (type instanceof EnumDeclaration) return Kind.ENUM;
-        return ((ClassOrInterfaceDeclaration) type).isInterface() ? Kind.INTERFACE : Kind.CLASS;
-    }
-
-    /** visibility; superclass (classes); implements: interfaces implemented, or extended by an interface. */
-    private static Map<String, String> typeAttributes(TypeDeclaration<?> type) {
-        var attributes = new HashMap<>(attributes(type));
-        NodeList<ClassOrInterfaceType> interfaces = new NodeList<>();
-        if (type instanceof ClassOrInterfaceDeclaration c && c.isInterface()) {
-            interfaces = c.getExtendedTypes();
-        } else if (type instanceof ClassOrInterfaceDeclaration c) {
-            if (c.getExtendedTypes().isNonEmpty()) {
-                var superclass = resolveType(c.getExtendedTypes(0));
-                if (superclass != null) attributes.put("superclass", superclass);
-            }
-            interfaces = c.getImplementedTypes();
-        } else if (type instanceof EnumDeclaration e) {
-            interfaces = e.getImplementedTypes();
-        }
-        attributes.put("implements", interfaces.stream().map(JavaProject::resolveType)
-                .filter(java.util.Objects::nonNull).collect(Collectors.joining(",")));
-        return Map.copyOf(attributes);
-    }
-
-    private static Map<String, String> attributes(NodeWithModifiers<?> node) {
-        var visibility = node.getAccessSpecifier().asString();
-        return Map.of("visibility", visibility.isEmpty() ? "package" : visibility,
-                "static", String.valueOf(node.hasModifier(Modifier.Keyword.STATIC)));
-    }
-
     // ---- identity
 
     private ElementId idOf(String address, Kind kind) {
-        return ids.computeIfAbsent(address, a -> new ElementId(kind.prefix() + ":" + nextId++));
+        return ids.of(address, kind);
     }
 
-    /** Moves the identity at {@code oldAddress}, and that of everything addressed under it, to {@code newAddress}. */
     private void transfer(String oldAddress, String newAddress) {
-        if (oldAddress.equals(newAddress)) return;
-        for (var address : List.copyOf(ids.keySet())) {
-            if (address.equals(oldAddress)) {
-                ids.put(newAddress, ids.remove(address));
-            } else if (address.startsWith(oldAddress) && "#/.".indexOf(address.charAt(oldAddress.length())) >= 0) {
-                ids.put(newAddress + address.substring(oldAddress.length()), ids.remove(address));
-            }
-        }
+        ids.transfer(oldAddress, newAddress);
     }
 
     // ---- AST lookup and text edits
