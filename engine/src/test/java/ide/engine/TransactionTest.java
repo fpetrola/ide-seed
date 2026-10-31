@@ -1,0 +1,148 @@
+package ide.engine;
+
+import ide.program.Change;
+import ide.program.Fact;
+import ide.program.Mode;
+import ide.program.Primitive;
+import ide.program.Program;
+import ide.program.Reference;
+import ide.projection.CompletionContext;
+import ide.projection.Diagnostic;
+import ide.projection.LanguageRules;
+import ide.projection.Projection;
+import ide.projection.kit.MemoryProjection;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Optional;
+
+import static ide.engine.Programs.RULES;
+import static ide.engine.Programs.id;
+import static ide.engine.Programs.reference;
+import static ide.engine.Programs.remedy;
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** A transaction knows only what each change declares: it expects that, reports anything else, keeps the pins. */
+class TransactionTest {
+
+    /** package a: class A; class B extends A { private int x; int y; int n() reads x } */
+    private static MemoryProjection program() {
+        return MemoryProjection.builder().rules(RULES)
+                .type("a.A")
+                .type("a.B").extend("a.B", "a.A")
+                .field("a.B", "x", "int").fact("a.B#x", Fact.VISIBILITY, "private")
+                .field("a.B", "y", "int")
+                .method("a.B", "n", "int").use("a.B#n()", "a.B#x", Mode.READ)
+                .build();
+    }
+
+    @Test
+    void whatAChangeDeclaresIsExpectedNotReported() {
+        var projection = program();
+        var p = projection.program();
+        var tx = new Transaction(projection);
+
+        tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
+        var result = tx.commit(new Repairer(RULES, List.of()));
+
+        assertThat(result.applied()).isTrue();
+        assertThat(result.steps()).singleElement().asString().startsWith("' retarget ").endsWith(" x -> a.B#y");
+        assertThat(projection.program().referencesFrom(id(p, "a.B#n()"))).extracting(Reference::target)
+                .containsExactly(id(p, "a.B#y"));
+    }
+
+    @Test
+    void whatAChangeDoesNotDeclareIsReportedAndTheStartRestored() {
+        var projection = program();
+        var p = projection.program();
+        var tx = new Transaction(silent(projection));
+
+        tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
+        var result = tx.commit(new Repairer(RULES, List.of()));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.unresolved");
+        assertThat(projection.program().referencesFrom(id(p, "a.B#n()"))).extracting(Reference::target)
+                .containsExactly(id(p, "a.B#x"));
+    }
+
+    @Test
+    void aRepairMayNotUndoWhatTheChangePinned() {
+        var projection = program();
+        var p = projection.program();
+        var x = id(p, "a.B#x");
+        var tx = new Transaction(projection);
+
+        tx.apply(new Primitive.Move(x, id(p, "a.A"), null)); // B#n() now reads a private field of A
+        var moveBack = remedy("move back", violation -> new Primitive.Move(violation.target(), id(p, "a.B"), null));
+        var result = tx.commit(new Repairer(RULES, List.of(moveBack, Programs.open())));
+
+        assertThat(result.applied()).isTrue();
+        assertThat(result.repairs()).containsExactly("open a.A#x");
+        assertThat(result.search()).contains("  X move back a.A#x: would undo what the refactoring did");
+        assertThat(projection.program().element(x).parent()).isEqualTo(id(p, "a.A"));
+    }
+
+    @Test
+    void backReturnsToAMarkAndAbortToTheStart() {
+        var projection = program();
+        var start = projection.program();
+        var tx = new Transaction(projection);
+
+        tx.apply(new Primitive.Rename(id(start, "a.B#y"), "z"));
+        var mark = tx.mark();
+        var afterRename = projection.program();
+        tx.apply(new Primitive.Create(ide.program.Kind.FIELD, id(start, "a.A"), "w"));
+        tx.back(mark);
+        assertThat(projection.program().outline()).isEqualTo(afterRename.outline());
+
+        tx.abort(null);
+        assertThat(projection.program().elements()).containsExactlyElementsOf(start.elements());
+    }
+
+    /** A driver that applies primitives but declares nothing about them. */
+    private static Projection silent(Projection projection) {
+        return new Projection() {
+            @Override
+            public Program program() {
+                return projection.program();
+            }
+
+            @Override
+            public Change apply(Primitive primitive) {
+                projection.apply(primitive);
+                return Change.NONE;
+            }
+
+            @Override
+            public void edit(String path, String text) {
+                projection.edit(path, text);
+            }
+
+            @Override
+            public Snapshot snapshot() {
+                return projection.snapshot();
+            }
+
+            @Override
+            public void restore(Snapshot snapshot) {
+                projection.restore(snapshot);
+            }
+
+            @Override
+            public LanguageRules rules() {
+                return projection.rules();
+            }
+
+            @Override
+            public List<Diagnostic> diagnostics() {
+                return projection.diagnostics();
+            }
+
+            @Override
+            public Optional<CompletionContext> completionContext(String path, String text, int offset) {
+                return Optional.empty();
+            }
+        };
+    }
+}
