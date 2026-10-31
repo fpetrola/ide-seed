@@ -39,23 +39,27 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The AST is never edited. Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
-- `engine` (projection) — Transaction (intercepts `apply`, folds each declared Change into the baseline, pins;
-  `attempt` undoes what is refused or does not verify; a point restores the baseline and pins too),
+- `engine` (projection) — Transaction (born with its Repairer; intercepts `apply`, folds each declared Change into
+  the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins
+  too; `commit()` verifies and repairs),
   Verifier (a list of Views compared through a Comparison: BindingView, AccessView, DispatchView, and CompilerView,
   costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
   only place that writes sigils), Result, Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
 - `refactoring` (projection, engine) — Refactoring (`apply(Run, Args)` answers an ElementId), Library, Run (one
-  kind, two places: `Run.in(tx, repairer, library)` inside a transaction; `Run.on(projection, library)` with no
+  kind, two places: `Run.in(tx, library)` inside a transaction; `Run.on(projection, library)` with no
   engine, which is how scripts are tested), Args (the one place an id-or-address is resolved), Value (Elem, Ref,
   Text, Bool, Items), Primitives (read off the Primitive records: nothing registered by hand), ChangeSignature (the
   only Java composite); the `.ref` language in `ide.refactoring.script`; the catalog
   `refactoring/src/main/resources/ide/refactoring/standard.ref`.
 - `knowledge` (engine, refactoring) — goals/effects planner over
-  `knowledge/src/main/resources/ide/knowledge/knowledge.ref`; effects run on the real Run, straight on the
-  projection; no remedy or quick fix is written in Java.
-- `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — `Workspace` over a
-  `JavaProjection`: transactions,
-  library, undo, log, fixes, completion, navigation, capabilities.
+  `knowledge/src/main/resources/ide/knowledge/knowledge.ref` (`Knowledge.standard(library)`); it searches a
+  violation or a diagnostic with the facts each gives; effects run on the real Run, straight on the projection; no
+  remedy or quick fix is written in Java.
+- `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — parts over a `JavaProjection`:
+  Session (each operation a transaction; undo, event log, saving; a fix must make its diagnostic disappear), Fixes
+  (the quick fixes of a line; a Fix is a diagnostic and its plan), Navigation and Completion (no language: tested
+  over MemoryProjection), Capabilities (each refactoring and operation with its schema). `Workspace` builds the
+  parts and only delegates.
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,
   completion over Java text), the samples in `acceptance/src/test/resources/samples` (case tables in
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.

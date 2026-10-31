@@ -40,14 +40,15 @@ refactorings y el conocimiento no pueden probarse solos, y la regla de autonomí
 La prueba de vocabulario, en el código que une todo:
 
 ```java
-var tx = new Transaction(projection);                    // engine
-Run.in(tx, repairer, library).call(refactoring, args);   // refactoring
-var result = tx.commit(repairer);                        // engine
-session.record(result);                                  // session
+var tx = new Transaction(project, repairer);    // engine
+Run.in(tx, library).call(refactoring, args);    // refactoring
+var result = tx.commit();                       // engine
+return record(tx, event, result);               // session: undo y log
 ```
 
-Si para escribir eso hace falta más, a algún producto le falta un concepto. Hoy hace falta algo de más: el
-reparador entra dos veces, porque la transacción no sabe cómo se la juzga (decisión 17, propuesta).
+Si para escribir eso hace falta más, a algún producto le falta un concepto. Es `Session.invoke` tal cual. Hasta la
+fase 6 hacía falta algo de más: el reparador entraba dos veces, porque la transacción no sabía cómo se la juzga
+(decisión 17).
 
 ## 3. Principios
 
@@ -119,8 +120,8 @@ Cómo se hace cumplir:
   `knowledge` implementa remedios". Son las dos reglas que Maven no puede expresar, y viven en `acceptance`.
 - `acceptance` no es un producto: es donde los productos se encuentran.
 - `projection-kit` es lo que bajaría quien escribe un driver: `java` lo declara para correr el contrato en sus
-  tests; `engine`, `refactoring` y `knowledge` lo declaran para probarse sobre la proyección en memoria. Siempre solo
-  para tests.
+  tests; `engine`, `refactoring`, `knowledge` y `session` lo declaran para probarse sobre la proyección en memoria.
+  Siempre solo para tests.
 
 De dónde viene cada cosa:
 
@@ -199,7 +200,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `Change` con expectativas y pins tipados; `Program.expecting` y `Program.outline`. Desde la fase 1: `ide.program`: `Mode` y `Fact` tipados; extends, implements y el
   tipo declarado son referencias; `Program` indexa por padre, site, destino y dirección, calcula `diff` y memoriza
   los overriders; `Address` e `Identity` tipadas, con las claves de tipo de parámetro por id; cada `Element` lleva
-  su dirección, y la sobrescritura compara nombre y claves, no texto.
+  su dirección, y la sobrescritura compara nombre y claves, no texto. Desde la fase 6 responde también la jerarquía
+  entera: `ancestors`, `subtypes` (por el índice de referencias) y `overriddenTransitively`, que antes calculaba la
+  navegación de la sesión recorriendo el grafo a mano.
 - **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
   enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
 
@@ -283,11 +286,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Para qué lo usarías.** Cualquier transformación que deba preservar invariantes y explicar qué pasó: migraciones
   de esquema, cambios de configuración.
 - **Dominio.**
-  - `Transaction`: la línea base (el `Program` de antes con las expectativas plegadas), los pins, el rastro y el
-    punto inicial. Intercepta `apply(Primitive)`: delega a la proyección, pliega las expectativas del `Change`,
-    acumula pins, registra el paso. No interpreta primitivos. Un punto (`snapshot`) guarda también la línea base y
-    los pins: volver a él olvida lo declarado desde entonces. `attempt(label, body, repairer)` corre parte del
-    cambio como intento: si lo rechazan o no verifica, se deshace y queda en el rastro como descartado.
+  - `Transaction`: nace con la proyección y el reparador que la juzga. Guarda la línea base (el `Program` de antes
+    con las expectativas plegadas), los pins, el rastro y el punto inicial. Intercepta `apply(Primitive)`: delega a
+    la proyección, pliega las expectativas del `Change`, acumula pins, registra el paso. No interpreta primitivos.
+    Un punto (`snapshot`) guarda también la línea base y los pins: volver a él olvida lo declarado desde entonces.
+    `attempt(label, body)` corre parte del cambio como intento: si lo rechazan o no verifica, se deshace y queda en
+    el rastro como descartado. `commit()` verifica y repara; si no llega a un punto fijo, deshace todo.
   - `View`: `check(baseline, after, rules)` devuelve violaciones. Vistas: Binding (perdida, religada, sin resolver),
     Access, Dispatch (overrides perdidos o nuevos), Compiler (solo si el código compilaba antes; corre última porque
     es la más cara). Futuras: Projection (direcciones duplicadas), Init.
@@ -304,17 +308,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Qué ignora.** Lenguajes, scripts, conocimiento, sesión.
 - **Prueba de autonomía.** Sobre `MemoryProjection`, con una vista y un remedio escritos en el test: llega al punto
   fijo, respeta los topes, no mueve pins, deshace cuando no puede.
-- **Estado actual** (fase 5 cerrada, 2026-10-31). `Transaction` intercepta `apply`, pliega el `Change` declarado y
+- **Estado actual** (fase 6 cerrada, 2026-10-31). `Transaction` intercepta `apply`, pliega el `Change` declarado y
   acumula pins tipados; no conoce ningún atributo. Las vistas son una clase cada una (`BindingView`, `AccessView`,
   `DispatchView`, `CompilerView`) detrás de `View` y `Comparison`; `Verifier` es una lista de vistas, y las costosas
   corren solo si las baratas no ven nada. La exención de lo que ya estaba roto vive en la vista que la necesita
   (acceso). `Trace` es un árbol de datos y el único lugar que escribe sigilos; el planificador de `knowledge` también
   responde su deducción como `Trace`. Tests propios sobre la proyección en memoria: transacción, reparador, rastro y
   cada vista sola. En la fase 5 el intento pasó de la sesión a la transacción, y remedios y quick fixes dejaron de
-  recibir las reglas aparte de la proyección.
-- **Abierto.** El reparador entra dos veces en el código que coordina: al run, para juzgar intentos, y al
-  `commit`. Propuesta (decisión 17): la transacción nace con su reparador, `new Transaction(projection, repairer)`,
-  y `attempt(label, body)` y `commit()` no lo reciben; el run queda `Run.in(tx, library)`.
+  recibir las reglas aparte de la proyección. En la fase 6 la transacción nació con su reparador (decisión 17).
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
@@ -365,7 +366,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   lenguaje de scripts (`Script.evaluate`, `Script.render`) y ejecuta los efectos con el `Run` real, directo sobre la
   proyección que le dan. Ya no tiene un contexto propio donde `attempt` no intentaba y `oblige` no obligaba. Los
   hechos entran tipados (site y target son elementos) y sus preguntas muestran los elementos por dirección. Tests
-  propios (`KnowledgeTest`) con metas y efectos escritos en el test.
+  propios (`KnowledgeTest`) con metas y efectos escritos en el test. Desde la fase 6 trae su base estándar
+  (`Knowledge.standard`) y sabe qué hechos da una violación o un diagnóstico (`search(Violation)`,
+  `search(Diagnostic)`); antes la sesión cargaba la base por su ruta y armaba esos hechos.
 - **Abierto.** Encadenamiento hacia atrás en varios niveles (la spec pedía 8 niveles, 4 pasos y 12 planes; hoy hay
   un nivel); `fact` e `invariant` del lenguaje de conocimiento.
 
@@ -373,15 +376,25 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 
 - **Qué es.** El ensamblado, el único que no sería una librería ajena. Abre un proyecto, ejecuta las operaciones
   del usuario como transacciones, mantiene undo, log y estado guardado, y expone todo como capacidades.
-- **Dominio.** `Session` (invoke, edit, fix, preview, expand, undo, save, diff, log), `Navigation` (callers,
-  hierarchy, references, model), `Completion`, `Capabilities` (el registro construido mecánicamente desde `Library`
-  y las operaciones de `Session`), `Workspace` como fachada delgada para tests y adaptadores.
+- **Dominio.**
+  - `Session`: las operaciones del usuario, cada una una transacción (invoke, preview, expand, edit, fix, define),
+    con undo, el log de eventos y lo último guardado (diff, save). Un fix que no hace desaparecer su diagnóstico no
+    se conserva.
+  - `Fixes`: los quick fixes de una línea, sus preguntas y cómo se dedujeron. Un `Fix` es un diagnóstico y el plan
+    que debería hacerlo desaparecer.
+  - `Navigation` (callers, hierarchy, references, model) y `Completion`: preguntas sobre el programa. No conocen
+    ningún lenguaje.
+  - `Capabilities`: cada refactoring de la biblioteca y cada operación del workspace, con su esquema.
+  - `Workspace`: la fachada para tests y adaptadores. Arma las partes y solo delega.
 - **Regla propia.** No contiene lógica de otro dominio; su prueba es la inversa de las demás: que cada línea se lea
   con los términos de los otros productos.
 - **Prueba de autonomía.** Cada colaborador se testea solo; la fachada solo delega.
-- **Estado actual.** `ide.session.Workspace`, 416 líneas con reglas, conocimiento, reparador, biblioteca, undo,
-  log, guardado, transacciones, quick fixes, completion, navegación y el registro de capacidades. Desde la fase 5 no
-  tiene runtime propio: cada transacción corre su refactoring con `Run.in`.
+- **Estado actual** (fase 6 cerrada, 2026-10-31). `ide.session`: `Session`, `Fixes` y `Fix`, `Navigation`,
+  `Completion`, `Capabilities` y `Workspace`, cuyos métodos son delegaciones de una línea. `NavigationTest` y
+  `CompletionTest` corren sobre la proyección en memoria; `FixesTest` y `SessionTest`, sobre un proyecto Java chico.
+  Los tests anteriores de la sesión y los de aceptación pasan contra la fachada sin cambios.
+- **Abierto.** Las operaciones que todavía no son capacidades (edit, save, asks, model) entran cuando un adaptador
+  las pida. `Capabilities` lista las operaciones a mano: si un día se desfasan de la fachada, se derivan de ella.
 
 ### 5.9 `adapters`: cli, ui, mcp
 
@@ -433,17 +446,17 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 |
-|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|
-| program          | 8                    | 12                  | 12                  | 12                  | 12                  |
-| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  |
-| engine           | 0                    | 9                   | 9                   | 17                  | 19                  |
-| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  |
-| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   |
-| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   |
-| session          | 13                   | 13                  | 13                  | 13                  | 13                  |
-| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 |
 
 ## 7. Decisiones
 
@@ -465,7 +478,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | tomada, 2026-10-31 |
 | 15 | Ejecución                | un único `Run`, dentro de una transacción o directo sobre una proyección; reemplaza a `Ctx` | tomada, 2026-10-31 (6911992) |
 | 16 | Valores de scripts       | `Value` tipado (`Elem`, `Ref`, `Text`, `Bool`, `Items`); id o dirección se resuelve en `Args` | tomada, 2026-10-31 (fb7e3e9) |
-| 17 | Transacción y reparador  | la transacción nace con su reparador; `attempt(label, body)`, `commit()`, `Run.in(tx, library)` | propuesta, para el comienzo de la fase 6 |
+| 17 | Transacción y reparador  | la transacción nace con su reparador; `attempt(label, body)`, `commit()`, `Run.in(tx, library)` | tomada, 2026-10-31 (85bb676) |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -491,14 +504,16 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge (resuelto en 6911992) | `ide.session`, `ide.knowledge` | 5 |
 | Valores de scripts como strings; id o dirección resuelto en cada función (resuelto en fb7e3e9) | `ide.refactoring.script` | 5 |
 | Plantillas de cuerpo en Java dentro del catálogo; `set import` e `initializer` (marcadas donde están en fb7e3e9; `CatalogTest` las cuida) | `standard.ref`, `knowledge.ref` | etapa 2 |
-| El reparador entra dos veces en el código que coordina (decisión 17)                | `ide.engine`, `ide.session` | 6 |
-| Workspace como cajón de todo                                                       | `ide.session`          | 6    |
+| El reparador entra dos veces en el código que coordina (decisión 17; resuelto en 85bb676) | `ide.engine`, `ide.session` | 6 |
+| La sesión carga `knowledge.ref` por su ruta y arma los hechos de un diagnóstico (resuelto en a288c2e) | `ide.session` | 6 |
+| La navegación recorre el grafo a mano: overrides transitivos, supertipos, subtipos (resuelto en 39f5dda) | `ide.session` | 6 |
+| Workspace como cajón de todo (resuelto en d26ed56, 4426824 y 708d184)              | `ide.session`          | 6    |
 
 ## 9. Plan de acción
 
 ### Reglas de la migración
 
-- Estrangulación, nunca big-bang: cada commit deja los 121 tests en verde. Un commit por ciclo.
+- Estrangulación, nunca big-bang: cada commit deja todos los tests en verde. Un commit por ciclo.
 - El orden sigue las dependencias, de abajo hacia arriba, con una excepción: la proyección falsa entra temprano
   (fase 2) porque habilita los tests de autonomía de todo lo demás.
 - Cada fase abre con el test de producto o de contrato que la define, en rojo, y cierra con el test de autonomía
@@ -600,11 +615,29 @@ id; la aceptación ahora lee ese mensaje.
 - Criterio de cierre: `Workspace` no tiene ningún `Ctx`; un script se prueba sin motor. Cumplido: `Ctx` ya no
   existe, y `RunTest` corre encapsulate-field sobre la proyección en memoria con `Run.on`.
 
-### Fase 6: `session`
+### Fase 6: `session` (cerrada, 2026-10-31)
+
+Hecha en seis ciclos: 85bb676 (decisión 17), a288c2e (lo que la sesión sabía de `knowledge` vuelve a `knowledge`),
+d26ed56 (`Navigation` y `Completion`), 4426824 (`Fixes`), 708d184 (`Session` y `Capabilities`; la fachada delega) y
+39f5dda (las preguntas de jerarquía vuelven a `program`). Además de las partes del plan apareció `Fixes`: los quick
+fixes de una línea no son ni sesión ni navegación.
+
+Leer cada clase con los términos de los otros productos encontró tres intrusiones, y cada una se arregló en el
+producto dueño:
+
+- La transacción no sabía cómo se la juzga: el reparador entraba dos veces.
+- La sesión cargaba la base de conocimiento por su ruta y sabía qué hechos da un diagnóstico.
+- La navegación recorría el grafo a mano.
+
+`SessionTest` cubre una regla que ningún test cubría: un fix que deja su diagnóstico no se conserva.
 
 - Objetivo: separar `Session`, `Navigation`, `Completion` y `Capabilities`; `Workspace` como fachada.
-- Tests rojos: los actuales de `workbench` siguen pasando contra la fachada; un test por colaborador en aislamiento.
+- Tests rojos: los actuales de `session` siguen pasando contra la fachada; un test por colaborador en aislamiento.
 - Criterio de cierre: cada clase de `session` se lee con los términos de los otros productos; la fachada solo delega.
+  Cumplido: `Workspace` arma las partes y cada uno de sus métodos es una delegación de una línea.
+
+Con la fase 6 termina la migración: cada producto del mapa es un módulo con sus propios tests. Lo que sigue es la
+etapa 2, por valor.
 
 ### Etapa 2, por valor
 
