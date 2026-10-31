@@ -48,6 +48,7 @@ class ShopSampleTest {
         if (expected.equals("applied")) {
             assertThat(result.violations()).as(description).isEmpty();
             assertThat(ws.diagnostics()).as("still compiles").isEmpty();
+            assertThat(ws.model()).as("the kept model is the model of the text").isEqualTo(Workspace.of(ws.sources()).model());
         } else {
             assertThat(result.violations()).extracting(Violation::code).contains(expected);
         }

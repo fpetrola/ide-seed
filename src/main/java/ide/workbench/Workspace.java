@@ -212,7 +212,7 @@ public final class Workspace {
         log.append(Map.of("event", "save", "root", root.toString()));
     }
 
-    private Map<String, String> sources() {
+    public Map<String, String> sources() {
         var sources = new java.util.TreeMap<String, String>();
         project.files().forEach(path -> sources.put(path, project.source(path)));
         return sources;
@@ -303,6 +303,22 @@ public final class Workspace {
             }
         }
         return List.copyOf(labels);
+    }
+
+    /** The model as sorted text: {@code KIND qualified} per element, {@code site -> target (mode)} per reference. */
+    public List<String> model() {
+        var graph = project.graph();
+        var lines = new java.util.ArrayList<String>();
+        graph.types().forEach(t -> collect(graph, t, lines));
+        graph.references().forEach(r -> lines.add(graph.element(r.site()).qualified() + " -> "
+                + graph.element(r.target()).qualified() + " (" + r.mode() + ")"));
+        lines.sort(null);
+        return lines;
+    }
+
+    private static void collect(ide.graph.ProgramGraph graph, ide.graph.Element element, List<String> lines) {
+        lines.add(element.kind() + " " + element.qualified());
+        graph.children(element.id()).stream().filter(c -> !c.kind().isType()).forEach(c -> collect(graph, c, lines));
     }
 
     // ---- navigation

@@ -75,6 +75,7 @@ class OrdersSampleTest {
             assertThat(result.violations()).as(description).isEmpty();
             assertThat(result.applied()).isTrue();
             assertThat(ws.diagnostics()).as("still compiles").isEmpty();
+            assertThat(ws.model()).as("the kept model is the model of the text").isEqualTo(Workspace.of(ws.sources()).model());
         } else {
             assertThat(result.applied()).as(description).isFalse();
             assertThat(result.violations()).extracting(Violation::code).contains(expected);
