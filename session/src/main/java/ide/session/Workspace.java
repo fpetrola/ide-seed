@@ -18,10 +18,8 @@ import ide.projection.Projection;
 import ide.java.JavaProjection;
 import ide.refactoring.Args;
 import ide.refactoring.Ctx;
-import ide.refactoring.ChangeSignature;
-import ide.refactoring.Primitives;
+import ide.refactoring.Library;
 import ide.refactoring.Refactoring;
-import ide.refactoring.script.ScriptParser;
 import ide.core.Param;
 
 import java.nio.file.Path;
@@ -33,10 +31,10 @@ public final class Workspace {
 
     private final JavaProjection project;
     private final LanguageRules rules;
-    private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), this::refactoring);
+    private final Library library = Library.standard();
+    private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), library::get);
     private final Repairer repairer;
     private final List<QuickFix> quickFixes = List.of(knowledge);
-    private final Map<String, Refactoring> refactorings = new java.util.TreeMap<>();
 
     private final java.util.Deque<Projection.Snapshot> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
@@ -50,9 +48,6 @@ public final class Workspace {
         this.rules = project.rules();
         this.repairer = new Repairer(List.of(knowledge));
         this.saved = sources();
-        Primitives.all().forEach(this::register);
-        register(new ChangeSignature());
-        define(resource("/ide/refactoring/standard.ref"));
     }
 
     private static String resource(String name) {
@@ -65,19 +60,14 @@ public final class Workspace {
 
     /** Registers the refactorings written in a {@code .ref} text; returns their ids. */
     public List<String> define(String scripts) {
-        var defined = ScriptParser.parse(scripts);
-        defined.forEach(this::register);
-        log.append(Map.of("event", "define", "refactorings", defined.stream().map(Refactoring::id).toList()));
-        return defined.stream().map(Refactoring::id).toList();
+        var defined = library.define(scripts);
+        log.append(Map.of("event", "define", "refactorings", defined));
+        return defined;
     }
 
-    /** {@code "<level> <id>"} for every registered refactoring. */
+    /** {@code "<level> <id>"} for every refactoring in the library. */
     public List<String> library() {
-        return refactorings.values().stream().map(r -> r.level() + " " + r.id()).toList();
-    }
-
-    private void register(Refactoring refactoring) {
-        refactorings.put(refactoring.id(), refactoring);
+        return library.listing();
     }
 
     public static Workspace of(Map<String, String> sources) {
@@ -94,7 +84,7 @@ public final class Workspace {
      */
     public CapabilityRegistry capabilities() {
         var registry = new CapabilityRegistry();
-        for (var refactoring : refactorings.values()) {
+        for (var refactoring : library.all()) {
             registry.register(Capability.of(refactoring.id(), refactoring.description(), refactoring.params(),
                     args -> json(invoke(refactoring.id(), args))));
         }
@@ -485,8 +475,6 @@ public final class Workspace {
     }
 
     private Refactoring refactoring(String id) {
-        var refactoring = refactorings.get(id);
-        if (refactoring == null) throw new IllegalArgumentException("unknown refactoring: " + id);
-        return refactoring;
+        return library.get(id);
     }
 }
