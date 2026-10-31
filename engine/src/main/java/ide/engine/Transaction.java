@@ -7,7 +7,6 @@ import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.Projection;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -24,11 +23,10 @@ public final class Transaction implements Projection {
     private final Snapshot start;
     private Program baseline;
     private final boolean compiled;
-    private final List<String> steps = new ArrayList<>();
-    private final List<String> search = new ArrayList<>();
+    private final Trace trace = new Trace();
+    private final Trace search = new Trace();
     private final Set<String> obligations = new LinkedHashSet<>();
     private final Set<Change.Pin> pinned = new LinkedHashSet<>();
-    private int depth;
 
     public Transaction(Projection projection) {
         this.projection = projection;
@@ -40,20 +38,20 @@ public final class Transaction implements Projection {
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else restores the start. */
     public Result commit(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
-        outcome.repairs().forEach(repair -> steps.add("! " + repair));
-        search.addAll(outcome.search());
+        outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
+        search.append(outcome.search());
         if (!compiled) obligations.add("types were not checked: the code did not compile before");
-        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps, search, List.copyOf(obligations));
+        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), trace, search, List.copyOf(obligations));
         projection.restore(start);
-        return Result.aborted(outcome.violations(), steps, search);
+        return Result.aborted(outcome.violations(), trace, search);
     }
 
     /** A point inside the transaction to come back to: the projection's state and the baseline's expectations. */
-    public record Mark(Snapshot snapshot, Program baseline, int steps) {
+    public record Mark(Snapshot snapshot, Program baseline) {
     }
 
     public Mark mark() {
-        return new Mark(projection.snapshot(), baseline, steps.size());
+        return new Mark(projection.snapshot(), baseline);
     }
 
     /** Undoes everything since the mark, keeping the steps that were logged (they show what was attempted). */
@@ -65,20 +63,20 @@ public final class Transaction implements Projection {
     /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
     public Violation check(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
-        outcome.repairs().forEach(repair -> log("! " + repair));
-        search.addAll(outcome.search());
+        outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
+        search.append(outcome.search());
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
     }
 
     /** Something the refactoring cannot decide and assumes; the result's guarantee becomes "assumed". */
     public void oblige(String assumption) {
         obligations.add(assumption);
-        log(": " + assumption);
+        trace.add(Trace.Kind.ASSUMED, assumption);
     }
 
     /** Records a discarded attempt. */
     public void discarded(String reason) {
-        log("X " + reason);
+        trace.add(Trace.Kind.DROPPED, reason);
     }
 
     /** The state before the transaction, for undo. */
@@ -89,22 +87,21 @@ public final class Transaction implements Projection {
     /** Restores the start; {@code reason} may be null when nothing went wrong (e.g. an expansion). */
     public Result abort(Violation reason) {
         projection.restore(start);
-        return Result.aborted(reason == null ? List.of() : List.of(reason), steps, search);
+        return Result.aborted(reason == null ? List.of() : List.of(reason), trace, search);
     }
 
     /** Keeps a manual edit as it is: the user's text is the authority, there is nothing to verify against. */
     public Result keep() {
-        return Result.ok(List.of(), steps, search, List.copyOf(obligations));
+        return Result.ok(List.of(), trace, search, List.copyOf(obligations));
     }
 
     /** Marks the start of a refactoring call; primitives until {@link #exit()} are nested under it. */
     public void enter(String call) {
-        log(". " + call);
-        depth++;
+        trace.open(Trace.Kind.CALL, call);
     }
 
     public void exit() {
-        depth--;
+        trace.close();
     }
 
     @Override
@@ -113,14 +110,14 @@ public final class Transaction implements Projection {
         var change = projection.apply(primitive);
         baseline = baseline.expecting(change);
         pinned.addAll(change.pins());
-        log("' " + describe(primitive, before, projection.program(), change));
+        trace.add(Trace.Kind.PRIMITIVE, describe(primitive, before, projection.program(), change));
         return change;
     }
 
     @Override
     public void edit(String path, String text) {
         projection.edit(path, text);
-        log("' edit " + path);
+        trace.add(Trace.Kind.PRIMITIVE, "edit " + path);
     }
 
     /** A primitive as the steps show it: elements by their address before it, and what it produced after. */
@@ -139,10 +136,6 @@ public final class Transaction implements Projection {
                     + " -> " + after.element(change.produced()).qualified();
             case Primitive.Inline i -> "inline " + i.reference() + " " + before.reference(i.reference()).name();
         };
-    }
-
-    private void log(String step) {
-        steps.add("  ".repeat(depth) + step);
     }
 
     @Override

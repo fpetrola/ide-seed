@@ -43,7 +43,7 @@ class RepairerTest {
 
         assertThat(outcome.violations()).isEmpty();
         assertThat(outcome.repairs()).containsExactly("open a.B#x", "open a.B#z");
-        assertThat(outcome.search()).startsWith("? access.insufficient a.A#n() cannot access private a.B#x", "  ! open a.B#x");
+        assertThat(outcome.search().lines()).startsWith("? access.insufficient a.A#n() cannot access private a.B#x", "  ! open a.B#x");
     }
 
     @Test
@@ -51,7 +51,7 @@ class RepairerTest {
         var outcome = new Repairer(RULES, List.of()).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).extracting(Violation::code).containsExactly("access.insufficient", "access.insufficient");
-        assertThat(outcome.search()).containsExactly("? access.insufficient a.A#n() cannot access private a.B#x", "  (no plan)");
+        assertThat(outcome.search().lines()).containsExactly("? access.insufficient a.A#n() cannot access private a.B#x", "  (no plan)");
     }
 
     @Test
@@ -62,8 +62,8 @@ class RepairerTest {
         var outcome = new Repairer(RULES, List.of(useless)).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).isNotEmpty();
-        assertThat(outcome.search()).filteredOn(line -> line.startsWith("  X useless")).hasSize(Repairer.MAX_BRANCHES);
-        assertThat(outcome.search()).last().isEqualTo("  X branch cap reached");
+        assertThat(outcome.search().lines()).filteredOn(line -> line.startsWith("  X useless")).hasSize(Repairer.MAX_BRANCHES);
+        assertThat(outcome.search().lines()).last().isEqualTo("  X branch cap reached");
         assertThat(projection.program().element(id(before, "a.B#x")).fact(Fact.STATIC)).isEqualTo("false");
     }
 
@@ -75,7 +75,7 @@ class RepairerTest {
         var outcome = new Repairer(RULES, List.of(asking)).stabilize(before, true, projection);
 
         assertThat(outcome.repairs()).isEmpty();
-        assertThat(outcome.search()).contains("  (no plan)");
+        assertThat(outcome.search().lines()).contains("  (no plan)");
     }
 
     @Test
@@ -87,7 +87,7 @@ class RepairerTest {
         var outcome = new Repairer(RULES, List.of(failing, open())).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).isEmpty();
-        assertThat(outcome.search()).contains("  X fail a.B#x: refused on purpose");
+        assertThat(outcome.search().lines()).contains("  X fail a.B#x: refused on purpose");
         assertThat(outcome.repairs()).containsExactly("open a.B#x", "open a.B#z");
     }
 }

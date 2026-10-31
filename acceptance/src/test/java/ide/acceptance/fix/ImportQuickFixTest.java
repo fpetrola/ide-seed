@@ -91,7 +91,7 @@ class ImportQuickFixTest {
                 }
                 """));
 
-        assertThat(ws.why("a/U.java", 4)).containsExactly(
+        assertThat(ws.why("a/U.java", 4).lines()).containsExactly(
                 "javac.cant.resolve.location List",
                 "? resolves(List)",
                 "  ! import java.util.List",

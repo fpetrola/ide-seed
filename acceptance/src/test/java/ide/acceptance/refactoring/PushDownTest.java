@@ -57,6 +57,6 @@ class PushDownTest {
         assertThat(result.applied()).isFalse();
         assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.unresolved");
         // pulling it back up would bind again, but it would undo the very move that was asked for
-        assertThat(ws.whyRepair()).contains("  X pull-up-dependency a.B#shared -> a.A: would undo what the refactoring did");
+        assertThat(ws.whyRepair().lines()).contains("  X pull-up-dependency a.B#shared -> a.A: would undo what the refactoring did");
     }
 }

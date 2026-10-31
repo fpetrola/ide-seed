@@ -40,7 +40,7 @@ public final class Workspace {
 
     private final java.util.Deque<Projection.Snapshot> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
-    private List<String> lastSearch = List.of();
+    private ide.engine.Trace lastSearch = new ide.engine.Trace();
 
     /** The sources as they are on disk (as loaded, or as last saved). */
     private Map<String, String> saved;
@@ -117,7 +117,7 @@ public final class Workspace {
                 .register(Capability.of("fix", "Applies a quick fix", List.of(path, line, Param.of("title", "text")),
                         args -> json(fix(text(args, "path"), Integer.parseInt(text(args, "line")), text(args, "title")))))
                 .register(Capability.of("why", "How the fixes for a line are deduced", List.of(path, line),
-                        args -> why(text(args, "path"), Integer.parseInt(text(args, "line")))))
+                        args -> why(text(args, "path"), Integer.parseInt(text(args, "line"))).lines()))
                 .register(Capability.of("complete", "Completions at an offset of edited text",
                         List.of(path, Param.of("text", "text"), Param.of("offset", "text")),
                         args -> complete(text(args, "path"), text(args, "text"), Integer.parseInt(text(args, "offset")))))
@@ -129,7 +129,7 @@ public final class Workspace {
                             return answer;
                         }))
                 .register(Capability.of("why-repair", "How the last transaction's repairs were searched", List.of(),
-                        args -> whyRepair()))
+                        args -> whyRepair().lines()))
                 .register(Capability.of("callers", "Who calls a method (polymorphically)", List.of(Param.of("method", "element", "METHOD")),
                         args -> callers(text(args, "method"))))
                 .register(Capability.of("hierarchy", "Supertypes and subtypes of a type", List.of(Param.of("type", "element", "CLASS", "INTERFACE", "ENUM")),
@@ -407,17 +407,20 @@ public final class Workspace {
         return record(tx, event, tx.commit(repairer));
     }
 
-    /** How the repairer searched in the last transaction: {@code ?} violation, {@code !} kept, {@code X} undone. */
-    public List<String> whyRepair() {
+    /** How the repairer searched in the last transaction: each violation, and each plan kept or undone. */
+    public ide.engine.Trace whyRepair() {
         return lastSearch;
     }
 
-    /** How fixes for the diagnostics on a line are deduced: {@code ?} goal, {@code !} plan, {@code X} rejected. */
-    public List<String> why(String path, int line) {
-        return diagnosticsAt(path, line).stream().flatMap(d -> java.util.stream.Stream.concat(
-                java.util.stream.Stream.of(d.code() + " " + d.symbol()),
-                knowledge.search(d.code(), Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())),
-                        project, rules).lines().stream())).toList();
+    /** How fixes for the diagnostics on a line are deduced: each diagnostic, its goals, and the effects tried. */
+    public ide.engine.Trace why(String path, int line) {
+        var trace = new ide.engine.Trace();
+        for (var d : diagnosticsAt(path, line)) {
+            trace.add(ide.engine.Trace.Kind.NOTE, d.code() + " " + d.symbol());
+            trace.append(knowledge.search(d.code(), Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())),
+                    project, rules).trace());
+        }
+        return trace;
     }
 
     private List<Diagnostic> diagnosticsAt(String path, int line) {

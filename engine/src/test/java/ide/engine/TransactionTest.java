@@ -79,7 +79,7 @@ class TransactionTest {
 
         assertThat(result.applied()).isTrue();
         assertThat(result.repairs()).containsExactly("open a.A#x");
-        assertThat(result.search()).contains("  X move back a.A#x: would undo what the refactoring did");
+        assertThat(result.search().lines()).contains("  X move back a.A#x: would undo what the refactoring did");
         assertThat(projection.program().element(x).parent()).isEqualTo(id(p, "a.A"));
     }
 

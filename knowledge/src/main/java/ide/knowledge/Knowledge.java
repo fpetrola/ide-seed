@@ -3,6 +3,7 @@ package ide.knowledge;
 import ide.engine.Plan;
 import ide.engine.QuickFix;
 import ide.engine.Remedy;
+import ide.engine.Trace;
 import ide.engine.Violation;
 import ide.core.Param;
 import ide.projection.Diagnostic;
@@ -38,8 +39,8 @@ public final class Knowledge implements Remedy, QuickFix {
                   List<Plan.Ask> asks, int cost, Script body) {
     }
 
-    /** One step of a search, for {@code why}. */
-    public record Trace(List<String> lines, List<Plan> plans) {
+    /** A search: the plans found, cheapest first, and how they were deduced, for {@code why}. */
+    public record Search(Trace trace, List<Plan> plans) {
     }
 
     private final List<Goal> goals;
@@ -71,14 +72,14 @@ public final class Knowledge implements Remedy, QuickFix {
                 "line", String.valueOf(diagnostic.line())), projection, rules).plans();
     }
 
-    /** The search for a code with the facts that came with it, with a readable trace. */
-    public Trace search(String code, Map<String, Object> facts, Projection projection, LanguageRules rules) {
-        var lines = new ArrayList<String>();
+    /** The search for a code with the facts that came with it: each goal a question, each effect tried an answer or dropped. */
+    public Search search(String code, Map<String, Object> facts, Projection projection, LanguageRules rules) {
+        var trace = new Trace();
         var candidates = new ArrayList<Map.Entry<Integer, Plan>>();
         for (var goal : goals) {
             if (!goal.code().equals(code)) continue;
             var bound = goal.needs().args().stream().map(a -> String.valueOf(facts.get(a))).toList();
-            lines.add("? " + goal.needs().name() + "(" + String.join(", ", bound) + ")");
+            trace.open(Trace.Kind.QUESTION, goal.needs().name() + "(" + String.join(", ", bound) + ")");
             for (var effect : effects) {
                 if (!effect.makes().name().equals(goal.needs().name())) continue;
                 var env = new LinkedHashMap<String, Object>(facts);
@@ -88,7 +89,7 @@ public final class Knowledge implements Remedy, QuickFix {
                 var ctx = ctx(projection, rules);
                 try {
                     if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), ctx, env))) {
-                        lines.add("  X " + effect.name() + ": " + effect.when());
+                        trace.add(Trace.Kind.DROPPED, effect.name() + ": " + effect.when());
                         continue;
                     }
                     var items = effect.forVariable() == null ? java.util.Collections.singletonList(null)
@@ -98,19 +99,20 @@ public final class Knowledge implements Remedy, QuickFix {
                         var variables = new LinkedHashMap<>(env);
                         if (effect.forVariable() != null) variables.put(effect.forVariable(), item);
                         var title = Script.render(effect.title(), ctx, variables);
-                        lines.add("  ! " + title);
+                        trace.add(Trace.Kind.ANSWER, title);
                         var asks = effect.asks().stream().map(a -> new Plan.Ask(a.name(), a.question(),
                                 Script.render(a.defaultAnswer(), ctx, variables))).toList();
                         candidates.add(Map.entry(effect.cost() * 100 + rank++, new Plan(title, asks,
                                 (p, answers) -> run(effect, asks, p, rules, variables, answers))));
                     }
                 } catch (RuntimeException inapplicable) { // e.g. the facts name elements that no longer exist
-                    lines.add("  X " + effect.name() + ": " + inapplicable.getMessage());
+                    trace.add(Trace.Kind.DROPPED, effect.name() + ": " + inapplicable.getMessage());
                 }
             }
+            trace.close();
         }
         candidates.sort(Map.Entry.comparingByKey());
-        return new Trace(lines, candidates.stream().map(Map.Entry::getValue).toList());
+        return new Search(trace, candidates.stream().map(Map.Entry::getValue).toList());
     }
 
     private void run(Effect effect, List<Plan.Ask> asks, Projection projection, LanguageRules rules,
