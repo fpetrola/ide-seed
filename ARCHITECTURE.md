@@ -65,8 +65,9 @@ Del producto (ya en `CLAUDE.md`, se mantienen):
 De la arquitectura (nuevos):
 
 9. Cada módulo es un producto con su dominio, y se usa solo en términos de ese dominio.
-10. Las dependencias van en un solo sentido y ArchUnit las hace cumplir; una regla nueva de ArchUnit es el primer
-    test rojo de cada fase de migración.
+10. Las dependencias van en un solo sentido y las declara el pom de cada producto: el compilador las hace cumplir,
+    y una dependencia nueva entre productos es una decisión visible en el diff. ArchUnit queda para lo que Maven no
+    puede expresar.
 11. Un producto se testea solo, con una implementación falsa de lo que necesita.
 12. Tipos, no strings: todo lo que el motor compara o consulta tiene un tipo propio (ids, modos, hechos,
     direcciones, pasos del rastro). El texto aparece solo en la proyección y en los renders.
@@ -74,31 +75,47 @@ De la arquitectura (nuevos):
 ## 4. Mapa de módulos
 
 ```
-                 adapters (cli, ui, mcp)
-                          |
-                       session
-        _______________/  |  \________________
-       /                  |                   \
-  knowledge            refactoring          (navegación, completion)
-       \__________________|
-                       engine
-                          |
-                      projection  <------ java (el driver de Java)
-                          |
-                       program
-                          |
-                        core
+                 acceptance            (solo tests: donde los productos se encuentran)
+                     |
+                  session              (ensambla; después, los adaptadores encima)
+          ___________|____________
+         |           |            |
+         |       knowledge        |
+         |        /     \         |
+       java   engine   refactoring
+         \       |       /
+          \______|______/
+                 |
+             projection
+                 |
+              program
+                 |
+               core
 ```
 
-Reglas de dependencia:
+Cada producto es un módulo Maven: carpeta `<producto>/`, artefacto `ide-<producto>`, paquete `ide.<producto>`. Su
+pom declara solo los productos que usa, y el pom es el mapa:
 
-- Todos conocen `core` y `program`.
-- `java` implementa `projection` y no conoce nada de arriba.
-- `engine` conoce `projection` y nunca `java`.
-- `refactoring` conoce `engine` (a través de su runtime) y nunca `java`.
-- `knowledge` conoce `refactoring` y `engine`; nadie de abajo conoce `knowledge`.
-- `session` conoce todo; los adaptadores conocen solo `session` y `core`.
-- Solo `java` conoce JavaParser y javac.
+| Módulo      | Declara                                                    | Qué es                                       |
+|-------------|------------------------------------------------------------|----------------------------------------------|
+| core        | nada                                                       | kit de capacidades y utilidades              |
+| program     | core                                                       | el programa como grafo                       |
+| projection  | program                                                    | el contrato de un driver de lenguaje         |
+| java        | projection, JavaParser                                     | el driver de Java                            |
+| engine      | projection                                                 | transacciones verificadas                    |
+| refactoring | projection                                                 | refactorings, runtime, lenguaje `.ref`, catálogo |
+| knowledge   | engine, refactoring                                        | planificador por metas                       |
+| session     | java, engine, refactoring, knowledge; JavaParser en runtime | el ensamblado                                |
+| acceptance  | session, solo para tests                                   | escenarios transversales, samples, reglas    |
+
+Cómo se hace cumplir:
+
+- Un producto compila contra lo que declara y lo que está debajo de eso; nada de arriba ni de al lado.
+- `refactoring` hoy declara solo `projection`; cuando su runtime necesite la transacción (fase 5) declarará `engine`.
+- Solo `java` compila contra JavaParser: `session` lo recibe en runtime, para ejecutar el driver.
+- javac viene con el JDK, así que "solo `java` usa la API del compilador" lo verifica ArchUnit, igual que "solo
+  `knowledge` implementa remedios". Son las dos reglas que Maven no puede expresar, y viven en `acceptance`.
+- `acceptance` no es un producto: es donde los productos se encuentran.
 
 De dónde viene cada cosa:
 
@@ -113,9 +130,6 @@ De dónde viene cada cosa:
 | `ide.refactor`, `ide.refactor.script`                               | `refactoring`                                 |
 | `ide.knowledge`                                                     | `knowledge`                                   |
 | `ide.workbench.Workspace`                                           | `session`: Session, Navigation, Completion, Capabilities, Workspace como fachada |
-
-Un solo módulo Maven por ahora; paquetes y ArchUnit marcan las fronteras. Los módulos Maven llegan cuando las
-interfaces dejen de moverse.
 
 ## 5. Fichas de producto
 
@@ -342,7 +356,56 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   sobre el dominio, falta una capacidad.
 - **Estado actual.** No existen, por decisión: llegan al final.
 
-## 6. Decisiones
+## 6. Cómo se testea
+
+Maven asegura que los productos no se conocen; los tests de producto aseguran que no se necesitan. Hay tres clases
+de test, cada una con su lugar y su rol.
+
+| Clase      | Dónde vive                                   | Qué prueba                                                | Contra qué                               |
+|------------|----------------------------------------------|-----------------------------------------------------------|------------------------------------------|
+| Producto   | el módulo del producto                       | el producto usado como herramienta, en su vocabulario      | dobles de lo que necesita de afuera      |
+| Contrato   | junto al contrato (`projection-kit`, fase 2) | que cada implementación cumple lo que sus usuarios asumen  | cada implementación, la real y la falsa  |
+| Aceptación | `acceptance`                                 | un escenario de usuario de punta a punta                   | todos los productos reales y texto Java  |
+
+- **Producto.** Lo entiende alguien que no sabe que existe el IDE: es la documentación del producto y muestra cómo
+  se usaría en otro proyecto. Si no se puede escribir sin nombrar otro producto, al dominio le falta un concepto o
+  al pom le sobra una dependencia. Los casos borde viven acá, en el producto dueño de la regla: cuántas veces se
+  evalúa un argumento en un inline es semántica de Java y va en `java`; los topes del reparador van en `engine`.
+- **Contrato.** Hace confiables a los dobles. El motor se prueba sobre la proyección en memoria, y el contrato
+  verifica que la proyección Java se comporta igual en todo lo que el motor asume. Sin contrato, un test de
+  producto puede pasar sobre un doble que miente.
+- **Aceptación.** Pocos por funcionalidad: el camino feliz y el aborto que importa. Prueban que la composición
+  entrega el valor; no repiten los casos borde de cada producto.
+
+La autonomía no se demuestra con funcionalidad de más. Un producto aprende lo que la composición necesita, pero lo
+aprende en su propio idioma; lo que nadie pide no se construye (principio 8).
+
+El ciclo de TDD es doble: se descubre de afuera hacia adentro y se implementa de abajo hacia arriba.
+
+1. Un test de aceptación en rojo describe el valor que se quiere.
+2. Se pregunta qué tiene que aprender cada producto para que pase. Cada respuesta es un test de producto en rojo,
+   escrito en el vocabulario de ese producto.
+3. Cada producto pasa a verde, de abajo hacia arriba, con refactor adentro del producto.
+4. Si un producto cambió una interfaz, el contrato se amplía y corre contra todas las implementaciones.
+5. La aceptación pasa a verde. Si pasó sin que ningún producto aprendiera nada, la funcionalidad era pura
+   composición, como un script nuevo del catálogo, y alcanza con la aceptación.
+
+Un bug que encuentra un test de aceptación se fija con un test en el producto que lo causa, y la aceptación queda
+como red. Ejemplo: el rename de un tipo usado como parámetro apareció en `RenameTypeTest`, de aceptación; la causa
+estaba en la identidad, y `IdentityTest` lo fija en el vocabulario de `program`, sin Java.
+
+Estado al 2026-10-31: la pirámide está invertida. Casi todo se prueba de punta a punta, y cinco productos no tienen
+ningún test propio. Cada fase de la migración baja a los productos que toca los casos borde que les pertenecen.
+
+| Módulo                                    | Tests |
+|-------------------------------------------|-------|
+| program                                   | 8     |
+| refactoring                               | 1     |
+| session                                   | 13    |
+| core, projection, java, engine, knowledge | 0     |
+| acceptance                                | 102   |
+
+## 7. Decisiones
 
 | #  | Tema                     | Decisión                                                                                   | Estado      |
 |----|--------------------------|--------------------------------------------------------------------------------------------|-------------|
@@ -358,11 +421,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 | 10 | Conformidad              | `MemoryProjection` más un kit de conformidad que corre contra cada driver                  | propuesta   |
 | 11 | Referencias no resueltas | entran al grafo con destino desconocido; import pasa a ser retarget                        | diferida, etapa 2 |
 | 12 | Cuerpos en plantillas    | lenguaje neutral de cuerpos renderizado por la proyección                                  | diferida, etapa 2 |
-| 13 | Módulos Maven            | cuando las interfaces dejen de moverse                                                     | diferida    |
+| 13 | Módulos Maven            | un módulo por producto, más `acceptance` para los escenarios transversales                  | tomada, 2026-10-31 (5d641a2) |
+| 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | propuesta   |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
-## 7. Intrusiones conocidas
+## 8. Intrusiones conocidas
 
 Registro de deuda de diseño, con la fase que la resuelve.
 
@@ -385,21 +449,22 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Plantillas de cuerpo en Java dentro del catálogo; `set import`                     | `standard.ref`, `knowledge.ref` | etapa 2 |
 | Workspace como cajón de todo                                                       | `ide.workbench`        | 6    |
 
-## 8. Plan de acción
+## 9. Plan de acción
 
 ### Reglas de la migración
 
 - Estrangulación, nunca big-bang: cada commit deja los 121 tests en verde. Un commit por ciclo.
 - El orden sigue las dependencias, de abajo hacia arriba, con una excepción: la proyección falsa entra temprano
   (fase 2) porque habilita los tests de autonomía de todo lo demás.
-- Cada fase abre con la regla de ArchUnit que la define, en rojo, y cierra con el test de autonomía del producto en
-  verde.
+- Cada fase abre con el test de producto o de contrato que la define, en rojo, y cierra con el test de autonomía
+  del producto en verde. Si cambia una dependencia entre productos, el pom cambia en el mismo commit.
 - Los tests de aceptación (los que invocan refactorings y comparan texto) no se tocan. Los que miran el rastro
-  siguen pasando por el render.
+  siguen pasando por el render. Los casos borde que pertenecen a un producto bajan a sus tests cuando la fase lo
+  toca.
 - `PerformanceProbe` al cierre de cada fase: el rename sobre `OrdersBig` no empeora.
 - Al cerrar una fase se actualiza el "Estado actual" de las fichas tocadas y el estado de las decisiones aplicadas.
 
-### Fase 1: `program` como producto
+### Fase 1: `program` como producto (cerrada, 2026-10-31)
 
 - Objetivo: grafo tipado, con vínculos, índices, diff y direcciones tipadas.
 - Tests rojos que la abren:
@@ -419,9 +484,11 @@ Registro de deuda de diseño, con la fase que la resuelve.
 - Objetivo: `Primitive` y `Change`; `Projection` con `apply`; `MemoryProjection`; kit de conformidad; `Transaction`
   que pliega lo que el `Change` declara.
 - Tests rojos:
-  - ArchUnit: `engine` no depende de `java`; `projection` depende solo de `program` y `core`.
+  - Ya vigente por los poms: `engine` no declara `java`; `projection` declara solo `program`.
   - `ProjectionContract`, abstracto, con las cinco obligaciones del driver, instanciado para `MemoryProjection` y
-    para `JavaProjection`.
+    para `JavaProjection`. Los dos viven en un módulo nuevo, `projection-kit`: el kit de conformidad es un producto
+    en sí, el que bajaría quien escribe un driver. `engine`, `refactoring` y `knowledge` lo usan en sus tests;
+    `java` corre el contrato en los suyos.
   - `EngineTest` sobre `MemoryProjection`: una vista y un remedio del test; punto fijo, topes, pins.
   - `TransactionTest`: las expectativas salen del `Change`, no de nombres de atributo.
 - Qué se toca: `JavaProject` implementa `apply` delegando a sus métodos actuales y declarando los `Change` (la
@@ -453,9 +520,9 @@ Registro de deuda de diseño, con la fase que la resuelve.
 ### Fase 5: `refactoring` y `knowledge` como productos
 
 - Objetivo: `Library` y `Runtime` propios; valores tipados; conocimiento sobre el runtime real.
-- Tests rojos: ArchUnit (`refactoring` no depende de `session`; `knowledge` no tiene `Ctx` propio);
-  `RuntimeTest` sobre `MemoryProjection` (expand de encapsulate-field da la secuencia esperada; semántica de
-  attempt y oblige); `KnowledgeTest` sobre `MemoryProjection` con efectos inventados.
+- Tests rojos: `RuntimeTest` en `refactoring`, sobre `MemoryProjection` (expand de encapsulate-field da la
+  secuencia esperada; semántica de attempt y oblige); `KnowledgeTest` en `knowledge`, sobre `MemoryProjection` con
+  efectos inventados; ArchUnit: `knowledge` no tiene `Ctx` propio.
 - Qué se toca: el runtime sale de `Workspace`; `Knowledge` usa el runtime real; `Value` y `Args` resuelven
   id-o-dirección una vez; las plantillas Java del catálogo quedan marcadas como fuga conocida.
 - Criterio de cierre: `Workspace` no tiene ningún `Ctx`; un script se prueba sin motor.
@@ -475,11 +542,9 @@ Registro de deuda de diseño, con la fase que la resuelve.
 4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo.
 5. Lo que falta del catálogo: pull-up-unifying, borrado de tipos anidados, encadenamiento en varios niveles del
    conocimiento.
-6. Módulos Maven: base (core, program, projection, java, engine), refactorings, remedies (knowledge), app
-   (session, adapters).
-7. Adaptadores: CLI, luego UI, luego MCP.
+6. Adaptadores: CLI, luego UI, luego MCP, cada uno como módulo que declara solo `session` y `core`.
 
-## 9. Glosario
+## 10. Glosario
 
 - **Elemento**: algo con identidad en el programa: paquete, tipo, campo, constructor, método, parámetro.
 - **Referencia**: un uso o un vínculo de un elemento (site) a otro (target), con un modo.
@@ -501,3 +566,6 @@ Registro de deuda de diseño, con la fase que la resuelve.
 - **Refactoring**: una composición de primitivos y otros refactorings, con parámetros declarados.
 - **Runtime**: lo que un refactoring ve mientras corre dentro de una transacción.
 - **Capacidad**: esquema más invocación; lo único que los adaptadores conocen.
+- **Test de producto**: usa un producto solo, en su vocabulario, con dobles de lo que necesita de afuera.
+- **Test de contrato**: verifica que cada implementación de una interfaz cumple lo que sus usuarios asumen.
+- **Test de aceptación**: un escenario de usuario que atraviesa todos los productos.
