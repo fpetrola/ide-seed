@@ -1,17 +1,17 @@
 package ide.knowledge;
 
-import ide.coherence.Plan;
-import ide.coherence.QuickFix;
-import ide.coherence.Remedy;
-import ide.coherence.Violation;
+import ide.engine.Plan;
+import ide.engine.QuickFix;
+import ide.engine.Remedy;
+import ide.engine.Violation;
 import ide.core.Param;
-import ide.graph.Diagnostic;
-import ide.graph.LanguageRules;
-import ide.graph.Program;
-import ide.refactor.Args;
-import ide.refactor.Ctx;
-import ide.refactor.Refactoring;
-import ide.refactor.script.Script;
+import ide.projection.Diagnostic;
+import ide.projection.LanguageRules;
+import ide.projection.Projection;
+import ide.refactoring.Args;
+import ide.refactoring.Ctx;
+import ide.refactoring.Refactoring;
+import ide.refactoring.script.Script;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -57,22 +57,22 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     @Override
-    public List<Plan> plans(Violation violation, Program program, LanguageRules rules) {
+    public List<Plan> plans(Violation violation, Projection projection, LanguageRules rules) {
         var facts = new HashMap<String, Object>();
         if (violation.site() != null) facts.put("site", violation.site().value());
         if (violation.target() != null) facts.put("target", violation.target().value());
         facts.putAll(violation.facts());
-        return search(violation.code(), facts, program, rules).plans();
+        return search(violation.code(), facts, projection, rules).plans();
     }
 
     @Override
-    public List<Plan> plans(Diagnostic diagnostic, Program program, LanguageRules rules) {
+    public List<Plan> plans(Diagnostic diagnostic, Projection projection, LanguageRules rules) {
         return search(diagnostic.code(), Map.of("symbol", diagnostic.symbol(), "path", diagnostic.path(),
-                "line", String.valueOf(diagnostic.line())), program, rules).plans();
+                "line", String.valueOf(diagnostic.line())), projection, rules).plans();
     }
 
     /** The search for a code with the facts that came with it, with a readable trace. */
-    public Trace search(String code, Map<String, Object> facts, Program program, LanguageRules rules) {
+    public Trace search(String code, Map<String, Object> facts, Projection projection, LanguageRules rules) {
         var lines = new ArrayList<String>();
         var candidates = new ArrayList<Map.Entry<Integer, Plan>>();
         for (var goal : goals) {
@@ -85,7 +85,7 @@ public final class Knowledge implements Remedy, QuickFix {
                 for (var i = 0; i < effect.makes().args().size(); i++) {
                     env.put(effect.makes().args().get(i), facts.get(goal.needs().args().get(i)));
                 }
-                var ctx = ctx(program, rules);
+                var ctx = ctx(projection, rules);
                 try {
                     if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), ctx, env))) {
                         lines.add("  X " + effect.name() + ": " + effect.when());
@@ -113,19 +113,19 @@ public final class Knowledge implements Remedy, QuickFix {
         return new Trace(lines, candidates.stream().map(Map.Entry::getValue).toList());
     }
 
-    private void run(Effect effect, List<Plan.Ask> asks, Program program, LanguageRules rules,
+    private void run(Effect effect, List<Plan.Ask> asks, Projection projection, LanguageRules rules,
                      Map<String, Object> variables, Map<String, String> answers) {
         var args = new HashMap<String, Object>();
         effect.body().params().forEach(p -> args.put(p.name(), variables.get(p.name())));
         asks.forEach(ask -> args.put(ask.name(), answers.getOrDefault(ask.name(), ask.defaultAnswer())));
-        effect.body().apply(ctx(program, rules), new Args(args));
+        effect.body().apply(ctx(projection, rules), new Args(args));
     }
 
-    private Ctx ctx(Program program, LanguageRules rules) {
+    private Ctx ctx(Projection projection, LanguageRules rules) {
         return new Ctx() {
             @Override
-            public Program program() {
-                return program;
+            public Projection projection() {
+                return projection;
             }
 
             @Override

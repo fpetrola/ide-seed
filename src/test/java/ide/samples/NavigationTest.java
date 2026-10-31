@@ -1,6 +1,6 @@
 package ide.samples;
 
-import ide.workbench.Workspace;
+import ide.session.Workspace;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

@@ -1,6 +1,6 @@
 package ide.fix;
 
-import ide.workbench.Workspace;
+import ide.session.Workspace;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;

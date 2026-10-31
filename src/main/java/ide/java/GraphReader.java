@@ -14,11 +14,11 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
-import ide.graph.Element;
-import ide.graph.ElementId;
-import ide.graph.Kind;
-import ide.graph.ProgramGraph;
-import ide.graph.Reference;
+import ide.program.Element;
+import ide.program.ElementId;
+import ide.program.Kind;
+import ide.program.Program;
+import ide.program.Reference;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -33,7 +33,7 @@ import static ide.java.Resolution.*;
 final class GraphReader {
 
     /** A graph and, for each of its reference ids, the node of the use. */
-    record Read(ProgramGraph graph, Map<String, Node> nodes) {
+    record Read(Program graph, Map<String, Node> nodes) {
     }
 
     private final Identity ids;
@@ -131,7 +131,7 @@ final class GraphReader {
                 addReference(references, nodes, use, target);
             }
         }
-        return new Read(new ProgramGraph(elements, references), nodes);
+        return new Read(new Program(elements, references), nodes);
     }
 
     /**

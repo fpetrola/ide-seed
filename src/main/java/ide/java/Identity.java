@@ -1,7 +1,7 @@
 package ide.java;
 
-import ide.graph.ElementId;
-import ide.graph.Kind;
+import ide.program.ElementId;
+import ide.program.Kind;
 
 import java.util.HashMap;
 import java.util.List;

@@ -9,7 +9,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 
-import ide.graph.PrimitiveRejected;
+import ide.projection.PrimitiveRejected;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -31,16 +31,16 @@ import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 
-import ide.graph.CompletionContext;
-import ide.graph.Diagnostic;
-import ide.graph.Element;
+import ide.projection.CompletionContext;
+import ide.projection.Diagnostic;
+import ide.program.Element;
 
 import static ide.java.Resolution.*;
-import ide.graph.ElementId;
-import ide.graph.Kind;
-import ide.graph.Program;
-import ide.graph.ProgramGraph;
-import ide.graph.Reference;
+import ide.program.ElementId;
+import ide.program.Kind;
+import ide.projection.Projection;
+import ide.program.Program;
+import ide.program.Reference;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -54,10 +54,10 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
- * Java sources in memory, edited with lexical preservation, projected to a {@link ProgramGraph}.
+ * Java sources in memory, edited with lexical preservation, projected to a {@link Program}.
  * Identity is kept in {@code ids} (address → id): parsing never decides identity, primitives transfer it.
  */
-public final class JavaProject implements Program {
+public final class JavaProject implements Projection {
 
     /** Everything needed to roll back: source text and identity. */
     public record Snapshot(Map<String, String> sources, Identity.State identity, java.util.Set<String> emptyPackages) {
@@ -71,7 +71,7 @@ public final class JavaProject implements Program {
     private final GraphReader reader;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
     private final Identity ids = new Identity();
-    private ProgramGraph graph;
+    private Program graph;
     private Map<String, Node> referenceNodes = Map.of();
     private List<Diagnostic> diagnostics;
     private final Map<String, String> parsedText = new HashMap<>();
@@ -186,7 +186,7 @@ public final class JavaProject implements Program {
     }
 
     @Override
-    public ProgramGraph graph() {
+    public Program graph() {
         if (graph == null) {
             var read = reader.read(units, emptyPackages);
             graph = read.graph();
@@ -588,7 +588,7 @@ public final class JavaProject implements Program {
         }
     }
 
-    private static boolean inside(ProgramGraph g, ElementId id, ElementId container) {
+    private static boolean inside(Program g, ElementId id, ElementId container) {
         for (var e = g.element(id); ; e = g.element(e.parent())) {
             if (e.id().equals(container)) return true;
             if (e.parent() == null) return false;

@@ -1,7 +1,7 @@
 package ide.java;
 
 import com.sun.source.util.JavacTask;
-import ide.graph.Diagnostic;
+import ide.projection.Diagnostic;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;

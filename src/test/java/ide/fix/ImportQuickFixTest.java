@@ -1,7 +1,7 @@
 package ide.fix;
 
-import ide.graph.Diagnostic;
-import ide.workbench.Workspace;
+import ide.projection.Diagnostic;
+import ide.session.Workspace;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;

@@ -1,7 +1,7 @@
 package ide.samples;
 
-import ide.coherence.Violation;
-import ide.workbench.Workspace;
+import ide.engine.Violation;
+import ide.session.Workspace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;

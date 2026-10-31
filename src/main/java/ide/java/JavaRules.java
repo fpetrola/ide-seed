@@ -1,9 +1,9 @@
 package ide.java;
 
-import ide.graph.Element;
-import ide.graph.ElementId;
-import ide.graph.LanguageRules;
-import ide.graph.ProgramGraph;
+import ide.program.Element;
+import ide.program.ElementId;
+import ide.projection.LanguageRules;
+import ide.program.Program;
 
 import java.util.List;
 
@@ -11,7 +11,7 @@ import java.util.List;
 public final class JavaRules implements LanguageRules {
 
     @Override
-    public boolean accessible(ProgramGraph graph, ElementId site, ElementId target) {
+    public boolean accessible(Program graph, ElementId site, ElementId target) {
         var element = graph.element(target);
         return switch (element.attribute("visibility")) {
             case "public" -> true;
@@ -24,7 +24,7 @@ public final class JavaRules implements LanguageRules {
     }
 
     @Override
-    public List<String> importCandidates(ProgramGraph graph, String simpleName) {
+    public List<String> importCandidates(Program graph, String simpleName) {
         var candidates = new java.util.ArrayList<String>();
         graph.types().stream().filter(t -> t.name().equals(simpleName) && t.attribute("file") != null)
                 .forEach(t -> candidates.add(t.qualified()));
@@ -39,13 +39,13 @@ public final class JavaRules implements LanguageRules {
 
     /** Top-level types are package-private or public; members may be anything. */
     @Override
-    public List<String> visibilities(ProgramGraph graph, ElementId element) {
+    public List<String> visibilities(Program graph, ElementId element) {
         var e = graph.element(element);
-        var topLevel = e.kind().isType() && e.parent() != null && graph.element(e.parent()).kind() == ide.graph.Kind.PACKAGE;
+        var topLevel = e.kind().isType() && e.parent() != null && graph.element(e.parent()).kind() == ide.program.Kind.PACKAGE;
         return topLevel ? List.of("package", "public") : visibilities();
     }
 
-    private static boolean samePackage(ProgramGraph graph, ElementId a, ElementId b) {
+    private static boolean samePackage(Program graph, ElementId a, ElementId b) {
         return packageOf(graph.topLevel(a)).equals(packageOf(graph.topLevel(b)));
     }
 

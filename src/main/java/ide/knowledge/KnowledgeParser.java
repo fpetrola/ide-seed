@@ -1,7 +1,7 @@
 package ide.knowledge;
 
-import ide.refactor.Refactoring;
-import ide.refactor.script.Script;
+import ide.refactoring.Refactoring;
+import ide.refactoring.script.Script;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,7 +48,7 @@ final class KnowledgeParser {
                 Knowledge.Predicate makes = null;
                 String when = null, forVariable = null, forItems = null;
                 var cost = 1;
-                var asks = new ArrayList<ide.coherence.Plan.Ask>();
+                var asks = new ArrayList<ide.engine.Plan.Ask>();
                 var body = new StringBuilder();
                 for (i++; !lines.get(i).strip().equals("end"); i++) {
                     var clause = lines.get(i).strip();
@@ -57,7 +57,7 @@ final class KnowledgeParser {
                     else if (clause.startsWith("cost ")) cost = Integer.parseInt(clause.substring(5).strip());
                     else if (clause.startsWith("ask ")) {
                         var parts = clause.substring(4).strip().split("\"");
-                        asks.add(new ide.coherence.Plan.Ask(parts[0].strip(), parts[1], parts.length > 3 ? parts[3] : ""));
+                        asks.add(new ide.engine.Plan.Ask(parts[0].strip(), parts[1], parts.length > 3 ? parts[3] : ""));
                     }
                     else if (clause.startsWith("for ")) {
                         var in = clause.indexOf(" in ");

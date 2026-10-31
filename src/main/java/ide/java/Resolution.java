@@ -23,7 +23,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 
-import ide.graph.Kind;
+import ide.program.Kind;
 
 import java.util.ArrayList;
 import java.util.HashMap;
