@@ -149,6 +149,26 @@ public final class Program {
         return supertypes;
     }
 
+    /** Every supertype in the workspace, directly or not, nearest first. */
+    public List<Element> ancestors(Element type) {
+        var ancestors = new ArrayList<Element>();
+        var seen = new HashSet<ElementId>();
+        var pending = new ArrayDeque<>(supertypes(type));
+        while (!pending.isEmpty()) {
+            var next = pending.poll();
+            if (!seen.add(next.id())) continue;
+            ancestors.add(next);
+            pending.addAll(supertypes(next));
+        }
+        return ancestors;
+    }
+
+    /** Direct subtypes in the workspace: the types that extend or implement {@code type}. */
+    public List<Element> subtypes(Element type) {
+        return referencesTo(type.id()).stream().filter(r -> r.mode() == Mode.EXTENDS || r.mode() == Mode.IMPLEMENTS)
+                .map(r -> element(r.site())).distinct().toList();
+    }
+
     /** The classes that extend {@code type} directly. */
     public List<Element> subclasses(ElementId type) {
         return referencesTo(type).stream().filter(r -> r.mode() == Mode.EXTENDS)
@@ -195,6 +215,19 @@ public final class Program {
                     .filter(e -> e.kind() == Kind.METHOD && signature(e).equals(signature)).findFirst();
             if (match.isPresent()) found.add(match.get());
             else pending.addAll(supertypes(type));
+        }
+        return found;
+    }
+
+    /** Every method {@code method} overrides, directly or not: a call to any of them may dispatch to it. */
+    public List<Element> overriddenTransitively(Element method) {
+        var found = new ArrayList<Element>();
+        var pending = new ArrayDeque<>(overriddenAll(method));
+        while (!pending.isEmpty()) {
+            var next = pending.poll();
+            if (found.contains(next)) continue;
+            found.add(next);
+            pending.addAll(overriddenAll(next));
         }
         return found;
     }

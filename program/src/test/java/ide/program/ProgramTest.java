@@ -2,6 +2,7 @@ package ide.program;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -63,6 +64,32 @@ class ProgramTest {
         assertThat(p.isSubclass(p.element(A), p.element(B))).isFalse();
         assertThat(p.subclasses(A)).extracting(Element::qualified).containsExactly("a.B");
         assertThat(p.declaredType(B_X)).map(Element::qualified).contains("a.A");
+    }
+
+    private static final ElementId C = new ElementId("type:10");
+    private static final ElementId C_NAME = new ElementId("method:11");
+
+    /** The {@link #program()}, and class C extends B { String name() } */
+    private static Program deeper() {
+        var p = program();
+        var elements = new ArrayList<>(p.elements());
+        elements.add(element(C, Kind.CLASS, "C", PKG, "a.C"));
+        elements.add(element(C_NAME, Kind.METHOD, "name", C, "a.C#name()"));
+        var references = new ArrayList<>(p.references());
+        references.add(new Reference("type:10@0", C, B, "B", Mode.EXTENDS));
+        return new Program(elements, references);
+    }
+
+    @Test
+    void theWholeHierarchyIsAQuestionToo() {
+        var p = deeper();
+
+        assertThat(p.ancestors(p.element(C))).extracting(Element::qualified).containsExactly("a.B", "a.A", "a.I");
+        assertThat(p.subtypes(p.element(A))).extracting(Element::qualified).containsExactly("a.B");
+        assertThat(p.subtypes(p.element(I))).extracting(Element::qualified).containsExactly("a.B");
+        assertThat(p.subtypes(p.element(B))).extracting(Element::qualified).containsExactly("a.C");
+        assertThat(p.overriddenTransitively(p.element(C_NAME))).extracting(Element::qualified)
+                .containsExactly("a.B#name()", "a.A#name()", "a.I#name()");
     }
 
     @Test
