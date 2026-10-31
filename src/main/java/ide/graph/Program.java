@@ -44,6 +44,12 @@ public interface Program {
     /** Sets an attribute; {@code body} takes a template where {@code #{id}} stands for the element {@code id}. */
     void set(ElementId element, String attribute, String value);
 
+    /**
+     * Replaces a call by the body of the called method (a single {@code return expr;}), substituting arguments;
+     * refuses what would change how often or in which order things are evaluated.
+     */
+    void inline(String call);
+
     /** Points reference {@code ref} at {@code target}, changing the shape of the site as needed. */
     void retarget(String ref, ElementId target);
 }

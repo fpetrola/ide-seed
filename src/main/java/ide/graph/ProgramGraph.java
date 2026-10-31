@@ -59,6 +59,31 @@ public final class ProgramGraph {
         return new ProgramGraph(elements.values(), copy);
     }
 
+    /** A copy without the references made from inside {@code element} (it is going away with them). */
+    public ProgramGraph withoutUsesFrom(ElementId element) {
+        var kept = references.stream().filter(r -> !inside(r.site(), element)).toList();
+        return new ProgramGraph(elements.values(), kept);
+    }
+
+    private boolean inside(ElementId id, ElementId container) {
+        for (var e = elements.get(id); e != null; e = e.parent() == null ? null : elements.get(e.parent())) {
+            if (e.id().equals(container)) return true;
+        }
+        return false;
+    }
+
+    /** A copy without one reference from {@code site} to {@code target}. */
+    public ProgramGraph without(ElementId site, ElementId target) {
+        var copy = new ArrayList<>(references);
+        for (var i = 0; i < copy.size(); i++) {
+            if (copy.get(i).site().equals(site) && copy.get(i).target().equals(target)) {
+                copy.remove(i);
+                break;
+            }
+        }
+        return new ProgramGraph(elements.values(), copy);
+    }
+
     /** A hypothetical copy where one attribute of one element has a different value. */
     public ProgramGraph with(ElementId id, String attribute, String value) {
         var copy = new LinkedHashMap<>(elements);

@@ -45,6 +45,11 @@ public final class Primitives {
                     ctx.program().set(element, args.text("attribute"), args.text("value"));
                     return element.value();
                 }),
+                primitive("inline", "Replaces a call by the called method's body", List.of(Param.of("call", "text")),
+                        (ctx, args) -> {
+                            ctx.program().inline(args.text("call"));
+                            return null;
+                        }),
                 primitive("retarget", "Points a reference at another element", List.of(Param.of("ref", "text"),
                         Param.of("target", "element")), (ctx, args) -> {
                     ctx.program().retarget(args.text("ref"), args.element("target", ctx.program().graph()).id());

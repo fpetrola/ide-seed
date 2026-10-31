@@ -601,6 +601,58 @@ public final class JavaProject implements Program {
     }
 
     /**
+     * Inlines a call to a method whose body is a single {@code return expr;}: each parameter becomes its argument
+     * (parenthesized where precedence needs it), and so does the whole expression at the call site. Refused:
+     * recursion, a body using implicit {@code this} members called on another receiver, and a non-trivial argument
+     * whose parameter is not used exactly once (it would be evaluated another number of times).
+     */
+    @Override
+    public void inline(String refId) {
+        var ref = graph().reference(refId);
+        if (!(referenceNodes.get(refId) instanceof MethodCallExpr call)) {
+            throw new PrimitiveRejected("inline.not-a-call", refId + " is not a call");
+        }
+        var method = graph().element(ref.target());
+        var declaration = (MethodDeclaration) declaration(method);
+        var statements = declaration.getBody().map(b -> b.getStatements()).orElseThrow();
+        if (statements.size() != 1 || !statements.get(0).isReturnStmt() || statements.get(0).asReturnStmt().getExpression().isEmpty()) {
+            throw new PrimitiveRejected("inline.body-shape", method.qualified() + " is not a single 'return expr;'");
+        }
+        var body = statements.get(0).asReturnStmt().getExpression().get().clone();
+        if (body.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.qualified().equals(resolveMethod(c)))) {
+            throw new PrimitiveRejected("inline.recursive", method.qualified() + " calls itself");
+        }
+        var thisMembers = body.findAll(NameExpr.class).stream().anyMatch(n -> resolveField(n) != null)
+                || body.findAll(MethodCallExpr.class).stream().anyMatch(c -> c.getScope().isEmpty());
+        if (thisMembers && call.getScope().filter(scope -> !scope.isThisExpr()).isPresent()) {
+            throw new PrimitiveRejected("inline.receiver", method.qualified() + " uses members of this; the call has another receiver");
+        }
+        var params = declaration.getParameters();
+        var args = call.getArguments();
+        for (var i = 0; i < params.size(); i++) {
+            var name = params.get(i).getNameAsString();
+            var uses = body.findAll(NameExpr.class, n -> n.getNameAsString().equals(name));
+            if (uses.size() != 1 && !Bodies.trivial(args.get(i))) {
+                throw new PrimitiveRejected("inline.evaluation-count", args.get(i) + " would be evaluated " + uses.size() + " times");
+            }
+        }
+        // substitute on the copy of the body; replacing a name that is the whole body replaces the root
+        Expression result = body;
+        for (var i = 0; i < params.size(); i++) {
+            var name = params.get(i).getNameAsString();
+            for (var use : body.findAll(NameExpr.class, n -> n.getNameAsString().equals(name))) {
+                var arg = args.get(i).clone();
+                var replacement = Bodies.needsParentheses(arg, use) ? Bodies.parenthesized(arg) : arg;
+                if (use == result) result = replacement;
+                else use.replace(replacement);
+            }
+        }
+        var text = Bodies.needsParentheses(result, call) ? "(" + result + ")" : result.toString();
+        var path = pathOf(call.findCompilationUnit().orElseThrow());
+        load(path, Text.replace(source(path), call, text));
+    }
+
+    /**
      * Retargets a field use to an accessor: a read becomes {@code getter()}, a write {@code x = v} used as a statement
      * becomes {@code setter(v)}. Updates (compound assignment, ++/--) and assignments whose value is used are rejected:
      * they would change how many times things are evaluated.

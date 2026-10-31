@@ -149,6 +149,7 @@ public final class Transaction implements Program {
     public void delete(ElementId element) {
         var name = name(element);
         program.delete(element);
+        baseline = baseline.withoutUsesFrom(element); // what it used goes with it
         log("' delete " + name);
     }
 
@@ -168,6 +169,14 @@ public final class Transaction implements Program {
             program.graph().find(value).ifPresent(to -> baseline = baseline.retargeted(element, oldSuperclass.get().id(), to.id()));
         }
         log("' set " + name(element) + " " + attribute + " = " + value);
+    }
+
+    @Override
+    public void inline(String call) {
+        var reference = program.graph().reference(call);
+        program.inline(call);
+        baseline = baseline.without(reference.site(), reference.target()); // the call is meant to go
+        log("' inline " + call + " " + reference.name());
     }
 
     @Override

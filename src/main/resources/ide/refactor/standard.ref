@@ -164,3 +164,11 @@ refactoring rename-field-with-accessors "Renames a field together with its gette
   end
   return ${field}
 end
+
+refactoring inline-method "Replaces every call of a method by its body, then deletes it"
+  param method : element(METHOD) "a method whose body is a single return"
+  for r in refs(method)
+    inline ${r}
+  end
+  delete ${method}
+end
