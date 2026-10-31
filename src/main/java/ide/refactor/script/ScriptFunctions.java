@@ -51,6 +51,8 @@ final class ScriptFunctions {
             case "members" -> ids(graph.members(element(args, 0).id()));
             case "fields" -> ids(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("FIELD")).toList());
             case "methods" -> ids(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("METHOD")).toList());
+            case "params" -> ids(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList());
+            case "paramnames" -> graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).map(Element::name).toList();
             case "family" -> ids(graph.family(element(args, 0)));
             case "refs" -> graph.referencesTo(element(args, 0).id()).stream().map(r -> r.id()).toList();
             // references
@@ -60,6 +62,7 @@ final class ScriptFunctions {
             // text and logic
             case "cap" -> cap(text(args, 0));
             case "decap" -> text(args, 0).isEmpty() ? "" : Character.toLowerCase(text(args, 0).charAt(0)) + text(args, 0).substring(1);
+            case "join" -> String.join(text(args, 1), list(args.get(0)).stream().map(String::valueOf).toList());
             case "concat" -> String.join("", args.stream().map(String::valueOf).toList());
             case "eq" -> String.valueOf(args.get(0)).equals(String.valueOf(args.get(1)));
             case "ne" -> !String.valueOf(args.get(0)).equals(String.valueOf(args.get(1)));

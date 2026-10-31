@@ -9,7 +9,9 @@ import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import ide.graph.PrimitiveRejected;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.Modifier;
@@ -20,6 +22,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
@@ -64,6 +67,7 @@ public final class JavaProject implements Program {
             Set.of(Modifier.Keyword.PUBLIC, Modifier.Keyword.PROTECTED, Modifier.Keyword.PRIVATE);
 
     private final JavaParser parser;
+    private final com.github.javaparser.resolution.TypeSolver typeSolver;
     private final Map<String, CompilationUnit> units = new TreeMap<>();
     private Map<String, ElementId> ids = new HashMap<>();
     private int nextId;
@@ -73,6 +77,7 @@ public final class JavaProject implements Program {
 
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
+        typeSolver = solver;
         parser = new JavaParser(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(solver)));
     }
 
@@ -365,6 +370,7 @@ public final class JavaProject implements Program {
             case "body" -> setBody(id, value);
             case "import" -> addImport(id, value);
             case "default" -> setDefault(id, value);
+            case "static" -> setFlag(id, Modifier.Keyword.STATIC, Boolean.parseBoolean(value));
             case "order" -> setOrder(id, Integer.parseInt(value));
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
@@ -520,6 +526,16 @@ public final class JavaProject implements Program {
         else type.getExtendedTypes(0).setName(name);
     }
 
+    /** Adds or removes a modifier keyword, after the access modifier. */
+    private void setFlag(ElementId id, Modifier.Keyword keyword, boolean on) {
+        var modifiers = ((NodeWithModifiers<?>) declaration(graph().element(id))).getModifiers();
+        modifiers.removeIf(m -> m.getKeyword() == keyword);
+        if (on) {
+            var index = (int) modifiers.stream().filter(m -> ACCESS.contains(m.getKeyword())).count();
+            modifiers.add(index, new Modifier(keyword));
+        }
+    }
+
     private void setVisibility(ElementId id, String value) {
         var modifiers = ((NodeWithModifiers<?>) declaration(graph().element(id))).getModifiers();
         modifiers.removeIf(m -> ACCESS.contains(m.getKeyword()));
@@ -535,11 +551,21 @@ public final class JavaProject implements Program {
     public void retarget(String refId, ElementId targetId) {
         var ref = graph().reference(refId);
         var node = (Expression) referenceNodes.get(refId);
+        if (node.isObjectCreationExpr() && !ref.mode().equals("new")) throw new IllegalStateException(ref.toString());
         var target = graph().element(targetId);
         if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
         var scope = node.isFieldAccessExpr() ? node.asFieldAccessExpr().getScope() : null;
+        if (node.isObjectCreationExpr()) scope = null;
         switch (ref.mode()) {
             case "read" -> node.replace(new MethodCallExpr(scope, target.name()));
+            case "new" -> {
+                var creation = (ObjectCreationExpr) node;
+                if (creation.getAnonymousClassBody().isPresent()) {
+                    throw new PrimitiveRejected("retarget.anonymous-class", "cannot turn " + creation + " into a call");
+                }
+                creation.replace(new MethodCallExpr(new NameExpr(creation.getType().asString()), target.name(),
+                        creation.getArguments()));
+            }
             case "write" -> {
                 var assign = (AssignExpr) node.getParentNode().orElseThrow();
                 if (!(assign.getParentNode().orElseThrow() instanceof ExpressionStmt)) {
@@ -587,28 +613,36 @@ public final class JavaProject implements Program {
                                 variable.getNameAsString(), typeId, address, Map.copyOf(attributes)));
                     }
                 }
+                for (var constructor : type.getConstructors()) {
+                    var address = methodAddress(typeName, constructor);
+                    var constructorId = idOf(address, Kind.CONSTRUCTOR);
+                    elements.add(new Element(constructorId, Kind.CONSTRUCTOR, type.getNameAsString(), typeId, address,
+                            attributes(constructor)));
+                    addParams(elements, constructor, address, constructorId);
+                }
                 for (var method : type.getMethods()) {
                     var address = methodAddress(typeName, method);
                     var methodId = idOf(address, Kind.METHOD);
                     elements.add(new Element(methodId, Kind.METHOD,
                             method.getNameAsString(), typeId, address, attributes(method)));
-                    for (var param : method.getParameters()) {
-                        var paramAddress = address + "/" + param.getNameAsString();
-                        elements.add(new Element(idOf(paramAddress, Kind.PARAM), Kind.PARAM, param.getNameAsString(),
-                                methodId, paramAddress, Map.of("type", param.getType().asString())));
-                    }
+                    addParams(elements, method, address, methodId);
                 }
             }
             var uses = new ArrayList<Node>();
             uses.addAll(fieldUses(cu));
             uses.addAll(cu.findAll(MethodCallExpr.class));
             uses.addAll(cu.findAll(ClassOrInterfaceType.class));
+            uses.addAll(cu.findAll(ObjectCreationExpr.class));
             uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
             for (var use : uses) {
                 var target = switch (use) {
                     case MethodCallExpr call -> resolveMethod(call);
+                    case ObjectCreationExpr creation -> resolveConstructor(creation);
                     case ClassOrInterfaceType type -> resolveType(type);
-                    default -> resolveField((Expression) use);
+                    default -> {
+                        var field = resolveField((Expression) use);
+                        yield field != null || !(use instanceof NameExpr name) ? field : resolveTypeName(name);
+                    }
                 };
                 addReference(references, nodes, use, target);
             }
@@ -627,7 +661,34 @@ public final class JavaProject implements Program {
         var ordinal = references.stream().filter(r -> r.site().equals(site)).count();
         var id = site + "@" + ordinal;
         nodes.put(id, use);
-        references.add(new Reference(id, site, ids.get(target), ((NodeWithSimpleName<?>) use).getNameAsString(), modeOf(use)));
+        var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
+                : ((NodeWithSimpleName<?>) use).getNameAsString();
+        var mode = use instanceof NameExpr && !target.contains("#") ? "type" : modeOf(use);
+        references.add(new Reference(id, site, ids.get(target), name, mode));
+    }
+
+    /** A name used as a type (e.g. the receiver in {@code Money.of(1)}): its qualified name, or null. */
+    private String resolveTypeName(NameExpr name) {
+        if (name.getParentNode().filter(p -> p instanceof MethodCallExpr || p instanceof FieldAccessExpr).isEmpty()) return null;
+        try {
+            var type = com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory.getContext(name, typeSolver)
+                    .solveType(name.getNameAsString());
+            return type.isSolved() ? type.getCorrespondingDeclaration().getQualifiedName() : null;
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
+    /** Address of the workspace constructor a {@code new} resolves to, or null. */
+    private static String resolveConstructor(ObjectCreationExpr creation) {
+        try {
+            var constructor = creation.resolve();
+            var params = new ArrayList<String>();
+            for (var i = 0; i < constructor.getNumberOfParams(); i++) params.add(simple(constructor.getParam(i).getType().describe()));
+            return constructor.declaringType().getQualifiedName() + "#new(" + String.join(",", params) + ")";
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
     }
 
     /** Qualified name of the type a type use resolves to, or null. */
@@ -641,6 +702,7 @@ public final class JavaProject implements Program {
 
     private static String modeOf(Node use) {
         if (use instanceof MethodCallExpr) return "call";
+        if (use instanceof ObjectCreationExpr) return "new";
         if (use instanceof ClassOrInterfaceType) return "type";
         var parent = use.getParentNode().orElseThrow();
         if (parent instanceof AssignExpr assign && assign.getTarget() == use) {
@@ -689,8 +751,10 @@ public final class JavaProject implements Program {
     private ElementId siteOf(Node node) {
         var type = node.findAncestor(TypeDeclaration.class).orElseThrow();
         var typeName = type.getFullyQualifiedName().orElseThrow().toString();
-        var method = node.findAncestor(MethodDeclaration.class);
-        if (method.isPresent()) return ids.get(methodAddress(typeName, method.get()));
+        var method = node.findAncestor(CallableDeclaration.class);
+        if (method.isPresent() && method.get().findAncestor(TypeDeclaration.class).orElse(null) == type) {
+            return ids.get(methodAddress(typeName, method.get()));
+        }
         var field = node.findAncestor(VariableDeclarator.class).filter(v -> v.getParentNode()
                 .filter(FieldDeclaration.class::isInstance).isPresent());
         return field.map(v -> ids.get(typeName + "#" + v.getNameAsString())).orElseGet(() -> ids.get(typeName));
@@ -700,8 +764,9 @@ public final class JavaProject implements Program {
      * {@code a.B#m(int,String)}: parameter types resolved (so declarations and calls agree) and written with simple
      * names (so moving a type does not change the address of the methods that take it).
      */
-    private static String methodAddress(String typeName, MethodDeclaration method) {
-        return typeName + "#" + method.getNameAsString() + method.getParameters().stream()
+    private static String methodAddress(String typeName, CallableDeclaration<?> method) {
+        var name = method instanceof ConstructorDeclaration ? "new" : method.getNameAsString();
+        return typeName + "#" + name + method.getParameters().stream()
                 .map(p -> simple(describe(p.getType()))).collect(Collectors.joining(",", "(", ")"));
     }
 
@@ -716,6 +781,14 @@ public final class JavaProject implements Program {
             return type.resolve().describe();
         } catch (RuntimeException unresolved) {
             return type.asString();
+        }
+    }
+
+    private void addParams(List<Element> elements, CallableDeclaration<?> callable, String address, ElementId owner) {
+        for (var param : callable.getParameters()) {
+            var paramAddress = address + "/" + param.getNameAsString();
+            elements.add(new Element(idOf(paramAddress, Kind.PARAM), Kind.PARAM, param.getNameAsString(),
+                    owner, paramAddress, Map.of("type", param.getType().asString())));
         }
     }
 
@@ -780,13 +853,17 @@ public final class JavaProject implements Program {
 
     private Node declaration(Element element) {
         if (element.kind() == Kind.PARAM) {
-            return ((MethodDeclaration) declaration(graph().element(element.parent())))
+            return ((CallableDeclaration<?>) declaration(graph().element(element.parent())))
                     .getParameterByName(element.name()).orElseThrow();
         }
         if (element.kind().isType()) return typeDeclaration(element.qualified());
         var type = typeDeclaration(graph().element(element.parent()).qualified());
         return switch (element.kind()) {
             case FIELD -> type.getFieldByName(element.name()).orElseThrow();
+            case CONSTRUCTOR -> type.getConstructors().stream()
+                    .filter(c -> methodAddress(element.qualified().substring(0, element.qualified().indexOf('#')), c)
+                            .equals(element.qualified()))
+                    .findFirst().orElseThrow();
             case METHOD -> type.getMethods().stream()
                     .filter(m -> methodAddress(element.qualified().substring(0, element.qualified().indexOf('#')), m)
                             .equals(element.qualified()))

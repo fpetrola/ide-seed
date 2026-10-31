@@ -84,3 +84,22 @@ refactoring safe-delete "Deletes an element if nothing uses it"
   param element : element(FIELD,METHOD) "what to delete"
   delete ${element}
 end
+
+refactoring introduce-factory "Static factory for a constructor; every new outside it goes through the factory"
+  param constructor : element(CONSTRUCTOR) "the constructor to hide"
+  param name : text "name of the factory method"
+  f := create METHOD ${owner(constructor)} ${name}
+  set ${f} visibility public
+  set ${f} static true
+  set ${f} type ${name(owner(constructor))}
+  for p in params(constructor)
+    q := create PARAM ${f} ${name(p)}
+    set ${q} type ${type(p)}
+  end
+  set ${f} body "return new #{${owner(constructor)}}(${join(paramnames(constructor), ", ")});"
+  for r in refs(constructor) | not-within f
+    retarget ${r} ${f}
+  end
+  set ${constructor} visibility private
+  return ${f}
+end
