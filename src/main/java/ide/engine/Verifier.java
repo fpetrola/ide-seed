@@ -6,7 +6,6 @@ import ide.program.Program;
 import ide.program.Reference;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,9 +20,8 @@ public final class Verifier {
 
     public List<Violation> verify(Program baseline, Program after) {
         var violations = new ArrayList<Violation>();
-        var lost = minus(baseline.references(), after.references());
-        var gained = minus(after.references(), baseline.references());
-        for (var ref : lost) violations.add(lost(ref, gained, baseline, after));
+        var diff = baseline.diff(after);
+        for (var ref : diff.lost()) violations.add(lost(ref, diff.gained(), baseline, after));
         var alreadyBroken = new java.util.HashSet<List<ElementId>>();
         for (var ref : baseline.references()) {
             if (baseline.contains(ref.site()) && baseline.contains(ref.target())
@@ -37,17 +35,6 @@ public final class Verifier {
         }
         violations.addAll(dispatch(baseline, after));
         return violations;
-    }
-
-    /** References in {@code a} with no counterpart (same site and target; the name may differ) in {@code b}. */
-    private static List<Reference> minus(List<Reference> a, List<Reference> b) {
-        var available = new HashMap<List<ElementId>, Integer>();
-        b.forEach(ref -> available.merge(List.of(ref.site(), ref.target()), 1, Integer::sum));
-        var result = new ArrayList<Reference>();
-        for (var ref : a) {
-            if (available.merge(List.of(ref.site(), ref.target()), -1, Integer::sum) < 0) result.add(ref);
-        }
-        return result;
     }
 
     /** Overriding must be the same before and after: no override lost, none gained. */
@@ -102,6 +89,6 @@ public final class Verifier {
     private static Violation inaccessible(Reference ref, Program graph) {
         var target = graph.element(ref.target());
         return new Violation("access.insufficient", ref.site(), ref.target(), graph.element(ref.site()).qualified()
-                + " cannot access " + target.attribute("visibility") + " " + target.qualified());
+                + " cannot access " + target.fact(ide.program.Fact.VISIBILITY) + " " + target.qualified());
     }
 }

@@ -3,6 +3,7 @@ package ide.java;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -16,7 +17,9 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import ide.program.Element;
 import ide.program.ElementId;
+import ide.program.Fact;
 import ide.program.Kind;
+import ide.program.Mode;
 import ide.program.Program;
 import ide.program.Reference;
 import java.util.ArrayList;
@@ -65,16 +68,15 @@ final class GraphReader {
                 var parent = type.getParentNode().filter(TypeDeclaration.class::isInstance)
                         .map(t -> ids.of(((TypeDeclaration<?>) t).getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(pkg);
                 var typeId = ids.of(typeName, Kind.CLASS);
-                var typeAttributes = new HashMap<>(typeAttributes(type));
-                if (type.isTopLevelType()) typeAttributes.put("file", unit.getKey());
+                var typeAttributes = new HashMap<>(attributes(type));
+                if (type.isTopLevelType()) typeAttributes.put(Fact.FILE, unit.getKey());
                 elements.add(new Element(typeId, kindOf(type),
                         type.getNameAsString(), parent, typeName, Map.copyOf(typeAttributes)));
                 for (var field : type.getFields()) {
                     for (var variable : field.getVariables()) {
                         var address = typeName + "#" + variable.getNameAsString();
                         var attributes = new HashMap<>(attributes(field));
-                        attributes.put("type", variable.getType().asString());
-                        declared(variable.getType()).ifPresent(d -> attributes.put("declared", d));
+                        attributes.put(Fact.TYPE, variable.getType().asString());
                         elements.add(new Element(ids.of(address, Kind.FIELD), Kind.FIELD,
                                 variable.getNameAsString(), typeId, address, Map.copyOf(attributes)));
                     }
@@ -90,10 +92,10 @@ final class GraphReader {
                     var address = methodAddress(typeName, method);
                     var methodId = ids.of(address, Kind.METHOD);
                     var methodAttributes = new HashMap<>(attributes(method));
-                    methodAttributes.put("type", method.getType().asString());
-                    method.getBody().ifPresent(b -> methodAttributes.put("body", b.toString().replaceAll("\\s+", " ")));
+                    methodAttributes.put(Fact.TYPE, method.getType().asString());
+                    method.getBody().ifPresent(b -> methodAttributes.put(Fact.BODY, b.toString().replaceAll("\\s+", " ")));
                     if (kindOf(type) == Kind.INTERFACE && method.getAccessSpecifier().asString().isEmpty()) {
-                        methodAttributes.put("visibility", "public"); // interface members are implicitly public
+                        methodAttributes.put(Fact.VISIBILITY, "public"); // interface members are implicitly public
                     }
                     elements.add(new Element(methodId, Kind.METHOD,
                             method.getNameAsString(), typeId, address, Map.copyOf(methodAttributes)));
@@ -147,7 +149,7 @@ final class GraphReader {
         var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
                 : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                 : ((NodeWithSimpleName<?>) use).getNameAsString();
-        var mode = use instanceof NameExpr && !target.contains("#") ? "type" : modeOf(use);
+        var mode = use instanceof NameExpr && !target.contains("#") ? Mode.TYPE : modeOf(use);
         references.add(new Reference(id, site, ids.get(target), name, mode));
     }
 
@@ -195,13 +197,15 @@ final class GraphReader {
         }
     }
 
-    /** The innermost member (method or field) containing the node, else its type. */
+    /** The innermost element containing the node: a parameter (its declared type), a method or field, else its type. */
     ElementId siteOf(Node node) {
         var type = node.findAncestor(TypeDeclaration.class).orElseThrow();
         var typeName = type.getFullyQualifiedName().orElseThrow().toString();
         var method = node.findAncestor(CallableDeclaration.class);
         if (method.isPresent() && method.get().findAncestor(TypeDeclaration.class).orElse(null) == type) {
-            return ids.get(methodAddress(typeName, method.get()));
+            var address = methodAddress(typeName, method.get());
+            var param = node.findAncestor(Parameter.class).filter(p -> p.getParentNode().orElse(null) == method.get());
+            return param.map(p -> ids.get(address + "/" + p.getNameAsString())).orElseGet(() -> ids.get(address));
         }
         var field = node.findAncestor(VariableDeclarator.class).filter(v -> v.getParentNode()
                 .filter(FieldDeclaration.class::isInstance).isPresent());
@@ -211,9 +215,8 @@ final class GraphReader {
     private void addParams(List<Element> elements, CallableDeclaration<?> callable, String address, ElementId owner) {
         for (var param : callable.getParameters()) {
             var paramAddress = address + "/" + param.getNameAsString();
-            var attributes = new HashMap<String, String>();
-            attributes.put("type", param.getType().asString());
-            declared(param.getType()).ifPresent(d -> attributes.put("declared", d));
+            var attributes = new HashMap<Fact, String>();
+            attributes.put(Fact.TYPE, param.getType().asString());
             elements.add(new Element(ids.of(paramAddress, Kind.PARAM), Kind.PARAM, param.getNameAsString(),
                     owner, paramAddress, Map.copyOf(attributes)));
         }

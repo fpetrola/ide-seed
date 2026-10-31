@@ -2,12 +2,15 @@ package ide.java;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.Modifier;
@@ -23,13 +26,13 @@ import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 
+import ide.program.Fact;
 import ide.program.Kind;
+import ide.program.Mode;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /** How uses resolve and how declarations are described in the graph: addresses, kinds, attributes. */
@@ -59,21 +62,39 @@ final class Resolution {
         }
     }
 
-    static String modeOf(Node use) {
-        if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr) return "call";
-        if (use instanceof ObjectCreationExpr) return "new";
-        if (use instanceof ClassOrInterfaceType) return "type";
+    static Mode modeOf(Node use) {
+        if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr) return Mode.CALL;
+        if (use instanceof ObjectCreationExpr) return Mode.NEW;
+        if (use instanceof ClassOrInterfaceType type) return linkMode(type);
         var parent = use.getParentNode().orElseThrow();
         if (parent instanceof AssignExpr assign && assign.getTarget() == use) {
-            return assign.getOperator() == AssignExpr.Operator.ASSIGN ? "write" : "update";
+            return assign.getOperator() == AssignExpr.Operator.ASSIGN ? Mode.WRITE : Mode.UPDATE;
         }
         if (parent instanceof UnaryExpr unary && (unary.getOperator().isPrefix() || unary.getOperator().isPostfix())
                 && unary.getOperator() != UnaryExpr.Operator.MINUS && unary.getOperator() != UnaryExpr.Operator.PLUS
                 && unary.getOperator() != UnaryExpr.Operator.LOGICAL_COMPLEMENT
                 && unary.getOperator() != UnaryExpr.Operator.BITWISE_COMPLEMENT) {
-            return "update";
+            return Mode.UPDATE;
         }
-        return "read";
+        return Mode.READ;
+    }
+
+    /**
+     * A type mention is a link when it is an extends or implements clause, or the whole declared type of a field,
+     * parameter or method; any other mention (a type argument, a local's type, a cast) is a plain type use.
+     */
+    static Mode linkMode(ClassOrInterfaceType type) {
+        var parent = type.getParentNode().orElse(null);
+        return switch (parent) {
+            case ClassOrInterfaceDeclaration c -> c.getExtendedTypes().stream().anyMatch(t -> t == type) ? Mode.EXTENDS
+                    : c.getImplementedTypes().stream().anyMatch(t -> t == type) ? Mode.IMPLEMENTS : Mode.TYPE;
+            case EnumDeclaration e -> e.getImplementedTypes().stream().anyMatch(t -> t == type) ? Mode.IMPLEMENTS : Mode.TYPE;
+            case Parameter p -> p.getType() == type ? Mode.DECLARED : Mode.TYPE;
+            case MethodDeclaration m -> m.getType() == type ? Mode.DECLARED : Mode.TYPE;
+            case VariableDeclarator v -> v.getType() == type
+                    && v.getParentNode().filter(FieldDeclaration.class::isInstance).isPresent() ? Mode.DECLARED : Mode.TYPE;
+            case null, default -> Mode.TYPE;
+        };
     }
 
     /** Address of a method reference's method ({@code Book::code}), or null. */
@@ -141,11 +162,6 @@ final class Resolution {
         }
     }
 
-    /** The qualified name of the type a declaration names, when it is a plain class or interface type. */
-    static Optional<String> declared(Type type) {
-        return type instanceof ClassOrInterfaceType named ? Optional.ofNullable(resolveType(named)) : Optional.empty();
-    }
-
     /** Classes, interfaces and enums of a unit, outermost first. */
     static List<TypeDeclaration<?>> types(CompilationUnit cu) {
         var types = new ArrayList<TypeDeclaration<?>>();
@@ -160,29 +176,12 @@ final class Resolution {
         return ((ClassOrInterfaceDeclaration) type).isInterface() ? Kind.INTERFACE : Kind.CLASS;
     }
 
-    /** visibility; superclass (classes); implements: interfaces implemented, or extended by an interface. */
-    static Map<String, String> typeAttributes(TypeDeclaration<?> type) {
-        var attributes = new HashMap<>(attributes(type));
-        NodeList<ClassOrInterfaceType> interfaces = new NodeList<>();
-        if (type instanceof ClassOrInterfaceDeclaration c && c.isInterface()) {
-            interfaces = c.getExtendedTypes();
-        } else if (type instanceof ClassOrInterfaceDeclaration c) {
-            if (c.getExtendedTypes().isNonEmpty()) {
-                var superclass = resolveType(c.getExtendedTypes(0));
-                if (superclass != null) attributes.put("superclass", superclass);
-            }
-            interfaces = c.getImplementedTypes();
-        } else if (type instanceof EnumDeclaration e) {
-            interfaces = e.getImplementedTypes();
-        }
-        attributes.put("implements", interfaces.stream().map(Resolution::resolveType)
-                .filter(java.util.Objects::nonNull).collect(Collectors.joining(",")));
-        return Map.copyOf(attributes);
-    }
-
-    static Map<String, String> attributes(NodeWithModifiers<?> node) {
+    /** The facts a declaration's modifiers state. */
+    static Map<Fact, String> attributes(NodeWithModifiers<?> node) {
         var visibility = node.getAccessSpecifier().asString();
-        return Map.of("visibility", visibility.isEmpty() ? "package" : visibility,
-                "static", String.valueOf(node.hasModifier(Modifier.Keyword.STATIC)));
+        return Map.of(Fact.VISIBILITY, visibility.isEmpty() ? "package" : visibility,
+                Fact.STATIC, String.valueOf(node.hasModifier(Modifier.Keyword.STATIC)),
+                Fact.ABSTRACT, String.valueOf(node.hasModifier(Modifier.Keyword.ABSTRACT)),
+                Fact.FINAL, String.valueOf(node.hasModifier(Modifier.Keyword.FINAL)));
     }
 }

@@ -103,7 +103,7 @@ public final class Repairer {
                 var value = switch (aspect) {
                     case "parent" -> String.valueOf(e.parent());
                     case "name" -> e.name();
-                    default -> e.attribute(aspect);
+                    default -> e.fact(ide.program.Fact.of(aspect));
                 };
                 state.put(id + "." + aspect, value);
             }

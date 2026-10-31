@@ -2,6 +2,7 @@ package ide.java;
 
 import ide.program.Element;
 import ide.program.ElementId;
+import ide.program.Fact;
 import ide.projection.LanguageRules;
 import ide.program.Program;
 
@@ -13,7 +14,7 @@ public final class JavaRules implements LanguageRules {
     @Override
     public boolean accessible(Program graph, ElementId site, ElementId target) {
         var element = graph.element(target);
-        return switch (element.attribute("visibility")) {
+        return switch (element.fact(Fact.VISIBILITY)) {
             case "public" -> true;
             case "private" -> graph.topLevel(site).id().equals(graph.topLevel(target).id());
             case "package" -> samePackage(graph, site, target);
@@ -26,7 +27,7 @@ public final class JavaRules implements LanguageRules {
     @Override
     public List<String> importCandidates(Program graph, String simpleName) {
         var candidates = new java.util.ArrayList<String>();
-        graph.types().stream().filter(t -> t.name().equals(simpleName) && t.attribute("file") != null)
+        graph.types().stream().filter(t -> t.name().equals(simpleName) && t.fact(Fact.FILE) != null)
                 .forEach(t -> candidates.add(t.qualified()));
         candidates.addAll(JdkTypes.named(simpleName));
         return candidates;

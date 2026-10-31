@@ -2,6 +2,7 @@ package ide.refactoring.script;
 
 import ide.program.Element;
 import ide.program.ElementId;
+import ide.program.Fact;
 import ide.projection.LanguageRules;
 import ide.program.Program;
 
@@ -31,9 +32,9 @@ final class ScriptFunctions {
             case "qualified" -> element(args, 0).qualified();
             case "owner" -> id(element(args, 0).parent());
             case "top" -> graph.topLevel(element(args, 0).id()).id().value();
-            case "attr" -> element(args, 0).attribute(text(args, 1));
-            case "type" -> element(args, 0).attribute("type");
-            case "superclass" -> element(args, 0).attribute("superclass");
+            case "attr" -> element(args, 0).fact(Fact.of(text(args, 1)));
+            case "type" -> element(args, 0).fact(Fact.TYPE);
+            case "superclass" -> graph.superclass(element(args, 0).id()).map(Element::qualified).orElse(null);
             case "enclosing" -> graph.enclosingType(element(args, 0).id()).id().value();
             case "subclass-of" -> graph.isSubclass(element(args, 0), element(args, 1));
             case "member-named" -> graph.members(element(args, 0).id()).stream()
@@ -53,7 +54,7 @@ final class ScriptFunctions {
             // language
             case "wider" -> {
                 var all = rules.visibilities(graph, element(args, 0).id());
-                yield all.subList(all.indexOf(element(args, 0).attribute("visibility")) + 1, all.size());
+                yield all.subList(all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1, all.size());
             }
             case "import-candidates" -> rules.importCandidates(graph, text(args, 0));
             case "is-type-name" -> !text(args, 0).isEmpty() && Character.isUpperCase(text(args, 0).charAt(0));
@@ -64,14 +65,13 @@ final class ScriptFunctions {
             case "params" -> ids(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList());
             case "paramnames" -> graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).map(Element::name).toList();
             case "constructors" -> ids(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
-            case "body" -> element(args, 0).attribute("body");
+            case "body" -> element(args, 0).fact(Fact.BODY);
             case "types-of" -> ids(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
-            case "subclasses" -> ids(graph.types().stream()
-                    .filter(t -> element(args, 0).qualified().equals(t.attribute("superclass"))).toList());
+            case "subclasses" -> ids(graph.subclasses(element(args, 0).id()));
             case "family" -> ids(graph.family(element(args, 0)));
             case "refs" -> graph.referencesTo(element(args, 0).id()).stream().map(r -> r.id()).toList();
             // references
-            case "mode" -> graph.reference(text(args, 0)).mode();
+            case "mode" -> graph.reference(text(args, 0)).mode().label();
             case "site" -> graph.reference(text(args, 0)).site().value();
             case "target" -> graph.reference(text(args, 0)).target().value();
             // text and logic
@@ -101,7 +101,7 @@ final class ScriptFunctions {
             case "with-attr" -> {
                 var spec = String.valueOf(arg);
                 var eq = spec.indexOf('=');
-                yield spec.substring(eq + 1).equals(element(item).attribute(spec.substring(0, eq)));
+                yield spec.substring(eq + 1).equals(element(item).fact(Fact.of(spec.substring(0, eq))));
             }
             default -> throw new IllegalArgumentException("unknown script filter: " + name);
         };

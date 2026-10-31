@@ -37,6 +37,8 @@ import ide.program.Element;
 
 import static ide.java.Resolution.*;
 import ide.program.ElementId;
+import ide.program.Fact;
+import ide.program.Mode;
 import ide.program.Kind;
 import ide.projection.Projection;
 import ide.program.Program;
@@ -296,7 +298,7 @@ public final class JavaProject implements Projection {
     private void moveType(Element type, Element pkg) {
         var oldPackage = packageOf(type.qualified());
         var newQualified = pkg.qualified() + "." + type.name();
-        var oldPath = type.attribute("file");
+        var oldPath = type.fact(Fact.FILE);
         if (oldPath == null) throw new IllegalArgumentException("only top-level types move to packages: " + type);
         var newPath = pkg.qualified().replace('.', '/') + "/" + type.name() + ".java";
         if (units.containsKey(newPath)) throw new IllegalArgumentException("already exists: " + newPath);
@@ -455,7 +457,7 @@ public final class JavaProject implements Projection {
         units.forEach((path, cu) -> cu.getImports().stream()
                 .filter(i -> !i.isAsterisk() && !i.isStatic() && i.getNameAsString().equals(type.qualified()))
                 .forEach(i -> edits.computeIfAbsent(path, k -> new ArrayList<>()).add(Map.entry(i.getName(), renamed))));
-        var oldPath = type.attribute("file");
+        var oldPath = type.fact(Fact.FILE);
         applyEdits(edits);
         if (oldPath != null && oldPath.endsWith("/" + type.name() + ".java")) {
             var newPath = oldPath.substring(0, oldPath.length() - (type.name() + ".java").length()) + name + ".java";
@@ -573,7 +575,7 @@ public final class JavaProject implements Projection {
         var uses = g.referencesTo(type.id()).stream().filter(r -> !inside(g, r.site(), type.id()))
                 .map(r -> g.element(r.site()).qualified()).distinct().toList();
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", type.qualified() + " is used by " + uses);
-        var path = type.attribute("file");
+        var path = type.fact(Fact.FILE);
         if (path == null) throw new IllegalArgumentException("only top-level types can be deleted so far: " + type);
         var edits = new LinkedHashMap<String, String>();
         units.forEach((p, cu) -> cu.getImports().stream()
@@ -858,12 +860,12 @@ public final class JavaProject implements Projection {
     @Override
     public void retarget(String refId, ElementId targetId) {
         var ref = graph().reference(refId);
-        if (ref.mode().equals("type")) {
+        if (ref.mode().isTypeUse()) {
             retargetType(ref, graph().element(targetId));
             return;
         }
         var node = (Expression) referenceNodes.get(refId);
-        if (node.isObjectCreationExpr() && !ref.mode().equals("new")) throw new IllegalStateException(ref.toString());
+        if (node.isObjectCreationExpr() && ref.mode() != Mode.NEW) throw new IllegalStateException(ref.toString());
         var target = graph().element(targetId);
         if (target.kind() == graph().element(ref.target()).kind()) { // same kind: the use just names the other one
             switch (referenceNodes.get(refId)) {
@@ -878,8 +880,8 @@ public final class JavaProject implements Projection {
         var scope = node.isFieldAccessExpr() ? node.asFieldAccessExpr().getScope() : null;
         if (node.isObjectCreationExpr()) scope = null;
         switch (ref.mode()) {
-            case "read" -> node.replace(new MethodCallExpr(scope, target.name()));
-            case "new" -> {
+            case READ -> node.replace(new MethodCallExpr(scope, target.name()));
+            case NEW -> {
                 var creation = (ObjectCreationExpr) node;
                 if (creation.getAnonymousClassBody().isPresent()) {
                     throw new PrimitiveRejected("retarget.anonymous-class", "cannot turn " + creation + " into a call");
@@ -887,14 +889,14 @@ public final class JavaProject implements Projection {
                 creation.replace(new MethodCallExpr(new NameExpr(creation.getType().asString()), target.name(),
                         creation.getArguments()));
             }
-            case "write" -> {
+            case WRITE -> {
                 var assign = (AssignExpr) node.getParentNode().orElseThrow();
                 if (!(assign.getParentNode().orElseThrow() instanceof ExpressionStmt)) {
                     throw new PrimitiveRejected("retarget.value-used", "the value of " + assign + " is used");
                 }
                 assign.replace(new MethodCallExpr(scope, target.name(), new NodeList<>(assign.getValue())));
             }
-            default -> throw new PrimitiveRejected("retarget." + ref.mode(),
+            default -> throw new PrimitiveRejected("retarget." + ref.mode().label(),
                     "cannot express " + node.getParentNode().orElseThrow() + " with " + target.qualified());
         }
         changed();

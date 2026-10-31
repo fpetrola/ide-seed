@@ -297,7 +297,7 @@ public final class Workspace {
         for (var type : graph.superclassChain(context.get().receiver())) {
             for (var member : graph.members(type.id())) {
                 if (!member.name().startsWith(context.get().prefix())) continue;
-                if (context.get().staticOnly() && !"true".equals(member.attribute("static"))) continue;
+                if (context.get().staticOnly() && !"true".equals(member.fact(ide.program.Fact.STATIC))) continue;
                 if (!rules.accessible(graph, context.get().site(), member.id())) continue;
                 labels.add(member.kind() == ide.program.Kind.METHOD ? member.name() + "()" : member.name());
             }
@@ -311,7 +311,7 @@ public final class Workspace {
         var lines = new java.util.ArrayList<String>();
         graph.types().forEach(t -> collect(graph, t, lines));
         graph.references().forEach(r -> lines.add(graph.element(r.site()).qualified() + " -> "
-                + graph.element(r.target()).qualified() + " (" + r.mode() + ")"));
+                + graph.element(r.target()).qualified() + " (" + r.mode().label() + ")"));
         lines.sort(null);
         return lines;
     }
@@ -334,7 +334,7 @@ public final class Workspace {
             var next = pending.poll();
             if (targets.add(next.id())) pending.addAll(graph.overriddenAll(next));
         }
-        return graph.references().stream().filter(r -> r.mode().equals("call") && targets.contains(r.target()))
+        return graph.references().stream().filter(r -> r.mode() == ide.program.Mode.CALL && targets.contains(r.target()))
                 .map(r -> graph.element(r.site()).qualified()).distinct().sorted().toList();
     }
 

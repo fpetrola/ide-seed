@@ -180,22 +180,22 @@ public final class Transaction implements Projection {
 
     @Override
     public void set(ElementId element, String attribute, String value) {
-        var oldSuperclass = attribute.equals("superclass")
-                ? projection.graph().find(String.valueOf(projection.graph().element(element).attribute("superclass"))) : null;
-        var before = projection.graph().element(element);
-        var oldDeclared = attribute.equals("type") ? projection.graph().find(String.valueOf(before.attribute("declared"))) : null;
+        var oldLink = link(element, attribute);
         projection.set(element, attribute, value);
-        if (oldDeclared != null && oldDeclared.isPresent()) { // the declaration now names another type, on purpose
-            var site = before.kind() == ide.program.Kind.PARAM ? before.parent() : element;
-            var now = projection.graph().element(element).attribute("declared");
-            projection.graph().find(String.valueOf(now))
-                    .ifPresent(to -> baseline = baseline.retargeted(site, oldDeclared.get().id(), to.id()));
-        }
+        // the declaration now links to another type, on purpose: the baseline expects the new link
+        oldLink.ifPresent(old -> link(element, attribute)
+                .ifPresent(now -> baseline = baseline.retargeted(element, old.id(), now.id())));
         if (attribute.equals("visibility")) pin(element, "visibility");
-        if (oldSuperclass != null && oldSuperclass.isPresent()) { // an intended rebinding of the extends clause
-            projection.graph().find(value).ifPresent(to -> baseline = baseline.retargeted(element, oldSuperclass.get().id(), to.id()));
-        }
         log("' set " + name(element) + " " + attribute + " = " + value);
+    }
+
+    /** The workspace type an attribute links to: the superclass, or the declared type. */
+    private java.util.Optional<ide.program.Element> link(ElementId element, String attribute) {
+        return switch (attribute) {
+            case "superclass" -> projection.graph().superclass(element);
+            case "type" -> projection.graph().declaredType(element);
+            default -> java.util.Optional.empty();
+        };
     }
 
     @Override
