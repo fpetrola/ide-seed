@@ -4,7 +4,11 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
+import ide.graph.PrimitiveRejected;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -31,6 +35,7 @@ import ide.graph.ProgramGraph;
 import ide.graph.Reference;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,6 +62,7 @@ public final class JavaProject implements Program {
     private Map<String, ElementId> ids = new HashMap<>();
     private int nextId;
     private ProgramGraph graph;
+    private Map<String, Node> referenceNodes = Map.of();
 
     private JavaProject() {
         var solver = new WorkspaceTypeSolver(units::values, new ReflectionTypeSolver());
@@ -84,7 +90,17 @@ public final class JavaProject implements Program {
         snapshot.sources().forEach(this::load);
         ids = new HashMap<>(snapshot.ids());
         nextId = snapshot.nextId();
-        graph = null;
+        invalidate();
+    }
+
+    @Override
+    public Object checkpoint() {
+        return snapshot();
+    }
+
+    @Override
+    public void rollback(Object checkpoint) {
+        restore((Snapshot) checkpoint);
     }
 
     @Override
@@ -95,17 +111,41 @@ public final class JavaProject implements Program {
 
     // ---- primitives
 
-    /** Creates a top-level class in its own compilation unit (only kind supported so far). */
+    /**
+     * Creates an empty element: a top-level class in its own unit, a {@code void} method without parameters at the
+     * end of a type, or an {@code Object} parameter at the end of a method.
+     */
     @Override
     public ElementId create(Kind kind, ElementId parent, String name) {
-        var pkg = graph().element(parent);
-        if (kind != Kind.CLASS || pkg.kind() != Kind.PACKAGE) {
-            throw new IllegalArgumentException("unsupported create: " + kind + " in " + pkg);
-        }
-        var path = pkg.qualified().replace('.', '/') + "/" + name + ".java";
-        if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
-        load(path, "package " + pkg.qualified() + ";\n\npublic class " + name + " {\n}\n");
-        return idOf(pkg.qualified() + "." + name, Kind.CLASS);
+        var owner = graph().element(parent);
+        return switch (kind) {
+            case CLASS -> {
+                if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("classes go in packages: " + owner);
+                var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
+                if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
+                load(path, "package " + owner.qualified() + ";\n\npublic class " + name + " {\n}\n");
+                yield idOf(owner.qualified() + "." + name, Kind.CLASS);
+            }
+            case METHOD -> {
+                insertMember(typeDeclaration(owner.qualified()), "void " + name + "() {\n" + " ".repeat(4) + "}");
+                yield idOf(owner.qualified() + "#" + name + "()", Kind.METHOD);
+            }
+            case PARAM -> {
+                var method = editMethod(owner, m -> m.addParameter("Object", name));
+                yield idOf(method + "/" + name, Kind.PARAM);
+            }
+            default -> throw new IllegalArgumentException("unsupported create: " + kind);
+        };
+    }
+
+    /** Edits a method's declaration and carries its identity (and its parameters') to its new address. */
+    private String editMethod(Element method, java.util.function.Consumer<MethodDeclaration> edit) {
+        var node = (MethodDeclaration) declaration(method);
+        edit.accept(node);
+        var address = methodAddress(method.qualified().substring(0, method.qualified().indexOf('#')), node);
+        changed();
+        transfer(method.qualified(), address);
+        return address;
     }
 
     /** Moves a member into another type, keeping its identity. */
@@ -114,12 +154,13 @@ public final class JavaProject implements Program {
         var g = graph();
         var element = g.element(member);
         var target = g.element(newParent);
-        var anchor = before == null ? null : declaration(g.element(before));
+        var anchor = before == null ? null : g.element(before);
         var node = declaration(element);
         var text = LexicalPreservingPrinter.print(node).strip();
         node.remove();
+        changed();
         if (anchor == null) insertMember(typeDeclaration(target.qualified()), text);
-        else insertBefore(anchor, text);
+        else insertBefore(declaration(anchor), text);
         var signature = element.qualified().substring(element.qualified().indexOf('#'));
         transfer(element.qualified(), target.qualified() + signature);
     }
@@ -131,6 +172,7 @@ public final class JavaProject implements Program {
         var uses = usesOf(element.qualified());
         var node = declaration(element);
         switch (node) {
+            case com.github.javaparser.ast.body.Parameter param -> param.setName(name);
             case FieldDeclaration field -> field.getVariables().stream()
                     .filter(v -> v.getNameAsString().equals(element.name())).forEach(v -> v.setName(name));
             case MethodDeclaration method -> method.setName(name);
@@ -163,9 +205,36 @@ public final class JavaProject implements Program {
         switch (attribute) {
             case "visibility" -> setVisibility(id, value);
             case "superclass" -> setSuperclass(id, value);
+            case "type" -> setType(id, value);
+            case "body" -> setBody(id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
         changed();
+    }
+
+    private void setType(ElementId id, String type) {
+        var element = graph().element(id);
+        var parsed = parser.parseType(type).getResult().orElseThrow();
+        switch (element.kind()) {
+            case METHOD -> ((MethodDeclaration) declaration(element)).setType(parsed);
+            case PARAM -> editMethod(graph().element(element.parent()),
+                    m -> m.getParameterByName(element.name()).orElseThrow().setType(parsed));
+            default -> throw new IllegalArgumentException("unsupported type change: " + element);
+        }
+    }
+
+    /** Replaces a method body with a one-statement-per-line template; {@code #{id}} renders as the element's name. */
+    private void setBody(ElementId id, String template) {
+        var method = (MethodDeclaration) declaration(graph().element(id));
+        var body = method.getBody().orElseThrow();
+        var indent = " ".repeat(method.getBegin().orElseThrow().column - 1);
+        var statements = render(template).lines().map(line -> indent + "    " + line + "\n").collect(Collectors.joining());
+        replaceText(body, "{\n" + statements + indent + "}");
+    }
+
+    private String render(String template) {
+        var matcher = java.util.regex.Pattern.compile("#\\{([^}]+)}").matcher(template);
+        return matcher.replaceAll(m -> graph().element(new ElementId(m.group(1))).name());
     }
 
     /** Sets the superclass by its qualified name, written as a simple name when in the same package. */
@@ -185,11 +254,39 @@ public final class JavaProject implements Program {
         if (!value.equals("package")) modifiers.addFirst(new Modifier(Modifier.Keyword.valueOf(value.toUpperCase())));
     }
 
+    /**
+     * Retargets a field use to an accessor: a read becomes {@code getter()}, a write {@code x = v} used as a statement
+     * becomes {@code setter(v)}. Updates (compound assignment, ++/--) and assignments whose value is used are rejected:
+     * they would change how many times things are evaluated.
+     */
+    @Override
+    public void retarget(String refId, ElementId targetId) {
+        var ref = graph().reference(refId);
+        var node = (Expression) referenceNodes.get(refId);
+        var target = graph().element(targetId);
+        if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
+        var scope = node.isFieldAccessExpr() ? node.asFieldAccessExpr().getScope() : null;
+        switch (ref.mode()) {
+            case "read" -> node.replace(new MethodCallExpr(scope, target.name()));
+            case "write" -> {
+                var assign = (AssignExpr) node.getParentNode().orElseThrow();
+                if (!(assign.getParentNode().orElseThrow() instanceof ExpressionStmt)) {
+                    throw new PrimitiveRejected("retarget.value-used", "the value of " + assign + " is used");
+                }
+                assign.replace(new MethodCallExpr(scope, target.name(), new NodeList<>(assign.getValue())));
+            }
+            default -> throw new PrimitiveRejected("retarget." + ref.mode(),
+                    "cannot express " + node.getParentNode().orElseThrow() + " with " + target.qualified());
+        }
+        changed();
+    }
+
     // ---- projection: graph from AST
 
     private ProgramGraph buildGraph() {
         var elements = new ArrayList<Element>();
         var references = new ArrayList<Reference>();
+        var nodes = new HashMap<String, Node>();
         var packages = new LinkedHashMap<String, ElementId>();
         for (var cu : units.values()) {
             var pkg = cu.getPackageDeclaration().map(p -> {
@@ -210,27 +307,63 @@ public final class JavaProject implements Program {
                 for (var field : type.getFields()) {
                     for (var variable : field.getVariables()) {
                         var address = typeName + "#" + variable.getNameAsString();
+                        var attributes = new HashMap<>(attributes(field));
+                        attributes.put("type", variable.getType().asString());
                         elements.add(new Element(idOf(address, Kind.FIELD), Kind.FIELD,
-                                variable.getNameAsString(), typeId, address, attributes(field)));
+                                variable.getNameAsString(), typeId, address, Map.copyOf(attributes)));
                     }
                 }
                 for (var method : type.getMethods()) {
                     var address = methodAddress(typeName, method);
-                    elements.add(new Element(idOf(address, Kind.METHOD), Kind.METHOD,
+                    var methodId = idOf(address, Kind.METHOD);
+                    elements.add(new Element(methodId, Kind.METHOD,
                             method.getNameAsString(), typeId, address, attributes(method)));
+                    for (var param : method.getParameters()) {
+                        var paramAddress = address + "/" + param.getNameAsString();
+                        elements.add(new Element(idOf(paramAddress, Kind.PARAM), Kind.PARAM, param.getNameAsString(),
+                                methodId, paramAddress, Map.of("type", param.getType().asString())));
+                    }
                 }
             }
-            for (var expr : fieldUses(cu)) addReference(references, expr, resolveField(expr));
-            for (var call : cu.findAll(MethodCallExpr.class)) addReference(references, call, resolveMethod(call));
+            var uses = new ArrayList<Node>();
+            uses.addAll(fieldUses(cu));
+            uses.addAll(cu.findAll(MethodCallExpr.class));
+            uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
+            for (var use : uses) {
+                var target = use instanceof MethodCallExpr call ? resolveMethod(call) : resolveField((Expression) use);
+                addReference(references, nodes, use, target);
+            }
         }
+        referenceNodes = nodes;
         return new ProgramGraph(elements, references);
     }
 
-    /** Records a use of a workspace element; uses of JDK elements and unresolved ones are not tracked yet. */
-    private void addReference(List<Reference> references, Node site, String target) {
+    /**
+     * Records a use of a workspace element (JDK and unresolved uses are not tracked yet).
+     * Its id is the site plus the ordinal of the use within the site, in source order.
+     */
+    private void addReference(List<Reference> references, Map<String, Node> nodes, Node use, String target) {
         if (target == null || !ids.containsKey(target)) return;
-        var name = ((NodeWithSimpleName<?>) site).getNameAsString();
-        references.add(new Reference(siteOf(site), ids.get(target), name));
+        var site = siteOf(use);
+        var ordinal = references.stream().filter(r -> r.site().equals(site)).count();
+        var id = site + "@" + ordinal;
+        nodes.put(id, use);
+        references.add(new Reference(id, site, ids.get(target), ((NodeWithSimpleName<?>) use).getNameAsString(), modeOf(use)));
+    }
+
+    private static String modeOf(Node use) {
+        if (use instanceof MethodCallExpr) return "call";
+        var parent = use.getParentNode().orElseThrow();
+        if (parent instanceof AssignExpr assign && assign.getTarget() == use) {
+            return assign.getOperator() == AssignExpr.Operator.ASSIGN ? "write" : "update";
+        }
+        if (parent instanceof UnaryExpr unary && (unary.getOperator().isPrefix() || unary.getOperator().isPostfix())
+                && unary.getOperator() != UnaryExpr.Operator.MINUS && unary.getOperator() != UnaryExpr.Operator.PLUS
+                && unary.getOperator() != UnaryExpr.Operator.LOGICAL_COMPLEMENT
+                && unary.getOperator() != UnaryExpr.Operator.BITWISE_COMPLEMENT) {
+            return "update";
+        }
+        return "read";
     }
 
     /** Address of the method the call resolves to, or null if unresolvable. */
@@ -307,13 +440,25 @@ public final class JavaProject implements Program {
         return ids.computeIfAbsent(address, a -> new ElementId(kind.prefix() + ":" + nextId++));
     }
 
+    /** Moves the identity at {@code oldAddress}, and that of everything addressed under it, to {@code newAddress}. */
     private void transfer(String oldAddress, String newAddress) {
-        ids.put(newAddress, ids.remove(oldAddress));
+        if (oldAddress.equals(newAddress)) return;
+        for (var address : List.copyOf(ids.keySet())) {
+            if (address.equals(oldAddress)) {
+                ids.put(newAddress, ids.remove(address));
+            } else if (address.startsWith(oldAddress) && "#/.".indexOf(address.charAt(oldAddress.length())) >= 0) {
+                ids.put(newAddress + address.substring(oldAddress.length()), ids.remove(address));
+            }
+        }
     }
 
     // ---- AST lookup and text edits
 
-    private BodyDeclaration<?> declaration(Element element) {
+    private Node declaration(Element element) {
+        if (element.kind() == Kind.PARAM) {
+            return ((MethodDeclaration) declaration(graph().element(element.parent())))
+                    .getParameterByName(element.name()).orElseThrow();
+        }
         var type = typeDeclaration(graph().element(element.parent()).qualified());
         return switch (element.kind()) {
             case FIELD -> type.getFieldByName(element.name()).orElseThrow();
@@ -342,7 +487,7 @@ public final class JavaProject implements Program {
     }
 
     /** Inserts a member as a text edit on the lines just above {@code anchor}, then re-parses the unit. */
-    private void insertBefore(BodyDeclaration<?> anchor, String memberText) {
+    private void insertBefore(Node anchor, String memberText) {
         var path = pathOf(anchor.findCompilationUnit().orElseThrow());
         var code = source(path);
         var offset = lineStart(code, anchor.getBegin().orElseThrow().line);
@@ -350,14 +495,40 @@ public final class JavaProject implements Program {
         load(path, code.substring(0, offset) + indent + memberText + "\n\n" + code.substring(offset));
     }
 
-    private void load(String path, String code) {
-        units.put(path, LexicalPreservingPrinter.setup(parser.parse(code).getResult().orElseThrow()));
-        changed();
+    /** Replaces the text of a node, then re-parses its unit. */
+    private void replaceText(Node node, String text) {
+        var path = pathOf(node.findCompilationUnit().orElseThrow());
+        var code = source(path);
+        var range = node.getRange().orElseThrow();
+        var start = lineStart(code, range.begin.line) + range.begin.column - 1;
+        var end = lineStart(code, range.end.line) + range.end.column;
+        load(path, code.substring(0, start) + text + code.substring(end));
     }
 
+    private void load(String path, String code) {
+        units.put(path, parse(code));
+        invalidate();
+    }
+
+    private CompilationUnit parse(String code) {
+        var result = parser.parse(code);
+        if (!result.isSuccessful()) throw new IllegalStateException("unparsable result: " + result.getProblems() + "\n" + code);
+        return LexicalPreservingPrinter.setup(result.getResult().orElseThrow());
+    }
+
+    /**
+     * After an in-place AST edit: re-parses every unit from its text, so positions match the text again and no
+     * resolution runs on an edited AST.
+     */
     private void changed() {
-        JavaParserFacade.clearInstances(); // resolution caches point into replaced or edited ASTs
+        units.replaceAll((path, cu) -> parse(LexicalPreservingPrinter.print(cu)));
+        invalidate();
+    }
+
+    private void invalidate() {
+        JavaParserFacade.clearInstances(); // resolution caches point into replaced ASTs
         graph = null;
+        referenceNodes = Map.of();
     }
 
     private String pathOf(CompilationUnit cu) {

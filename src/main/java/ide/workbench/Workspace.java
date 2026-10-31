@@ -4,12 +4,18 @@ import ide.coherence.OpenVisibility;
 import ide.coherence.PullUpDependency;
 import ide.coherence.Repairer;
 import ide.coherence.Result;
+import ide.coherence.Transaction;
+import ide.coherence.Violation;
+import ide.graph.PrimitiveRejected;
 import ide.graph.Program;
 import ide.java.JavaProject;
 import ide.java.JavaRules;
 import ide.refactor.Args;
 import ide.refactor.Ctx;
+import ide.refactor.EncapsulateField;
 import ide.refactor.ExtractSuperclass;
+import ide.refactor.GenerateGetter;
+import ide.refactor.GenerateSetter;
 import ide.refactor.PullUp;
 import ide.refactor.Refactoring;
 import ide.refactor.Rename;
@@ -26,7 +32,8 @@ public final class Workspace {
 
     private final JavaProject project;
     private final Repairer repairer = new Repairer(new JavaRules(), List.of(new OpenVisibility(), new PullUpDependency()));
-    private final Map<String, Refactoring> refactorings = Stream.of(new Rename(), new RenameMethodFamily(), PullUp.field(), PullUp.method(), new ExtractSuperclass())
+    private final Map<String, Refactoring> refactorings = Stream.of(new Rename(), new RenameMethodFamily(), PullUp.field(), PullUp.method(), new ExtractSuperclass(),
+                    new GenerateGetter(), new GenerateSetter(), new EncapsulateField())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
 
     private Workspace(JavaProject project) {
@@ -41,26 +48,26 @@ public final class Workspace {
         return project.source(path);
     }
 
-    /** Runs a refactoring naively, then verifies and repairs; rolls back if violations remain. */
+    /** Runs a refactoring naively in a transaction, then verifies and repairs; rolls back if violations remain. */
     public Result invoke(String refactoring, Map<String, ?> args) {
-        var snapshot = project.snapshot();
-        var baseline = project.graph();
+        var tx = new Transaction(project);
         var ctx = new Ctx() {
             @Override
             public Program program() {
-                return project;
+                return tx;
             }
 
             @Override
-            public void call(String id, Map<String, ?> callArgs) {
-                refactoring(id).apply(this, new Args(callArgs));
+            public String call(String id, Map<String, ?> callArgs) {
+                return refactoring(id).apply(this, new Args(callArgs));
             }
         };
-        ctx.call(refactoring, args);
-        var outcome = repairer.stabilize(baseline, project);
-        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs());
-        project.restore(snapshot);
-        return Result.aborted(outcome.violations());
+        try {
+            ctx.call(refactoring, args);
+        } catch (PrimitiveRejected rejected) {
+            return tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
+        }
+        return tx.commit(repairer);
     }
 
     private Refactoring refactoring(String id) {

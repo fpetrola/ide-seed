@@ -1,7 +1,7 @@
 package ide.graph;
 
 public enum Kind {
-    PACKAGE, CLASS, INTERFACE, FIELD, METHOD;
+    PACKAGE, CLASS, INTERFACE, FIELD, METHOD, PARAM;
 
     public String prefix() {
         return switch (this) {
@@ -9,6 +9,7 @@ public enum Kind {
             case CLASS, INTERFACE -> "type";
             case FIELD -> "field";
             case METHOD -> "method";
+            case PARAM -> "param";
         };
     }
 }

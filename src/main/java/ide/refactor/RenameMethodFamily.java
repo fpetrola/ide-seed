@@ -11,11 +11,12 @@ public final class RenameMethodFamily implements Refactoring {
     }
 
     @Override
-    public void apply(Ctx ctx, Args args) {
+    public String apply(Ctx ctx, Args args) {
         var graph = ctx.program().graph();
         var name = args.text("name");
         for (var member : graph.family(args.element("method", graph))) {
             ctx.call("rename", Map.of("element", ctx.program().graph().element(member.id()).qualified(), "name", name));
         }
+        return null;
     }
 }

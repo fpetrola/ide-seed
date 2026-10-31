@@ -25,12 +25,13 @@ public final class PullUp implements Refactoring {
     }
 
     @Override
-    public void apply(Ctx ctx, Args args) {
+    public String apply(Ctx ctx, Args args) {
         var graph = ctx.program().graph();
         var member = args.element(parameter, graph);
         var superclass = graph.element(member.parent()).attribute("superclass");
         var target = graph.find(superclass)
                 .orElseThrow(() -> new IllegalArgumentException("superclass not in workspace: " + superclass));
         ctx.program().move(member.id(), target.id());
+        return null;
     }
 }

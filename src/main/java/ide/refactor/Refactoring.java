@@ -5,5 +5,6 @@ public interface Refactoring {
 
     String id();
 
-    void apply(Ctx ctx, Args args);
+    /** Applies the change; returns the id of the element it produced, if any (else null). */
+    String apply(Ctx ctx, Args args);
 }

@@ -5,6 +5,12 @@ public interface Program {
 
     ProgramGraph graph();
 
+    /** Captures the whole program state (text and identity). */
+    Object checkpoint();
+
+    /** Returns to a state captured by {@link #checkpoint()}. */
+    void rollback(Object checkpoint);
+
     /** Creates an empty element of {@code kind} named {@code name} inside {@code parent}. */
     ElementId create(Kind kind, ElementId parent, String name);
 
@@ -18,5 +24,9 @@ public interface Program {
     /** Renames an element; every use of it is rewritten. */
     void rename(ElementId element, String name);
 
+    /** Sets an attribute; {@code body} takes a template where {@code #{id}} stands for the element {@code id}. */
     void set(ElementId element, String attribute, String value);
+
+    /** Points reference {@code ref} at {@code target}, changing the shape of the site as needed. */
+    void retarget(String ref, ElementId target);
 }

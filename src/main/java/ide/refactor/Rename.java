@@ -9,7 +9,9 @@ public final class Rename implements Refactoring {
     }
 
     @Override
-    public void apply(Ctx ctx, Args args) {
-        ctx.program().rename(args.element("element", ctx.program().graph()).id(), args.text("name"));
+    public String apply(Ctx ctx, Args args) {
+        var element = args.element("element", ctx.program().graph()).id();
+        ctx.program().rename(element, args.text("name"));
+        return element.value();
     }
 }

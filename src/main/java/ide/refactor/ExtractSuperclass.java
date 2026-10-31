@@ -13,7 +13,7 @@ public final class ExtractSuperclass implements Refactoring {
     }
 
     @Override
-    public void apply(Ctx ctx, Args args) {
+    public String apply(Ctx ctx, Args args) {
         var program = ctx.program();
         var type = args.element("type", program.graph());
         var fields = args.elements("fields", program.graph());
@@ -23,5 +23,6 @@ public final class ExtractSuperclass implements Refactoring {
         if (oldSuperclass != null) program.set(base, "superclass", oldSuperclass);
         program.set(type.id(), "superclass", program.graph().element(base).qualified());
         for (var field : fields) ctx.call("pull-up-field", Map.of("field", program.graph().element(field.id()).qualified()));
+        return base.value();
     }
 }

@@ -37,6 +37,28 @@ public final class ProgramGraph {
         return references;
     }
 
+    public Reference reference(String id) {
+        return references.stream().filter(r -> r.id().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("no reference " + id));
+    }
+
+    public List<Reference> referencesTo(ElementId target) {
+        return references.stream().filter(r -> r.target().equals(target)).toList();
+    }
+
+    /** A copy whose references from {@code site} to {@code from} point at {@code to} (one per call). */
+    public ProgramGraph retargeted(ElementId site, ElementId from, ElementId to) {
+        var copy = new ArrayList<>(references);
+        for (var i = 0; i < copy.size(); i++) {
+            var r = copy.get(i);
+            if (r.site().equals(site) && r.target().equals(from)) {
+                copy.set(i, new Reference(r.id(), r.site(), to, r.name(), r.mode()));
+                break;
+            }
+        }
+        return new ProgramGraph(elements.values(), copy);
+    }
+
     /** A hypothetical copy where one attribute of one element has a different value. */
     public ProgramGraph with(ElementId id, String attribute, String value) {
         var copy = new LinkedHashMap<>(elements);

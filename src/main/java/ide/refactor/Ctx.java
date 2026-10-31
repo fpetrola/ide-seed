@@ -9,6 +9,6 @@ public interface Ctx {
 
     Program program();
 
-    /** Applies another refactoring in the same transaction. */
-    void call(String refactoring, Map<String, ?> args);
+    /** Applies another refactoring in the same transaction; returns what it produced (an element id) or null. */
+    String call(String refactoring, Map<String, ?> args);
 }
