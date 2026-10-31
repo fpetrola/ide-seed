@@ -123,8 +123,19 @@ refactoring copy-signature "Declares a method's signature, without a body, in an
     q := create PARAM ${d} ${name(p)}
     set ${q} type ${type(p)}
   end
+  if eq(kind(into), "CLASS")
+    set ${d} visibility ${attr(method, "visibility")}
+  end
   set ${d} abstract true
   return ${d}
+end
+
+refactoring declare-abstract-in-superclass "Declares a method abstract in the superclass of its type"
+  param method : element(METHOD) "the method to declare"
+  require nonempty(superclass(owner(method))) "${qualified(owner(method))} has no superclass"
+  copy-signature ${method} ${superclass(owner(method))}
+  set ${superclass(owner(method))} abstract true
+  return ${method}
 end
 
 refactoring extract-interface "Creates an interface with some methods of a type, and the type implements it"

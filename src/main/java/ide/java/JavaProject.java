@@ -550,18 +550,25 @@ public final class JavaProject implements Program {
         else type.getExtendedTypes(0).setName(name);
     }
 
-    /** A method without body: in an interface just the signature, in a class an abstract method. */
+    /**
+     * A method without body (in an interface just the signature, in a class an abstract method), or an abstract
+     * class.
+     */
     private void setAbstract(ElementId id, boolean on) {
         var element = graph().element(id);
-        if (!on || element.kind() != Kind.METHOD) throw new IllegalArgumentException("unsupported: abstract=" + on + " on " + element);
-        var method = (MethodDeclaration) declaration(element);
-        var inInterface = graph().element(element.parent()).kind() == Kind.INTERFACE;
+        if (!on) throw new IllegalArgumentException("unsupported: abstract=false on " + element);
+        if (element.kind() == Kind.CLASS) {
+            setFlag(id, Modifier.Keyword.ABSTRACT, true);
+            return;
+        }
+        if (element.kind() != Kind.METHOD) throw new IllegalArgumentException("unsupported: abstract on " + element);
+        if (graph().element(element.parent()).kind() != Kind.INTERFACE) {
+            setFlag(id, Modifier.Keyword.ABSTRACT, true);
+            changed(); // positions must match the text again before the next edit
+        }
+        var method = (MethodDeclaration) declaration(graph().element(id));
         var signature = LexicalPreservingPrinter.print(method).strip();
-        signature = signature.substring(0, signature.indexOf('{')).stripTrailing() + ";";
-        if (!inInterface) setFlag(id, Modifier.Keyword.ABSTRACT, true);
-        var text = inInterface ? signature
-                : LexicalPreservingPrinter.print(method).strip().replaceFirst("\\s*\\{[\\s\\S]*}$", ";");
-        replaceText(method, text);
+        replaceText(method, signature.substring(0, signature.indexOf('{')).stripTrailing() + ";");
     }
 
     /** Adds an implemented interface by qualified name; simple name when in the same package. */
