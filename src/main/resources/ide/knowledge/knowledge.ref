@@ -45,3 +45,21 @@ effect create-field "create field ${symbol}"
     set ${f} type ${type}
   end
 end
+
+goal javac.var.not.initialized.in.default.constructor needs initialized(symbol)
+
+effect initialize-in-declaration "initialize ${symbol} in its declaration"
+  makes initialized(symbol)
+  ask value "initial value" "${default-value(type(field-in(path, symbol)))}"
+  do
+    set ${field-in(path, symbol)} initializer ${value}
+  end
+end
+
+effect drop-final "make ${symbol} not final"
+  makes initialized(symbol)
+  cost 2
+  do
+    set ${field-in(path, symbol)} final false
+  end
+end

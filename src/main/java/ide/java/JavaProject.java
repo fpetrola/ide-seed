@@ -392,6 +392,10 @@ public final class JavaProject implements Program {
             case "default" -> setDefault(id, value);
             case "static" -> setFlag(id, Modifier.Keyword.STATIC, Boolean.parseBoolean(value));
             case "abstract" -> setAbstract(id, Boolean.parseBoolean(value));
+            case "final" -> setFlag(id, Modifier.Keyword.FINAL, Boolean.parseBoolean(value));
+            case "initializer" -> ((FieldDeclaration) declaration(graph().element(id))).getVariables().stream()
+                    .filter(v -> v.getNameAsString().equals(graph().element(id).name()))
+                    .forEach(v -> v.setInitializer(parser.parseExpression(value).getResult().orElseThrow()));
             case "implements" -> addImplements(id, value);
             case "order" -> setOrder(id, Integer.parseInt(value));
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);

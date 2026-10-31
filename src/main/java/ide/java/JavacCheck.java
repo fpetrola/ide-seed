@@ -35,11 +35,21 @@ final class JavacCheck {
             if (d.getKind() != javax.tools.Diagnostic.Kind.ERROR || d.getSource() == null) continue;
             var path = d.getSource().toUri().getPath().substring(1);
             var code = sources.get(path);
-            var symbol = d.getStartPosition() >= 0 ? code.substring((int) d.getStartPosition(), (int) d.getEndPosition()) : "";
+            var symbol = symbolAt(code, d.getPosition(), d.getStartPosition(), d.getEndPosition());
             errors.add(new Diagnostic("javac." + d.getCode().replaceFirst("^compiler\\.err\\.", ""), path,
                     (int) d.getLineNumber(), symbol, d.getMessage(null)));
         }
         return errors;
+    }
+
+    /** What a diagnostic is about: the identifier at its preferred position, else the text of its range. */
+    private static String symbolAt(String code, long position, long start, long end) {
+        if (position >= 0 && position < code.length() && Character.isJavaIdentifierStart(code.charAt((int) position))) {
+            var stop = (int) position;
+            while (stop < code.length() && Character.isJavaIdentifierPart(code.charAt(stop))) stop++;
+            return code.substring((int) position, stop);
+        }
+        return start >= 0 && end > start ? code.substring((int) start, (int) end) : "";
     }
 
     private static JavaFileObject source(String path, String code) {

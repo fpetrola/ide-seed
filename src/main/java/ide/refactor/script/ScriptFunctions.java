@@ -39,6 +39,16 @@ final class ScriptFunctions {
             case "member-named" -> graph.members(element(args, 0).id()).stream()
                     .filter(m -> m.name().equals(element(args, 1).name()) && m.kind() == element(args, 1).kind())
                     .map(m -> m.id().value()).findFirst().orElse(null);
+            case "field-in" -> graph.typesIn(text(args, 0)).stream()
+                    .flatMap(t -> graph.members(t.id()).stream())
+                    .filter(m -> m.kind().name().equals("FIELD") && m.name().equals(text(args, 1)))
+                    .map(m -> m.id().value()).findFirst().orElse(null);
+            case "default-value" -> switch (text(args, 0)) {
+                case "byte", "short", "int", "long", "float", "double" -> "0";
+                case "boolean" -> "false";
+                case "char" -> "'\\0'";
+                default -> "null";
+            };
             case "top-in" -> graph.typesIn(text(args, 0)).getFirst().id().value();
             // language
             case "wider" -> {
