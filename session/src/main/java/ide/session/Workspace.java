@@ -30,7 +30,7 @@ public final class Workspace {
     private final JavaProjection project;
     private final LanguageRules rules;
     private final Library library = Library.standard();
-    private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), library);
+    private final Knowledge knowledge = Knowledge.standard(library);
     private final Repairer repairer;
     private final List<QuickFix> quickFixes = List.of(knowledge);
 
@@ -46,14 +46,6 @@ public final class Workspace {
         this.rules = project.rules();
         this.repairer = new Repairer(List.of(knowledge));
         this.saved = sources();
-    }
-
-    private static String resource(String name) {
-        try (var in = Workspace.class.getResourceAsStream(name)) {
-            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
     }
 
     /** Registers the refactorings written in a {@code .ref} text; returns their ids. */
@@ -404,8 +396,7 @@ public final class Workspace {
         var trace = new ide.engine.Trace();
         for (var d : diagnosticsAt(path, line)) {
             trace.add(ide.engine.Trace.Kind.NOTE, d.code() + " " + d.symbol());
-            trace.append(knowledge.search(d.code(), Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())),
-                    project).trace());
+            trace.append(knowledge.search(d, project).trace());
         }
         return trace;
     }

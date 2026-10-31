@@ -13,6 +13,9 @@ import ide.refactoring.Run;
 import ide.refactoring.Value;
 import ide.refactoring.script.Script;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -56,18 +59,37 @@ public final class Knowledge implements Remedy, QuickFix {
         return KnowledgeParser.parse(text, library);
     }
 
+    /** The knowledge the IDE ships with ({@code knowledge.ref}), acting through {@code library}. */
+    public static Knowledge standard(Library library) {
+        try (var in = Knowledge.class.getResourceAsStream("/ide/knowledge/knowledge.ref")) {
+            return parse(new String(in.readAllBytes(), StandardCharsets.UTF_8), library);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     @Override
     public List<Plan> plans(Violation violation, Projection projection) {
-        var facts = new HashMap<String, Object>(violation.facts());
-        if (violation.site() != null) facts.put("site", violation.site());
-        if (violation.target() != null) facts.put("target", violation.target());
-        return search(violation.code(), facts, projection).plans();
+        return search(violation, projection).plans();
     }
 
     @Override
     public List<Plan> plans(Diagnostic diagnostic, Projection projection) {
+        return search(diagnostic, projection).plans();
+    }
+
+    /** The search for a violation: its site and target are elements, the rest of its facts text. */
+    public Search search(Violation violation, Projection projection) {
+        var facts = new HashMap<String, Object>(violation.facts());
+        if (violation.site() != null) facts.put("site", violation.site());
+        if (violation.target() != null) facts.put("target", violation.target());
+        return search(violation.code(), facts, projection);
+    }
+
+    /** The search for a diagnostic, with what it says: its symbol, and where it is (path and line). */
+    public Search search(Diagnostic diagnostic, Projection projection) {
         return search(diagnostic.code(), Map.of("symbol", diagnostic.symbol(), "path", diagnostic.path(),
-                "line", String.valueOf(diagnostic.line())), projection).plans();
+                "line", String.valueOf(diagnostic.line())), projection);
     }
 
     /**

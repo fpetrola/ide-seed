@@ -3,11 +3,13 @@ package ide.knowledge;
 import ide.engine.Plan;
 import ide.engine.Repairer;
 import ide.engine.Transaction;
+import ide.engine.Violation;
 import ide.program.ElementId;
 import ide.program.Fact;
 import ide.program.Mode;
 import ide.program.Primitive;
 import ide.program.Program;
+import ide.projection.Diagnostic;
 import ide.projection.PrimitiveRejected;
 import ide.projection.kit.MemoryProjection;
 import ide.refactoring.Library;
@@ -99,6 +101,38 @@ class KnowledgeTest {
         assertThat(result.repairs()).containsExactly("bring a.A#x into a.B"); // widening would undo the change
         assertThat(projection.program().element(x).qualified()).isEqualTo("a.B#x");
         assertThat(projection.program().element(x).fact(Fact.VISIBILITY)).isEqualTo("private");
+    }
+
+    @Test
+    void aDiagnosticIsSearchedWithWhatItSays() {
+        var knowledge = Knowledge.parse("""
+                goal compiler.unknown needs known(symbol)
+
+                effect declare "declare ${symbol}, line ${line} of ${path}"
+                  makes known(symbol)
+                  do
+                    fail "not in this test"
+                  end
+                end
+                """, Library.standard());
+        var diagnostic = new Diagnostic("compiler.unknown", "a/A.java", 7, "total", "cannot find symbol total");
+
+        var search = knowledge.search(diagnostic, program());
+
+        assertThat(search.trace().lines()).containsExactly("? known(total)", "  ! declare total, line 7 of a/A.java");
+        assertThat(search.plans()).extracting(Plan::title).containsExactly("declare total, line 7 of a/A.java");
+    }
+
+    @Test
+    void theStandardBaseOpensWhatCannotBeAccessed() {
+        var projection = program();
+        var p = projection.program();
+        projection.apply(new Primitive.Set(id(p, "a.A#x"), "visibility", "private"));
+        var violation = new Violation("access.insufficient", id(p, "a.B#n()"), id(p, "a.A#x"), "cannot access");
+
+        var plans = Knowledge.standard(Library.standard()).plans(violation, projection);
+
+        assertThat(plans).extracting(Plan::title).startsWith("open-visibility a.A#x private -> package");
     }
 
     /** Accessors for every field, all or nothing per field; or assuming none are needed. */
