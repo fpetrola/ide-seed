@@ -28,6 +28,11 @@ public final class Primitives {
                     ctx.program().move(element.id(), args.element("to", graph).id(), before == null ? null : before.id());
                     return element.id().value();
                 }),
+                primitive("delete", "Deletes an element nothing references", List.of(Param.of("element", "element")),
+                        (ctx, args) -> {
+                            ctx.program().delete(args.element("element", ctx.program().graph()).id());
+                            return null;
+                        }),
                 primitive("rename", "Renames an element and rewrites its uses", List.of(Param.of("element", "element"),
                         Param.of("name", "text")), (ctx, args) -> {
                     var element = args.element("element", ctx.program().graph()).id();

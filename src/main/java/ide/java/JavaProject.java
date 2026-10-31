@@ -280,6 +280,28 @@ public final class JavaProject implements Program {
         return dot < 0 ? "" : qualifiedType.substring(0, dot);
     }
 
+    /**
+     * Deletes a member (with its comment) that nothing references: its lines go, and a blank line left doubled
+     * or against a brace goes with them.
+     */
+    @Override
+    public void delete(ElementId id) {
+        var g = graph();
+        var element = g.element(id);
+        var uses = g.referencesTo(id).stream().map(r -> g.element(r.site()).qualified()).distinct().toList();
+        if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", element.qualified() + " is used by " + uses);
+        var node = declaration(element);
+        if (node instanceof FieldDeclaration field && field.getVariables().size() > 1) {
+            throw new IllegalArgumentException("deleting one of several variables is not supported: " + element);
+        }
+        var path = pathOf(node.findCompilationUnit().orElseThrow());
+        var code = source(path);
+        var first = node.getComment().flatMap(Node::getBegin).orElse(node.getBegin().orElseThrow()).line;
+        var last = node.getEnd().orElseThrow().line;
+        load(path, Text.collapseBlankAt(Text.removeLines(code, first, last), first));
+        ids.remove(element.qualified());
+    }
+
     /** Renames a field or method together with every use that resolves to it, keeping its identity. */
     @Override
     public void rename(ElementId id, String name) {

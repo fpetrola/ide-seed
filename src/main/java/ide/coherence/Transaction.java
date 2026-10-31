@@ -103,6 +103,13 @@ public final class Transaction implements Program {
     }
 
     @Override
+    public void delete(ElementId element) {
+        var name = name(element);
+        program.delete(element);
+        log("' delete " + name);
+    }
+
+    @Override
     public void rename(ElementId element, String name) {
         var from = name(element);
         program.rename(element, name);

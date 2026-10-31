@@ -31,4 +31,23 @@ final class Text {
         var end = code.indexOf('\n', start);
         return start < code.length() && code.substring(start, end < 0 ? code.length() : end).isBlank();
     }
+
+    /**
+     * After removing lines so that {@code line} is the first one after the gap: drops one blank line if the gap
+     * left two blank lines together, or a blank line right after an opening or before a closing brace.
+     */
+    static String collapseBlankAt(String code, int line) {
+        var before = line > 1 ? lineText(code, line - 1).strip() : null;
+        var after = lineText(code, line).strip();
+        if (before != null && before.isEmpty() && (after.isEmpty() || after.startsWith("}"))) return removeLines(code, line - 1, line - 1);
+        if (after.isEmpty() && before != null && before.endsWith("{")) return removeLines(code, line, line);
+        return code;
+    }
+
+    private static String lineText(String code, int line) {
+        var start = lineStart(code, line);
+        if (start >= code.length()) return "";
+        var end = code.indexOf('\n', start);
+        return code.substring(start, end < 0 ? code.length() : end);
+    }
 }

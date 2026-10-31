@@ -29,6 +29,9 @@ public interface Program {
     /** Moves a member into {@code newParent}, just before {@code before} (a member there), or at the end if null. */
     void move(ElementId member, ElementId newParent, ElementId before);
 
+    /** Deletes an element that nothing references. */
+    void delete(ElementId element);
+
     /** Renames an element; every use of it is rewritten. */
     void rename(ElementId element, String name);
 

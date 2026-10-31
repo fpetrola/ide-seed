@@ -79,3 +79,8 @@ refactoring move-type "Moves a top-level type to another package"
   move ${type} ${package}
   return ${type}
 end
+
+refactoring safe-delete "Deletes an element if nothing uses it"
+  param element : element(FIELD,METHOD) "what to delete"
+  delete ${element}
+end
