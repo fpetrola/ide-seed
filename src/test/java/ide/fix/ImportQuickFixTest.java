@@ -79,4 +79,21 @@ class ImportQuickFixTest {
                 }
                 """);
     }
+
+    @Test
+    void whyShowsHowTheFixWasDeduced() {
+        var ws = Workspace.of(Map.of("a/U.java", """
+                package a;
+
+                class U {
+                    List<String> names;
+                    int count;
+                }
+                """));
+
+        assertThat(ws.why("a/U.java", 4)).containsExactly(
+                "javac.cant.resolve.location List",
+                "? resolves(List)",
+                "  ! import java.util.List");
+    }
 }

@@ -22,6 +22,31 @@ public final class Script implements Refactoring {
     private final List<Param> params;
     private final List<Stmt> body;
 
+    /** An anonymous script: a block of statements run with the given variables, as knowledge effects are. */
+    public static Script block(String statements, List<String> variables) {
+        var header = new StringBuilder("refactoring block\n");
+        variables.forEach(v -> header.append("  param ").append(v).append(" : text\n"));
+        return ScriptParser.parse(header + statements + "\nend\n").getFirst();
+    }
+
+    /** Evaluates an expression with the given variables. */
+    public static Object evaluate(String expression, Ctx ctx, Map<String, Object> variables) {
+        return new Script("expression", "", List.of(), List.of()).eval(ScriptParser.expression(expression), ctx, variables);
+    }
+
+    /** Interpolates {@code ${expr}} in a text with the given variables. */
+    public static String render(String text, Ctx ctx, Map<String, Object> variables) {
+        return String.valueOf(new Script("text", "", List.of(), List.of()).interpolate(text, ctx, variables));
+    }
+
+    public static boolean truthy(Object value) {
+        return ScriptFunctions.truthy(value);
+    }
+
+    public static List<?> list(Object value) {
+        return ScriptFunctions.list(value);
+    }
+
     Script(String id, String description, List<Param> params, List<Stmt> body) {
         this.id = id;
         this.description = description;
@@ -122,15 +147,15 @@ public final class Script implements Refactoring {
     }
 
     /** Text with {@code ${expr}}; an argument that is exactly one {@code ${expr}} keeps the value (e.g. a list). */
-    private Object interpolate(String text, Ctx ctx, Map<String, Object> env) {
+    Object interpolate(String text, Ctx ctx, Map<String, Object> env) {
         var whole = INTERPOLATION.matcher(text);
         if (whole.matches()) return eval(ScriptParser.expression(whole.group(1)), ctx, env);
         return INTERPOLATION.matcher(text).replaceAll(m ->
                 java.util.regex.Matcher.quoteReplacement(String.valueOf(eval(ScriptParser.expression(m.group(1)), ctx, env))));
     }
 
-    private Object eval(Expr expr, Ctx ctx, Map<String, Object> env) {
-        var functions = new ScriptFunctions(ctx.program().graph());
+    Object eval(Expr expr, Ctx ctx, Map<String, Object> env) {
+        var functions = new ScriptFunctions(ctx.program().graph(), ctx.rules());
         return switch (expr) {
             case Expr.Str s -> s.value();
             case Expr.Var v -> {

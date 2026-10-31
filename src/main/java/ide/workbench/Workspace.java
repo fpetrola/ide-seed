@@ -1,10 +1,9 @@
 package ide.workbench;
 
 import ide.core.EventLog;
-import ide.coherence.ImportFix;
-import ide.coherence.OpenVisibility;
+import ide.coherence.Plan;
 import ide.coherence.QuickFix;
-import ide.coherence.PullUpDependency;
+import ide.knowledge.Knowledge;
 import ide.coherence.Repairer;
 import ide.coherence.Result;
 import ide.coherence.Transaction;
@@ -32,8 +31,9 @@ public final class Workspace {
 
     private final JavaProject project;
     private final LanguageRules rules = new JavaRules();
-    private final Repairer repairer = new Repairer(rules, List.of(new OpenVisibility(), new PullUpDependency()));
-    private final List<QuickFix> quickFixes = List.of(new ImportFix());
+    private final Knowledge knowledge = Knowledge.parse(resource("/ide/knowledge/knowledge.ref"), this::refactoring);
+    private final Repairer repairer = new Repairer(rules, List.of(knowledge));
+    private final List<QuickFix> quickFixes = List.of(knowledge);
     private final Map<String, Refactoring> refactorings = new java.util.TreeMap<>();
 
     private final java.util.Deque<Object> undo = new java.util.ArrayDeque<>();
@@ -43,8 +43,12 @@ public final class Workspace {
         this.project = project;
         Primitives.all().forEach(this::register);
         register(new ChangeSignature());
-        try (var catalog = Workspace.class.getResourceAsStream("/ide/refactor/standard.ref")) {
-            define(new String(catalog.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        define(resource("/ide/refactor/standard.ref"));
+    }
+
+    private static String resource(String name) {
+        try (var in = Workspace.class.getResourceAsStream(name)) {
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
@@ -117,6 +121,11 @@ public final class Workspace {
             public List<Param> params(String id) {
                 return refactoring(id).params();
             }
+
+            @Override
+            public LanguageRules rules() {
+                return rules;
+            }
         };
         Result result;
         try {
@@ -166,27 +175,37 @@ public final class Workspace {
     /** Titles of the fixes offered for the diagnostics on a line. */
     public List<String> fixes(String path, int line) {
         return diagnosticsAt(path, line).stream()
-                .flatMap(d -> quickFixes.stream().flatMap(f -> f.titles(d, project, rules).stream()))
-                .distinct().toList();
+                .flatMap(d -> quickFixes.stream().flatMap(f -> f.plans(d, project, rules).stream()))
+                .map(Plan::title).distinct().toList();
     }
 
     /** Applies a fix as a transaction that must make its diagnostic disappear. */
     public Result fix(String path, int line, String title) {
         for (var diagnostic : diagnosticsAt(path, line)) {
             for (var quickFix : quickFixes) {
-                if (!quickFix.titles(diagnostic, project, rules).contains(title)) continue;
-                var tx = new Transaction(project);
-                tx.enter("fix " + title);
-                quickFix.apply(title, diagnostic, tx);
-                tx.exit();
-                var event = Map.of("event", "fix", "path", path, "line", line, "title", title);
-                if (project.diagnostics().contains(diagnostic)) {
-                    return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
+                for (var plan : quickFix.plans(diagnostic, project, rules)) {
+                    if (!plan.title().equals(title)) continue;
+                    var tx = new Transaction(project);
+                    tx.enter("fix " + title);
+                    plan.apply().accept(tx);
+                    tx.exit();
+                    var event = Map.of("event", "fix", "path", path, "line", line, "title", title);
+                    if (project.diagnostics().contains(diagnostic)) {
+                        return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
+                    }
+                    return record(tx, event, tx.commit(repairer));
                 }
-                return record(tx, event, tx.commit(repairer));
             }
         }
         throw new IllegalArgumentException("no fix '" + title + "' at " + path + ":" + line);
+    }
+
+    /** How fixes for the diagnostics on a line are deduced: {@code ?} goal, {@code !} plan, {@code X} rejected. */
+    public List<String> why(String path, int line) {
+        return diagnosticsAt(path, line).stream().flatMap(d -> java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(d.code() + " " + d.symbol()),
+                knowledge.search(d.code(), Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())),
+                        project, rules).lines().stream())).toList();
     }
 
     private List<Diagnostic> diagnosticsAt(String path, int line) {

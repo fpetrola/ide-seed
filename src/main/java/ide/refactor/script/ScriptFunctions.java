@@ -2,6 +2,7 @@ package ide.refactor.script;
 
 import ide.graph.Element;
 import ide.graph.ElementId;
+import ide.graph.LanguageRules;
 import ide.graph.ProgramGraph;
 
 import java.util.ArrayList;
@@ -15,9 +16,11 @@ import java.util.List;
 final class ScriptFunctions {
 
     private final ProgramGraph graph;
+    private final LanguageRules rules;
 
-    ScriptFunctions(ProgramGraph graph) {
+    ScriptFunctions(ProgramGraph graph, LanguageRules rules) {
         this.graph = graph;
+        this.rules = rules;
     }
 
     Object call(String name, List<Object> args) {
@@ -31,6 +34,19 @@ final class ScriptFunctions {
             case "attr" -> element(args, 0).attribute(text(args, 1));
             case "type" -> element(args, 0).attribute("type");
             case "superclass" -> element(args, 0).attribute("superclass");
+            case "enclosing" -> graph.enclosingType(element(args, 0).id()).id().value();
+            case "subclass-of" -> graph.isSubclass(element(args, 0), element(args, 1));
+            case "member-named" -> graph.members(element(args, 0).id()).stream()
+                    .filter(m -> m.name().equals(element(args, 1).name()) && m.kind() == element(args, 1).kind())
+                    .map(m -> m.id().value()).findFirst().orElse(null);
+            case "top-in" -> graph.typesIn(text(args, 0)).getFirst().id().value();
+            // language
+            case "wider" -> {
+                var all = rules.visibilities();
+                yield all.subList(all.indexOf(element(args, 0).attribute("visibility")) + 1, all.size());
+            }
+            case "import-candidates" -> rules.importCandidates(graph, text(args, 0));
+            case "is-type-name" -> !text(args, 0).isEmpty() && Character.isUpperCase(text(args, 0).charAt(0));
             // queries
             case "members" -> ids(graph.members(element(args, 0).id()));
             case "fields" -> ids(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("FIELD")).toList());

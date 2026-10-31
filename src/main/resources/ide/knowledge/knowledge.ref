@@ -1,0 +1,36 @@
+# What must hold for each violation or diagnostic to go away, and what makes it hold.
+# No remedy is written in Java: repairs and quick fixes are deduced from here, and the verifier judges them.
+
+goal access.insufficient needs accessible(site, target)
+goal binding.unresolved needs in-scope(site, target)
+goal javac.cant.resolve.location needs resolves(symbol)
+goal javac.cant.resolve needs resolves(symbol)
+
+effect open-visibility "open-visibility ${qualified(target)} ${attr(target, "visibility")} -> ${v}"
+  makes accessible(site, target)
+  for v in wider(target)
+  do
+    set ${target} visibility ${v}
+  end
+end
+
+effect pull-up-dependency "pull-up-dependency ${qualified(target)} -> ${qualified(enclosing(site))}"
+  makes in-scope(site, target)
+  when and(ne(owner(target), enclosing(site)), subclass-of(owner(target), enclosing(site)), empty(member-named(enclosing(site), target)))
+  do
+    if eq(kind(site), "FIELD")
+      move ${target} ${enclosing(site)} ${site}
+    else
+      move ${target} ${enclosing(site)}
+    end
+  end
+end
+
+effect import "import ${t}"
+  makes resolves(symbol)
+  when is-type-name(symbol)
+  for t in import-candidates(symbol)
+  do
+    set ${top-in(path)} import ${t}
+  end
+end

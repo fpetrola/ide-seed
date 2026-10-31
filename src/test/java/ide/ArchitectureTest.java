@@ -35,4 +35,19 @@ class ArchitectureTest {
             .that().resideInAPackage("ide.core..")
             .should().dependOnClassesThat().resideInAnyPackage(
                     "ide.graph..", "ide.java..", "ide.coherence..", "ide.refactor..", "ide.workbench..", "com.github..");
+
+    @ArchTest
+    static final ArchRule theEngineDoesNotKnowTheKnowledge = noClasses()
+            .that().resideInAnyPackage("ide.coherence..", "ide.graph..", "ide.refactor..", "ide.java..")
+            .should().dependOnClassesThat().resideInAPackage("ide.knowledge..");
+
+    @ArchTest
+    static final ArchRule knowledgeIsLanguageNeutral = noClasses()
+            .that().resideInAPackage("ide.knowledge..")
+            .should().dependOnClassesThat().resideInAnyPackage("ide.java..", "com.github.javaparser..");
+
+    @ArchTest
+    static final ArchRule noRemedyIsWrittenInJava = com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes()
+            .that().implement(ide.coherence.Remedy.class).or().implement(ide.coherence.QuickFix.class)
+            .should().haveFullyQualifiedName("ide.knowledge.Knowledge");
 }
