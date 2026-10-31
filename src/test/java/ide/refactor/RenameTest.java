@@ -159,4 +159,59 @@ class RenameTest {
         assertThat(result.applied()).isFalse();
         assertThat(result.violations()).extracting(Violation::code).containsExactly("dispatch.lost-override");
     }
+
+    @Test
+    void renameMethodFamilyRenamesOverridesUpAndDownAndAllCalls() {
+        var ws = Workspace.of(Map.of(
+                "a/A.java", """
+                        package a;
+
+                        class A {
+                            String name() {
+                                return "a";
+                            }
+                        }
+                        """,
+                "a/B.java", """
+                        package a;
+
+                        class B extends A {
+                            String name() {
+                                return "b";
+                            }
+                        }
+                        """,
+                "a/C.java", """
+                        package a;
+
+                        class C extends B {
+                            String name() {
+                                return "c" + super.name();
+                            }
+
+                            String all(A a, B b) {
+                                return a.name() + b.name();
+                            }
+                        }
+                        """));
+
+        var result = ws.invoke("rename-method-family", Map.of("method", "a.B#name()", "name", "label"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/A.java")).contains("String label() {");
+        assertThat(ws.source("a/B.java")).contains("String label() {");
+        assertThat(ws.source("a/C.java")).isEqualTo("""
+                package a;
+
+                class C extends B {
+                    String label() {
+                        return "c" + super.label();
+                    }
+
+                    String all(A a, B b) {
+                        return a.label() + b.label();
+                    }
+                }
+                """);
+    }
 }

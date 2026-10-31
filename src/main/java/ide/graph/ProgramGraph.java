@@ -1,5 +1,6 @@
 package ide.graph;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -74,6 +75,19 @@ public final class ProgramGraph {
             if (match.isPresent()) return match;
         }
         return Optional.empty();
+    }
+
+    /** The method and every method related to it by overriding, transitively, up and down. */
+    public List<Element> family(Element method) {
+        var family = new ArrayList<Element>(List.of(method));
+        for (var i = 0; i < family.size(); i++) {
+            var current = family.get(i);
+            overridden(current).filter(o -> !family.contains(o)).ifPresent(family::add);
+            for (var other : methods()) {
+                if (!family.contains(other) && overridden(other).filter(current::equals).isPresent()) family.add(other);
+            }
+        }
+        return family;
     }
 
     public List<Element> methods() {
