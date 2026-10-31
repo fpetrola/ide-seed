@@ -43,7 +43,7 @@ class TransactionTest {
         var tx = new Transaction(projection);
 
         tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
-        var result = tx.commit(new Repairer(RULES, List.of()));
+        var result = tx.commit(new Repairer(List.of()));
 
         assertThat(result.applied()).isTrue();
         assertThat(result.steps()).singleElement().asString().startsWith("' retarget ").endsWith(" x -> a.B#y");
@@ -58,7 +58,7 @@ class TransactionTest {
         var tx = new Transaction(silent(projection));
 
         tx.apply(new Primitive.Retarget(reference(p, "a.B#n()", "a.B#x"), id(p, "a.B#y")));
-        var result = tx.commit(new Repairer(RULES, List.of()));
+        var result = tx.commit(new Repairer(List.of()));
 
         assertThat(result.applied()).isFalse();
         assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.unresolved");
@@ -75,7 +75,7 @@ class TransactionTest {
 
         tx.apply(new Primitive.Move(x, id(p, "a.A"), null)); // B#n() now reads a private field of A
         var moveBack = remedy("move back", violation -> new Primitive.Move(violation.target(), id(p, "a.B"), null));
-        var result = tx.commit(new Repairer(RULES, List.of(moveBack, Programs.open())));
+        var result = tx.commit(new Repairer(List.of(moveBack, Programs.open())));
 
         assertThat(result.applied()).isTrue();
         assertThat(result.repairs()).containsExactly("open a.A#x");

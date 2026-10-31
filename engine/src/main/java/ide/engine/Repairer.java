@@ -1,6 +1,5 @@
 package ide.engine;
 
-import ide.projection.LanguageRules;
 import ide.projection.Projection;
 import ide.program.Change;
 import ide.program.Fact;
@@ -30,19 +29,19 @@ public final class Repairer {
     }
 
     private final Verifier verifier;
-    private final LanguageRules rules;
     private final List<Remedy> remedies;
 
-    public Repairer(LanguageRules rules, List<Remedy> remedies) {
-        this.verifier = new Verifier(rules);
-        this.rules = rules;
+    public Repairer(Verifier verifier, List<Remedy> remedies) {
+        this.verifier = verifier;
         this.remedies = List.copyOf(remedies);
     }
 
-    /**
-     * @param compiled whether the program compiled before the transaction; only then is it held to compile after
-     *                 (the compiler view runs once the graph views are clean, it is the slowest)
-     */
+    /** With the standard views. */
+    public Repairer(List<Remedy> remedies) {
+        this(Verifier.standard(), remedies);
+    }
+
+    /** @param compiled whether the program compiled before the transaction; only then is it held to compile after */
     public Outcome stabilize(Program baseline, boolean compiled, Projection projection) {
         return stabilize(baseline, compiled, projection, List.of());
     }
@@ -60,7 +59,7 @@ public final class Repairer {
             if (violations.isEmpty()) return new Outcome(repairs, List.of(), search);
             var target = violations.getFirst();
             search.open(Trace.Kind.QUESTION, target.code() + " " + target.detail());
-            var plans = remedies.stream().flatMap(r -> r.plans(target, projection, rules).stream())
+            var plans = remedies.stream().flatMap(r -> r.plans(target, projection, projection.rules()).stream())
                     .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
             String kept = null;
             if (plans.isEmpty()) search.add(Trace.Kind.NOTE, "(no plan)");
@@ -114,11 +113,7 @@ public final class Repairer {
     }
 
     private List<Violation> verify(Program baseline, boolean compiled, Projection projection) {
-        var violations = verifier.verify(baseline, projection.program());
-        if (!violations.isEmpty() || !compiled) return violations;
-        return projection.diagnostics().stream().map(d -> new Violation(d.code(), null, null,
-                d.path() + ":" + d.line() + ": " + d.message(),
-                Map.of("symbol", d.symbol(), "path", d.path(), "line", String.valueOf(d.line())))).toList();
+        return verifier.verify(new Comparison(baseline, projection, compiled));
     }
 
     /** Whether the violation is still among {@code violations} (same code, site and target). */

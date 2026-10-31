@@ -48,7 +48,7 @@ public final class Workspace {
     private Workspace(JavaProjection project) {
         this.project = project;
         this.rules = project.rules();
-        this.repairer = new Repairer(rules, List.of(knowledge));
+        this.repairer = new Repairer(List.of(knowledge));
         this.saved = sources();
         Primitives.all().forEach(this::register);
         register(new ChangeSignature());

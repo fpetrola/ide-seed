@@ -39,7 +39,7 @@ class RepairerTest {
 
     @Test
     void repairsOneViolationPerRoundUntilAFixpoint() {
-        var outcome = new Repairer(RULES, List.of(open())).stabilize(before, true, projection);
+        var outcome = new Repairer(List.of(open())).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).isEmpty();
         assertThat(outcome.repairs()).containsExactly("open a.B#x", "open a.B#z");
@@ -48,7 +48,7 @@ class RepairerTest {
 
     @Test
     void withoutAPlanTheViolationsStay() {
-        var outcome = new Repairer(RULES, List.of()).stabilize(before, true, projection);
+        var outcome = new Repairer(List.of()).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).extracting(Violation::code).containsExactly("access.insufficient", "access.insufficient");
         assertThat(outcome.search().lines()).containsExactly("? access.insufficient a.A#n() cannot access private a.B#x", "  (no plan)");
@@ -59,7 +59,7 @@ class RepairerTest {
         Remedy useless = (violation, p, rules) -> IntStream.range(0, 20).mapToObj(i -> new Plan("useless " + i, List.of(),
                 (target, answers) -> target.apply(new Primitive.Set(violation.target(), "static", "true")))).toList();
 
-        var outcome = new Repairer(RULES, List.of(useless)).stabilize(before, true, projection);
+        var outcome = new Repairer(List.of(useless)).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).isNotEmpty();
         assertThat(outcome.search().lines()).filteredOn(line -> line.startsWith("  X useless")).hasSize(Repairer.MAX_BRANCHES);
@@ -72,7 +72,7 @@ class RepairerTest {
         Remedy asking = (violation, p, rules) -> List.of(new Plan("ask", List.of(new Plan.Ask("v", "which visibility?", "package")),
                 (target, answers) -> target.apply(new Primitive.Set(violation.target(), "visibility", answers.get("v")))));
 
-        var outcome = new Repairer(RULES, List.of(asking)).stabilize(before, true, projection);
+        var outcome = new Repairer(List.of(asking)).stabilize(before, true, projection);
 
         assertThat(outcome.repairs()).isEmpty();
         assertThat(outcome.search().lines()).contains("  (no plan)");
@@ -84,7 +84,7 @@ class RepairerTest {
             throw new PrimitiveRejected("test.refused", "refused on purpose");
         });
 
-        var outcome = new Repairer(RULES, List.of(failing, open())).stabilize(before, true, projection);
+        var outcome = new Repairer(List.of(failing, open())).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).isEmpty();
         assertThat(outcome.search().lines()).contains("  X fail a.B#x: refused on purpose");
