@@ -29,4 +29,10 @@ class ArchitectureTest {
     static final ArchRule refactoringsDoNotKnowTheEngine = noClasses()
             .that().resideInAPackage("ide.refactor..")
             .should().dependOnClassesThat().resideInAnyPackage("ide.coherence..", "ide.workbench..");
+
+    @ArchTest
+    static final ArchRule coreKnowsNothingElse = noClasses()
+            .that().resideInAPackage("ide.core..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "ide.graph..", "ide.java..", "ide.coherence..", "ide.refactor..", "ide.workbench..", "com.github..");
 }

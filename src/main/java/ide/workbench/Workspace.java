@@ -1,5 +1,6 @@
 package ide.workbench;
 
+import ide.core.EventLog;
 import ide.coherence.ImportFix;
 import ide.coherence.OpenVisibility;
 import ide.coherence.QuickFix;
@@ -26,6 +27,7 @@ import ide.refactor.Refactoring;
 import ide.refactor.Rename;
 import ide.refactor.RenameMethodFamily;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,6 +45,9 @@ public final class Workspace {
                     new GenerateGetter(), new GenerateSetter(), new EncapsulateField(), new MoveType())
             .collect(Collectors.toMap(Refactoring::id, Function.identity()));
 
+    private final java.util.Deque<Object> undo = new java.util.ArrayDeque<>();
+    private EventLog log = EventLog.NONE;
+
     private Workspace(JavaProject project) {
         this.project = project;
     }
@@ -53,6 +58,19 @@ public final class Workspace {
 
     public String source(String path) {
         return project.source(path);
+    }
+
+    /** Appends every event to a JSONL file from now on. */
+    public Workspace logTo(Path file) {
+        log = EventLog.to(file);
+        return this;
+    }
+
+    /** Reverts the last applied transaction. */
+    public void undo() {
+        if (undo.isEmpty()) throw new IllegalStateException("nothing to undo");
+        project.rollback(undo.pop());
+        log.append(Map.of("event", "undo"));
     }
 
     public java.util.Set<String> files() {
@@ -78,12 +96,26 @@ public final class Workspace {
                 }
             }
         };
+        Result result;
         try {
             ctx.call(refactoring, args);
+            result = tx.commit(repairer);
         } catch (PrimitiveRejected rejected) {
-            return tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
+            result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
         }
-        return tx.commit(repairer);
+        return record(tx, Map.of("event", "transaction", "refactoring", refactoring, "args", args), result);
+    }
+
+    /** Logs a finished transaction and makes it undoable if it applied. */
+    private Result record(Transaction tx, Map<String, ?> event, Result result) {
+        if (result.applied()) undo.push(tx.before());
+        var entry = new java.util.LinkedHashMap<String, Object>(event);
+        entry.put("applied", result.applied());
+        entry.put("violations", result.violations().stream().map(v -> v.code() + ": " + v.detail()).toList());
+        entry.put("repairs", result.repairs());
+        entry.put("steps", result.steps());
+        log.append(entry);
+        return result;
     }
 
     /**
@@ -125,10 +157,11 @@ public final class Workspace {
                 tx.enter("fix " + title);
                 quickFix.apply(title, diagnostic, tx);
                 tx.exit();
+                var event = Map.of("event", "fix", "path", path, "line", line, "title", title);
                 if (project.diagnostics().contains(diagnostic)) {
-                    return tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic));
+                    return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
                 }
-                return tx.commit(repairer);
+                return record(tx, event, tx.commit(repairer));
             }
         }
         throw new IllegalArgumentException("no fix '" + title + "' at " + path + ":" + line);

@@ -35,6 +35,11 @@ public final class Transaction implements Program {
         return Result.aborted(outcome.violations(), steps);
     }
 
+    /** The state before the transaction, for undo. */
+    public Object before() {
+        return checkpoint;
+    }
+
     public Result abort(Violation reason) {
         program.rollback(checkpoint);
         return Result.aborted(List.of(reason), steps);

@@ -169,6 +169,7 @@ public final class JavaProject implements Program {
      */
     @Override
     public ElementId create(Kind kind, ElementId parent, String name) {
+        requireIdentifier(name);
         var owner = graph().element(parent);
         return switch (kind) {
             case CLASS -> {
@@ -188,6 +189,12 @@ public final class JavaProject implements Program {
             }
             default -> throw new IllegalArgumentException("unsupported create: " + kind);
         };
+    }
+
+    private static void requireIdentifier(String name) {
+        if (!javax.lang.model.SourceVersion.isName(name) || name.contains(".")) {
+            throw new PrimitiveRejected("projection.invalid-identifier", "'" + name + "' is not a Java identifier");
+        }
     }
 
     /** Edits a method's declaration and carries its identity (and its parameters') to its new address. */
@@ -276,6 +283,7 @@ public final class JavaProject implements Program {
     /** Renames a field or method together with every use that resolves to it, keeping its identity. */
     @Override
     public void rename(ElementId id, String name) {
+        requireIdentifier(name);
         var element = graph().element(id);
         var uses = usesOf(element.qualified());
         var node = declaration(element);
