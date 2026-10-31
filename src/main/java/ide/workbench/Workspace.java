@@ -1,6 +1,7 @@
 package ide.workbench;
 
 import ide.core.EventLog;
+import ide.core.TextDiff;
 import ide.coherence.Plan;
 import ide.coherence.QuickFix;
 import ide.knowledge.Knowledge;
@@ -39,8 +40,12 @@ public final class Workspace {
     private final java.util.Deque<Object> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
 
+    /** The sources as they are on disk (as loaded, or as last saved). */
+    private Map<String, String> saved;
+
     private Workspace(JavaProject project) {
         this.project = project;
+        this.saved = sources();
         Primitives.all().forEach(this::register);
         register(new ChangeSignature());
         define(resource("/ide/refactor/standard.ref"));
@@ -79,6 +84,69 @@ public final class Workspace {
         return project.source(path);
     }
 
+    /** A refactoring's verified outcome and its diff; the program is left as it was. */
+    public record Preview(Result result, String diff) {
+    }
+
+    public Preview preview(String refactoring, Map<String, ?> args) {
+        var before = sources();
+        var result = invoke(refactoring, args);
+        var diff = diff(before, sources());
+        if (result.applied()) undo();
+        return new Preview(result, diff);
+    }
+
+    /** The step tree a refactoring would produce, without verifying or keeping anything. */
+    public List<String> expand(String refactoring, Map<String, ?> args) {
+        var tx = new Transaction(project);
+        try {
+            ctx(tx).call(refactoring, args);
+        } catch (PrimitiveRejected rejected) {
+            tx.discarded(rejected.code() + " " + rejected.getMessage());
+        }
+        var steps = tx.abort(null).steps();
+        return steps;
+    }
+
+    /** Net diff of every unsaved change. */
+    public String diff() {
+        return diff(saved, sources());
+    }
+
+    /** Writes the changed files under {@code root}; nothing reaches disk before. */
+    public void save(Path root) {
+        var current = sources();
+        try {
+            for (var entry : current.entrySet()) {
+                if (entry.getValue().equals(saved.get(entry.getKey()))) continue;
+                var file = root.resolve(entry.getKey());
+                java.nio.file.Files.createDirectories(file.getParent());
+                java.nio.file.Files.writeString(file, entry.getValue());
+            }
+            for (var path : saved.keySet()) {
+                if (!current.containsKey(path)) java.nio.file.Files.deleteIfExists(root.resolve(path));
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        saved = current;
+        log.append(Map.of("event", "save", "root", root.toString()));
+    }
+
+    private Map<String, String> sources() {
+        var sources = new java.util.TreeMap<String, String>();
+        project.files().forEach(path -> sources.put(path, project.source(path)));
+        return sources;
+    }
+
+    private static String diff(Map<String, String> before, Map<String, String> after) {
+        var paths = new java.util.TreeSet<>(before.keySet());
+        paths.addAll(after.keySet());
+        var out = new StringBuilder();
+        for (var path : paths) out.append(TextDiff.unified(path, before.getOrDefault(path, ""), after.getOrDefault(path, "")));
+        return out.toString();
+    }
+
     /** Appends every event to a JSONL file from now on. */
     public Workspace logTo(Path file) {
         log = EventLog.to(file);
@@ -99,54 +167,7 @@ public final class Workspace {
     /** Runs a refactoring naively in a transaction, then verifies and repairs; rolls back if violations remain. */
     public Result invoke(String refactoring, Map<String, ?> args) {
         var tx = new Transaction(project);
-        var ctx = new Ctx() {
-            @Override
-            public Program program() {
-                return tx;
-            }
-
-            @Override
-            public String call(String id, Map<String, ?> callArgs) {
-                var refactoring = refactoring(id);
-                if (refactoring.level().equals("primitive")) return refactoring.apply(this, new Args(callArgs));
-                tx.enter(id);
-                try {
-                    return refactoring.apply(this, new Args(callArgs));
-                } finally {
-                    tx.exit();
-                }
-            }
-
-            @Override
-            public List<Param> params(String id) {
-                return refactoring(id).params();
-            }
-
-            @Override
-            public LanguageRules rules() {
-                return rules;
-            }
-
-            @Override
-            public boolean attempt(String label, Runnable body) {
-                var mark = tx.mark();
-                tx.enter("try " + label);
-                String failure;
-                try {
-                    body.run();
-                    var left = tx.check(repairer);
-                    failure = left == null ? null : left.code() + " " + left.detail();
-                } catch (PrimitiveRejected rejected) {
-                    failure = rejected.code() + " " + rejected.getMessage();
-                } finally {
-                    tx.exit();
-                }
-                if (failure == null) return true;
-                tx.back(mark);
-                tx.discarded(label + ": " + failure);
-                return false;
-            }
-        };
+        var ctx = ctx(tx);
         Result result;
         try {
             ctx.call(refactoring, args);
@@ -230,6 +251,58 @@ public final class Workspace {
 
     private List<Diagnostic> diagnosticsAt(String path, int line) {
         return project.diagnostics().stream().filter(d -> d.path().equals(path) && d.line() == line).toList();
+    }
+
+    /** What refactorings see inside {@code tx}. */
+    private Ctx ctx(Transaction tx) {
+        return new Ctx() {
+            @Override
+            public Program program() {
+                return tx;
+            }
+
+            @Override
+            public String call(String id, Map<String, ?> callArgs) {
+                var refactoring = refactoring(id);
+                if (refactoring.level().equals("primitive")) return refactoring.apply(this, new Args(callArgs));
+                tx.enter(id);
+                try {
+                    return refactoring.apply(this, new Args(callArgs));
+                } finally {
+                    tx.exit();
+                }
+            }
+
+            @Override
+            public List<Param> params(String id) {
+                return refactoring(id).params();
+            }
+
+            @Override
+            public LanguageRules rules() {
+                return rules;
+            }
+
+            @Override
+            public boolean attempt(String label, Runnable body) {
+                var mark = tx.mark();
+                tx.enter("try " + label);
+                String failure;
+                try {
+                    body.run();
+                    var left = tx.check(repairer);
+                    failure = left == null ? null : left.code() + " " + left.detail();
+                } catch (PrimitiveRejected rejected) {
+                    failure = rejected.code() + " " + rejected.getMessage();
+                } finally {
+                    tx.exit();
+                }
+                if (failure == null) return true;
+                tx.back(mark);
+                tx.discarded(label + ": " + failure);
+                return false;
+            }
+        };
     }
 
     private Refactoring refactoring(String id) {

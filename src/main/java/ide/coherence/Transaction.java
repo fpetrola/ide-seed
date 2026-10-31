@@ -68,9 +68,10 @@ public final class Transaction implements Program {
         return checkpoint;
     }
 
+    /** Rolls back; {@code reason} may be null when nothing went wrong (e.g. an expansion). */
     public Result abort(Violation reason) {
         program.rollback(checkpoint);
-        return Result.aborted(List.of(reason), steps);
+        return Result.aborted(reason == null ? List.of() : List.of(reason), steps);
     }
 
     /** Marks the start of a refactoring call; primitives until {@link #exit()} are nested under it. */
