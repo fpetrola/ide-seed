@@ -10,6 +10,8 @@ import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import ide.graph.PrimitiveRejected;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -148,7 +150,7 @@ public final class JavaProject implements Program {
         try {
             String receiver = site.get() instanceof FieldAccessExpr access
                     ? access.getScope().calculateResolvedType().asReferenceType().getQualifiedName()
-                    : site.get().findAncestor(ClassOrInterfaceDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow();
+                    : site.get().findAncestor(TypeDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow().toString();
             return Optional.ofNullable(ids.get(receiver)).map(r -> new CompletionContext(r, prefix, siteId));
         } catch (RuntimeException unresolved) {
             return Optional.empty();
@@ -224,13 +226,16 @@ public final class JavaProject implements Program {
             return;
         }
         var anchor = before == null ? null : g.element(before);
+        var signature = element.qualified().substring(element.qualified().indexOf('#'));
+        if (ids.containsKey(target.qualified() + signature)) {
+            throw new PrimitiveRejected("projection.duplicate", target.qualified() + signature + " already exists");
+        }
         var node = declaration(element);
         var text = LexicalPreservingPrinter.print(node).strip();
         node.remove();
         changed();
         if (anchor == null) insertMember(typeDeclaration(target.qualified()), text);
         else insertBefore(declaration(anchor), text);
-        var signature = element.qualified().substring(element.qualified().indexOf('#'));
         transfer(element.qualified(), target.qualified() + signature);
     }
 
@@ -326,9 +331,12 @@ public final class JavaProject implements Program {
             case MethodDeclaration method -> method.setName(name);
             default -> throw new IllegalArgumentException("unsupported rename: " + element);
         }
-        uses.forEach(use -> use.setName(name));
         var owner = element.qualified().substring(0, element.qualified().indexOf('#') + 1);
         var rest = element.qualified().substring(owner.length() + element.name().length());
+        if (ids.containsKey(owner + name + rest)) {
+            throw new PrimitiveRejected("projection.duplicate", owner + name + rest + " already exists");
+        }
+        uses.forEach(use -> use.setName(name));
         transfer(element.qualified(), owner + name + rest);
         changed();
     }
@@ -503,7 +511,7 @@ public final class JavaProject implements Program {
 
     /** Sets the superclass by its qualified name, written as a simple name when in the same package. */
     private void setSuperclass(ElementId id, String superclass) {
-        var type = typeDeclaration(graph().element(id).qualified());
+        var type = (ClassOrInterfaceDeclaration) typeDeclaration(graph().element(id).qualified());
         var pkg = type.findCompilationUnit().flatMap(CompilationUnit::getPackageDeclaration)
                 .map(p -> p.getNameAsString() + ".").orElse("");
         var name = superclass.startsWith(pkg) && superclass.indexOf('.', pkg.length()) < 0
@@ -561,14 +569,14 @@ public final class JavaProject implements Program {
                     return id;
                 });
             }).orElse(null);
-            for (var type : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+            for (TypeDeclaration<?> type : types(cu)) {
                 var typeName = type.getFullyQualifiedName().orElseThrow();
-                var parent = type.findAncestor(ClassOrInterfaceDeclaration.class)
-                        .map(t -> idOf(t.getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(pkg);
+                var parent = type.getParentNode().filter(TypeDeclaration.class::isInstance)
+                        .map(t -> idOf(((TypeDeclaration<?>) t).getFullyQualifiedName().orElseThrow(), Kind.CLASS)).orElse(pkg);
                 var typeId = idOf(typeName, Kind.CLASS);
                 var typeAttributes = new HashMap<>(typeAttributes(type));
                 if (type.isTopLevelType()) typeAttributes.put("file", pathOf(cu));
-                elements.add(new Element(typeId, type.isInterface() ? Kind.INTERFACE : Kind.CLASS,
+                elements.add(new Element(typeId, kindOf(type),
                         type.getNameAsString(), parent, typeName, Map.copyOf(typeAttributes)));
                 for (var field : type.getFields()) {
                     for (var variable : field.getVariables()) {
@@ -652,7 +660,7 @@ public final class JavaProject implements Program {
         try {
             var method = call.resolve();
             var params = new ArrayList<String>();
-            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(method.getParam(i).getType().describe());
+            for (var i = 0; i < method.getNumberOfParams(); i++) params.add(simple(method.getParam(i).getType().describe()));
             return method.declaringType().getQualifiedName() + "#" + method.getName() + "(" + String.join(",", params) + ")";
         } catch (RuntimeException unresolved) {
             return null;
@@ -679,8 +687,8 @@ public final class JavaProject implements Program {
 
     /** The innermost member (method or field) containing the node, else its type. */
     private ElementId siteOf(Node node) {
-        var type = node.findAncestor(ClassOrInterfaceDeclaration.class).orElseThrow();
-        var typeName = type.getFullyQualifiedName().orElseThrow();
+        var type = node.findAncestor(TypeDeclaration.class).orElseThrow();
+        var typeName = type.getFullyQualifiedName().orElseThrow().toString();
         var method = node.findAncestor(MethodDeclaration.class);
         if (method.isPresent()) return ids.get(methodAddress(typeName, method.get()));
         var field = node.findAncestor(VariableDeclarator.class).filter(v -> v.getParentNode()
@@ -688,10 +696,19 @@ public final class JavaProject implements Program {
         return field.map(v -> ids.get(typeName + "#" + v.getNameAsString())).orElseGet(() -> ids.get(typeName));
     }
 
-    /** {@code a.B#m(int,java.lang.String)}: parameter types resolved, so declarations and calls agree. */
+    /**
+     * {@code a.B#m(int,String)}: parameter types resolved (so declarations and calls agree) and written with simple
+     * names (so moving a type does not change the address of the methods that take it).
+     */
     private static String methodAddress(String typeName, MethodDeclaration method) {
         return typeName + "#" + method.getNameAsString() + method.getParameters().stream()
-                .map(p -> describe(p.getType())).collect(Collectors.joining(",", "(", ")"));
+                .map(p -> simple(describe(p.getType()))).collect(Collectors.joining(",", "(", ")"));
+    }
+
+    private static final java.util.regex.Pattern PACKAGE_PREFIX = java.util.regex.Pattern.compile("\\b(?:[a-z_$][\\w$]*\\.)+");
+
+    private static String simple(String described) {
+        return PACKAGE_PREFIX.matcher(described).replaceAll("").replace(" ", "");
     }
 
     private static String describe(Type type) {
@@ -702,11 +719,37 @@ public final class JavaProject implements Program {
         }
     }
 
-    private static Map<String, String> typeAttributes(ClassOrInterfaceDeclaration type) {
+    /** Classes, interfaces and enums of a unit, outermost first. */
+    private static List<TypeDeclaration<?>> types(CompilationUnit cu) {
+        var types = new ArrayList<TypeDeclaration<?>>();
+        cu.findAll(TypeDeclaration.class).forEach(t -> {
+            if (t instanceof ClassOrInterfaceDeclaration || t instanceof EnumDeclaration) types.add(t);
+        });
+        return types;
+    }
+
+    private static Kind kindOf(TypeDeclaration<?> type) {
+        if (type instanceof EnumDeclaration) return Kind.ENUM;
+        return ((ClassOrInterfaceDeclaration) type).isInterface() ? Kind.INTERFACE : Kind.CLASS;
+    }
+
+    /** visibility; superclass (classes); implements: interfaces implemented, or extended by an interface. */
+    private static Map<String, String> typeAttributes(TypeDeclaration<?> type) {
         var attributes = new HashMap<>(attributes(type));
-        if (!type.isInterface() && type.getExtendedTypes().isNonEmpty()) {
-            attributes.put("superclass", type.getExtendedTypes(0).resolve().asReferenceType().getQualifiedName());
+        NodeList<ClassOrInterfaceType> interfaces = new NodeList<>();
+        if (type instanceof ClassOrInterfaceDeclaration c && c.isInterface()) {
+            interfaces = c.getExtendedTypes();
+        } else if (type instanceof ClassOrInterfaceDeclaration c) {
+            if (c.getExtendedTypes().isNonEmpty()) {
+                var superclass = resolveType(c.getExtendedTypes(0));
+                if (superclass != null) attributes.put("superclass", superclass);
+            }
+            interfaces = c.getImplementedTypes();
+        } else if (type instanceof EnumDeclaration e) {
+            interfaces = e.getImplementedTypes();
         }
+        attributes.put("implements", interfaces.stream().map(JavaProject::resolveType)
+                .filter(java.util.Objects::nonNull).collect(Collectors.joining(",")));
         return Map.copyOf(attributes);
     }
 
@@ -740,7 +783,7 @@ public final class JavaProject implements Program {
             return ((MethodDeclaration) declaration(graph().element(element.parent())))
                     .getParameterByName(element.name()).orElseThrow();
         }
-        if (element.kind() == Kind.CLASS || element.kind() == Kind.INTERFACE) return typeDeclaration(element.qualified());
+        if (element.kind().isType()) return typeDeclaration(element.qualified());
         var type = typeDeclaration(graph().element(element.parent()).qualified());
         return switch (element.kind()) {
             case FIELD -> type.getFieldByName(element.name()).orElseThrow();
@@ -752,15 +795,15 @@ public final class JavaProject implements Program {
         };
     }
 
-    private ClassOrInterfaceDeclaration typeDeclaration(String qualified) {
+    private TypeDeclaration<?> typeDeclaration(String qualified) {
         return units.values().stream()
-                .flatMap(cu -> cu.findAll(ClassOrInterfaceDeclaration.class).stream())
-                .filter(t -> t.getFullyQualifiedName().orElse("").equals(qualified))
+                .flatMap(cu -> types(cu).stream())
+                .filter(t -> t.getFullyQualifiedName().map(Object::toString).orElse("").equals(qualified))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("no type " + qualified));
     }
 
     /** Inserts a member as a text edit just before the type's closing brace, then re-parses the unit. */
-    private void insertMember(ClassOrInterfaceDeclaration type, String memberText) {
+    private void insertMember(TypeDeclaration<?> type, String memberText) {
         var path = pathOf(type.findCompilationUnit().orElseThrow());
         var code = source(path);
         var offset = Text.lineStart(code, type.getEnd().orElseThrow().line);

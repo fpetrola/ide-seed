@@ -55,20 +55,21 @@ public final class Verifier {
         var before = overrides(baseline);
         var now = overrides(after);
         var violations = new ArrayList<Violation>();
-        now.forEach((method, overridden) -> {
-            if (!overridden.equals(before.get(method))) violations.add(new Violation("dispatch.new-override", method, overridden,
-                    after.element(method).qualified() + " would override " + after.element(overridden).qualified()));
-        });
-        before.forEach((method, overridden) -> {
-            if (!now.containsKey(method)) violations.add(new Violation("dispatch.lost-override", method, overridden,
-                    baseline.element(method).qualified() + " no longer overrides " + baseline.element(overridden).qualified()));
-        });
+        for (var pair : now) {
+            if (!before.contains(pair)) violations.add(new Violation("dispatch.new-override", pair.get(0), pair.get(1),
+                    after.element(pair.get(0)).qualified() + " would override " + after.element(pair.get(1)).qualified()));
+        }
+        for (var pair : before) {
+            if (!now.contains(pair)) violations.add(new Violation("dispatch.lost-override", pair.get(0), pair.get(1),
+                    baseline.element(pair.get(0)).qualified() + " no longer overrides " + baseline.element(pair.get(1)).qualified()));
+        }
         return violations;
     }
 
-    private static Map<ElementId, ElementId> overrides(ProgramGraph graph) {
-        var overrides = new HashMap<ElementId, ElementId>();
-        for (var method : graph.methods()) graph.overridden(method).ifPresent(o -> overrides.put(method.id(), o.id()));
+    /** (method, overridden) pairs. */
+    private static java.util.Set<List<ElementId>> overrides(ProgramGraph graph) {
+        var overrides = new java.util.LinkedHashSet<List<ElementId>>();
+        for (var method : graph.methods()) graph.overriddenAll(method).forEach(o -> overrides.add(List.of(method.id(), o.id())));
         return overrides;
     }
 

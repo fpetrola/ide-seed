@@ -2,10 +2,12 @@ package ide.java;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.model.SymbolReference;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserEnumDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserInterfaceDeclaration;
 
 import java.util.Collection;
@@ -45,6 +47,11 @@ final class WorkspaceTypeSolver implements TypeSolver {
                     return SymbolReference.solved(type.isInterface()
                             ? new JavaParserInterfaceDeclaration(type, getRoot())
                             : new JavaParserClassDeclaration(type, getRoot()));
+                }
+            }
+            for (var type : cu.findAll(EnumDeclaration.class)) {
+                if (type.getFullyQualifiedName().orElse("").equals(name)) {
+                    return SymbolReference.solved(new JavaParserEnumDeclaration(type, getRoot()));
                 }
             }
         }

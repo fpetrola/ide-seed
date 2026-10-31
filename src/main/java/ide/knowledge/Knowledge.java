@@ -86,19 +86,23 @@ public final class Knowledge implements Remedy, QuickFix {
                     env.put(effect.makes().args().get(i), facts.get(goal.needs().args().get(i)));
                 }
                 var ctx = ctx(program, rules);
-                if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), ctx, env))) {
-                    lines.add("  X " + effect.name() + ": " + effect.when());
-                    continue;
-                }
-                var items = effect.forVariable() == null ? java.util.Collections.singletonList(null)
-                        : Script.list(Script.evaluate(effect.forItems(), ctx, env));
-                var rank = 0;
-                for (var item : items) {
-                    var variables = new LinkedHashMap<>(env);
-                    if (effect.forVariable() != null) variables.put(effect.forVariable(), item);
-                    var title = Script.render(effect.title(), ctx, variables);
-                    lines.add("  ! " + title);
-                    candidates.add(Map.entry(effect.cost() * 100 + rank++, new Plan(title, p -> run(effect, p, rules, variables))));
+                try {
+                    if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), ctx, env))) {
+                        lines.add("  X " + effect.name() + ": " + effect.when());
+                        continue;
+                    }
+                    var items = effect.forVariable() == null ? java.util.Collections.singletonList(null)
+                            : Script.list(Script.evaluate(effect.forItems(), ctx, env));
+                    var rank = 0;
+                    for (var item : items) {
+                        var variables = new LinkedHashMap<>(env);
+                        if (effect.forVariable() != null) variables.put(effect.forVariable(), item);
+                        var title = Script.render(effect.title(), ctx, variables);
+                        lines.add("  ! " + title);
+                        candidates.add(Map.entry(effect.cost() * 100 + rank++, new Plan(title, p -> run(effect, p, rules, variables))));
+                    }
+                } catch (RuntimeException inapplicable) { // e.g. the facts name elements that no longer exist
+                    lines.add("  X " + effect.name() + ": " + inapplicable.getMessage());
                 }
             }
         }

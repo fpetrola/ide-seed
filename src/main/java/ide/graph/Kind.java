@@ -1,12 +1,16 @@
 package ide.graph;
 
 public enum Kind {
-    PACKAGE, CLASS, INTERFACE, FIELD, METHOD, PARAM;
+    PACKAGE, CLASS, INTERFACE, ENUM, FIELD, METHOD, PARAM;
+
+    public boolean isType() {
+        return this == CLASS || this == INTERFACE || this == ENUM;
+    }
 
     public String prefix() {
         return switch (this) {
             case PACKAGE -> "pkg";
-            case CLASS, INTERFACE -> "type";
+            case CLASS, INTERFACE, ENUM -> "type";
             case FIELD -> "field";
             case METHOD -> "method";
             case PARAM -> "param";

@@ -26,10 +26,11 @@ class CompilerViewTest {
                 """;
         var ws = Workspace.of(Map.of("a/P.java", p));
 
-        var result = ws.invoke("rename", Map.of("element", "a.P#one()", "name", "two"));
+        // hashCode() now overrides Object's, which the graph does not hold, with weaker access
+        var result = ws.invoke("rename", Map.of("element", "a.P#one()", "name", "hashCode"));
 
         assertThat(result.applied()).isFalse();
-        assertThat(result.violations()).extracting(Violation::code).containsExactly("javac.already.defined");
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("javac.override.weaker.access");
         assertThat(ws.source("a/P.java")).isEqualTo(p);
     }
 

@@ -73,7 +73,7 @@ public final class ProgramGraph {
     /** The innermost type enclosing (or equal to) the element. */
     public Element enclosingType(ElementId id) {
         var element = element(id);
-        while (element.kind() != Kind.CLASS && element.kind() != Kind.INTERFACE) element = element(element.parent());
+        while (!element.kind().isType()) element = element(element.parent());
         return element;
     }
 
@@ -85,18 +85,36 @@ public final class ProgramGraph {
         return false;
     }
 
-    /** The method that {@code method} overrides: the nearest one with the same signature up the superclass chain. */
-    public Optional<Element> overridden(Element method) {
-        var signature = signature(method);
-        var type = Optional.ofNullable(element(method.parent()).attribute("superclass")).flatMap(this::find);
-        for (; type.isPresent(); type = Optional.ofNullable(type.get().attribute("superclass")).flatMap(this::find)) {
-            var owner = type.get().id();
-            var match = elements.values().stream()
-                    .filter(e -> e.kind() == Kind.METHOD && owner.equals(e.parent()) && signature(e).equals(signature))
-                    .findFirst();
-            if (match.isPresent()) return match;
+    /** Direct supertypes in the workspace: the superclass, then the implemented (or extended) interfaces. */
+    public List<Element> supertypes(Element type) {
+        var names = new ArrayList<String>();
+        if (type.attribute("superclass") != null) names.add(type.attribute("superclass"));
+        if (type.attribute("implements") != null && !type.attribute("implements").isEmpty()) {
+            names.addAll(List.of(type.attribute("implements").split(",")));
         }
-        return Optional.empty();
+        return names.stream().flatMap(n -> find(n).stream()).toList();
+    }
+
+    /** The method that {@code method} overrides first: nearest supertype first, superclass before interfaces. */
+    public Optional<Element> overridden(Element method) {
+        return overriddenAll(method).stream().findFirst();
+    }
+
+    /** Every method {@code method} directly overrides: on each supertype path, the nearest with the same signature. */
+    public List<Element> overriddenAll(Element method) {
+        var signature = signature(method);
+        var found = new ArrayList<Element>();
+        var visited = new java.util.HashSet<ElementId>();
+        var pending = new java.util.ArrayDeque<>(supertypes(element(method.parent())));
+        while (!pending.isEmpty()) {
+            var type = pending.poll();
+            if (!visited.add(type.id())) continue;
+            var match = children(type.id()).stream()
+                    .filter(e -> e.kind() == Kind.METHOD && signature(e).equals(signature)).findFirst();
+            if (match.isPresent()) found.add(match.get());
+            else pending.addAll(supertypes(type));
+        }
+        return found;
     }
 
     /** The method and every method related to it by overriding, transitively, up and down. */
@@ -104,9 +122,9 @@ public final class ProgramGraph {
         var family = new ArrayList<Element>(List.of(method));
         for (var i = 0; i < family.size(); i++) {
             var current = family.get(i);
-            overridden(current).filter(o -> !family.contains(o)).ifPresent(family::add);
+            overriddenAll(current).stream().filter(o -> !family.contains(o)).forEach(family::add);
             for (var other : methods()) {
-                if (!family.contains(other) && overridden(other).filter(current::equals).isPresent()) family.add(other);
+                if (!family.contains(other) && overriddenAll(other).contains(current)) family.add(other);
             }
         }
         return family;
@@ -139,7 +157,7 @@ public final class ProgramGraph {
     }
 
     public List<Element> types() {
-        return elements.values().stream().filter(e -> e.kind() == Kind.CLASS || e.kind() == Kind.INTERFACE).toList();
+        return elements.values().stream().filter(e -> e.kind().isType()).toList();
     }
 
     public List<Element> methods() {
