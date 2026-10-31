@@ -1,0 +1,81 @@
+# The standard catalog: every refactoring here is a composition of primitives and other refactorings.
+# The coherence engine verifies and repairs the result, so scripts state intent, not care.
+
+refactoring generate-getter "public T getX() { return x; } for a field x of type T"
+  param field : element(FIELD) "the field to read"
+  getter := create METHOD ${owner(field)} get${cap(name(field))}
+  set ${getter} visibility public
+  set ${getter} type ${type(field)}
+  set ${getter} body "return #{${field}};"
+  return ${getter}
+end
+
+refactoring generate-setter "public void setX(T x) { this.x = x; } for a field x of type T"
+  param field : element(FIELD) "the field to write"
+  setter := create METHOD ${owner(field)} set${cap(name(field))}
+  set ${setter} visibility public
+  p := create PARAM ${setter} ${name(field)}
+  set ${p} type ${type(field)}
+  set ${setter} body "this.#{${field}} = #{${p}};"
+  return ${setter}
+end
+
+refactoring encapsulate-field "Accessors for a field; uses outside its type go through them; the field becomes private"
+  param field : element(FIELD) "the field to encapsulate"
+  getter := generate-getter ${field}
+  setter := generate-setter ${field}
+  for r in refs(field) | not-within top(field)
+    if eq(mode(r), "read")
+      retarget ${r} ${getter}
+    else
+      retarget ${r} ${setter}
+    end
+  end
+  set ${field} visibility private
+  return ${field}
+end
+
+refactoring pull-up-field "Moves a field to the superclass of its type"
+  param field : element(FIELD) "the field to move up"
+  require nonempty(superclass(owner(field))) "${qualified(owner(field))} has no superclass"
+  move ${field} ${superclass(owner(field))}
+  return ${field}
+end
+
+refactoring pull-up-method "Moves a method to the superclass of its type"
+  param method : element(METHOD) "the method to move up"
+  require nonempty(superclass(owner(method))) "${qualified(owner(method))} has no superclass"
+  move ${method} ${superclass(owner(method))}
+  return ${method}
+end
+
+refactoring extract-superclass "Creates a class between a type and its superclass and pulls fields up into it"
+  param type : element(CLASS) "the type to extract from"
+  param name : text "name of the new superclass"
+  param fields : elements(FIELD) "fields to pull up"
+  base := create CLASS ${owner(type)} ${name}
+  if nonempty(superclass(type))
+    set ${base} superclass ${superclass(type)}
+  end
+  set ${type} superclass ${qualified(base)}
+  for f in fields
+    pull-up-field ${f}
+  end
+  return ${base}
+end
+
+refactoring rename-method-family "Renames a method with every method it overrides or that overrides it"
+  param method : element(METHOD) "any method of the family"
+  param name : text "the new name"
+  for m in family(method)
+    rename ${m} ${name}
+  end
+  return ${method}
+end
+
+refactoring move-type "Moves a top-level type to another package"
+  param type : element(CLASS,INTERFACE) "the type to move"
+  param package : element(PACKAGE) "the destination package"
+  move ${type} ${package}
+  return ${type}
+end

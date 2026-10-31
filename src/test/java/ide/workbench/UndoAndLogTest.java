@@ -60,7 +60,7 @@ class UndoAndLogTest {
         var lines = Files.readAllLines(project.resolve(".ide/events.jsonl"));
         assertThat(lines).hasSize(3);
         assertThat(lines.get(0)).contains("\"event\":\"transaction\"", "\"refactoring\":\"rename\"", "\"applied\":true",
-                "\"steps\":[\". rename\",\"  ' rename a.P#x -> y\"]");
+                "\"steps\":[\"' rename a.P#x -> y\"]");
         assertThat(lines.get(1)).contains("\"applied\":false", "projection.invalid-identifier");
         assertThat(lines.get(2)).contains("\"event\":\"undo\"");
     }

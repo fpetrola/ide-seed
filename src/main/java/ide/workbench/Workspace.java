@@ -17,22 +17,14 @@ import ide.java.JavaProject;
 import ide.java.JavaRules;
 import ide.refactor.Args;
 import ide.refactor.Ctx;
-import ide.refactor.EncapsulateField;
-import ide.refactor.ExtractSuperclass;
-import ide.refactor.GenerateGetter;
-import ide.refactor.GenerateSetter;
-import ide.refactor.MoveType;
-import ide.refactor.PullUp;
+import ide.refactor.Primitives;
 import ide.refactor.Refactoring;
-import ide.refactor.Rename;
-import ide.refactor.RenameMethodFamily;
+import ide.refactor.script.ScriptParser;
+import ide.core.Param;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /** Entry point: invokes refactorings as transactions over a Java project. */
 public final class Workspace {
@@ -41,15 +33,36 @@ public final class Workspace {
     private final LanguageRules rules = new JavaRules();
     private final Repairer repairer = new Repairer(rules, List.of(new OpenVisibility(), new PullUpDependency()));
     private final List<QuickFix> quickFixes = List.of(new ImportFix());
-    private final Map<String, Refactoring> refactorings = Stream.of(new Rename(), new RenameMethodFamily(), PullUp.field(), PullUp.method(), new ExtractSuperclass(),
-                    new GenerateGetter(), new GenerateSetter(), new EncapsulateField(), new MoveType())
-            .collect(Collectors.toMap(Refactoring::id, Function.identity()));
+    private final Map<String, Refactoring> refactorings = new java.util.TreeMap<>();
 
     private final java.util.Deque<Object> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
 
     private Workspace(JavaProject project) {
         this.project = project;
+        Primitives.all().forEach(this::register);
+        try (var catalog = Workspace.class.getResourceAsStream("/ide/refactor/standard.ref")) {
+            define(new String(catalog.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    /** Registers the refactorings written in a {@code .ref} text; returns their ids. */
+    public List<String> define(String scripts) {
+        var defined = ScriptParser.parse(scripts);
+        defined.forEach(this::register);
+        log.append(Map.of("event", "define", "refactorings", defined.stream().map(Refactoring::id).toList()));
+        return defined.stream().map(Refactoring::id).toList();
+    }
+
+    /** {@code "<level> <id>"} for every registered refactoring. */
+    public List<String> library() {
+        return refactorings.values().stream().map(r -> r.level() + " " + r.id()).toList();
+    }
+
+    private void register(Refactoring refactoring) {
+        refactorings.put(refactoring.id(), refactoring);
     }
 
     public static Workspace of(Map<String, String> sources) {
@@ -88,12 +101,19 @@ public final class Workspace {
 
             @Override
             public String call(String id, Map<String, ?> callArgs) {
+                var refactoring = refactoring(id);
+                if (refactoring.level().equals("primitive")) return refactoring.apply(this, new Args(callArgs));
                 tx.enter(id);
                 try {
-                    return refactoring(id).apply(this, new Args(callArgs));
+                    return refactoring.apply(this, new Args(callArgs));
                 } finally {
                     tx.exit();
                 }
+            }
+
+            @Override
+            public List<Param> params(String id) {
+                return refactoring(id).params();
             }
         };
         Result result;
