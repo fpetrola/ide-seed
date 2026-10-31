@@ -131,4 +131,39 @@ class MoveTypeTest {
                 """);
         assertThat(ws.diagnostics()).isEmpty();
     }
+
+    @Test
+    void usersThatOnlyNameTheTypeAsAReceiverGetTheImportToo() {
+        var ws = Workspace.of(Map.of(
+                "a/Status.java", """
+                        package a;
+
+                        public enum Status {
+                            NEW, PAID
+                        }
+                        """,
+                "a/Order.java", """
+                        package a;
+
+                        class Order {
+                            boolean paid(Object s) {
+                                return s == Status.PAID;
+                            }
+                        }
+                        """,
+                "b/Other.java", """
+                        package b;
+
+                        public class Other {
+                        }
+                        """));
+
+        var result = ws.invoke("move-type", Map.of("type", "a.Status", "package", "b"));
+
+        assertThat(result.violations()).isEmpty();
+        // the projection only follows declared types; javac reports the receiver and knowledge deduces the import
+        assertThat(result.repairs()).containsExactly("import b.Status");
+        assertThat(ws.source("a/Order.java")).contains("import b.Status;");
+        assertThat(ws.diagnostics()).isEmpty();
+    }
 }
