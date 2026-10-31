@@ -188,6 +188,13 @@ public final class JavaProject implements Program {
                 load(path, "package " + owner.qualified() + ";\n\npublic class " + name + " {\n}\n");
                 yield idOf(owner.qualified() + "." + name, Kind.CLASS);
             }
+            case INTERFACE -> {
+                if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("interfaces go in packages: " + owner);
+                var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
+                if (units.containsKey(path)) throw new IllegalArgumentException("already exists: " + path);
+                load(path, "package " + owner.qualified() + ";\n\npublic interface " + name + " {\n}\n");
+                yield idOf(owner.qualified() + "." + name, Kind.CLASS);
+            }
             case FIELD -> {
                 insertField(typeDeclaration(owner.qualified()), "Object " + name + ";");
                 yield idOf(owner.qualified() + "#" + name, Kind.FIELD);
@@ -384,6 +391,8 @@ public final class JavaProject implements Program {
             case "import" -> addImport(id, value);
             case "default" -> setDefault(id, value);
             case "static" -> setFlag(id, Modifier.Keyword.STATIC, Boolean.parseBoolean(value));
+            case "abstract" -> setAbstract(id, Boolean.parseBoolean(value));
+            case "implements" -> addImplements(id, value);
             case "order" -> setOrder(id, Integer.parseInt(value));
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
@@ -541,6 +550,29 @@ public final class JavaProject implements Program {
         else type.getExtendedTypes(0).setName(name);
     }
 
+    /** A method without body: in an interface just the signature, in a class an abstract method. */
+    private void setAbstract(ElementId id, boolean on) {
+        var element = graph().element(id);
+        if (!on || element.kind() != Kind.METHOD) throw new IllegalArgumentException("unsupported: abstract=" + on + " on " + element);
+        var method = (MethodDeclaration) declaration(element);
+        var inInterface = graph().element(element.parent()).kind() == Kind.INTERFACE;
+        var signature = LexicalPreservingPrinter.print(method).strip();
+        signature = signature.substring(0, signature.indexOf('{')).stripTrailing() + ";";
+        if (!inInterface) setFlag(id, Modifier.Keyword.ABSTRACT, true);
+        var text = inInterface ? signature
+                : LexicalPreservingPrinter.print(method).strip().replaceFirst("\\s*\\{[\\s\\S]*}$", ";");
+        replaceText(method, text);
+    }
+
+    /** Adds an implemented interface by qualified name; simple name when in the same package. */
+    private void addImplements(ElementId id, String qualified) {
+        var type = (ClassOrInterfaceDeclaration) typeDeclaration(graph().element(id).qualified());
+        var pkg = type.findCompilationUnit().flatMap(CompilationUnit::getPackageDeclaration)
+                .map(p -> p.getNameAsString() + ".").orElse("");
+        var name = qualified.startsWith(pkg) && qualified.indexOf('.', pkg.length()) < 0 ? qualified.substring(pkg.length()) : qualified;
+        type.addImplementedType(name);
+    }
+
     /** Adds or removes a modifier keyword, after the access modifier. */
     private void setFlag(ElementId id, Modifier.Keyword keyword, boolean on) {
         var modifiers = ((NodeWithModifiers<?>) declaration(graph().element(id))).getModifiers();
@@ -638,8 +670,13 @@ public final class JavaProject implements Program {
                 for (var method : type.getMethods()) {
                     var address = methodAddress(typeName, method);
                     var methodId = idOf(address, Kind.METHOD);
+                    var methodAttributes = new HashMap<>(attributes(method));
+                    methodAttributes.put("type", method.getType().asString());
+                    if (kindOf(type) == Kind.INTERFACE && method.getAccessSpecifier().asString().isEmpty()) {
+                        methodAttributes.put("visibility", "public"); // interface members are implicitly public
+                    }
                     elements.add(new Element(methodId, Kind.METHOD,
-                            method.getNameAsString(), typeId, address, attributes(method)));
+                            method.getNameAsString(), typeId, address, Map.copyOf(methodAttributes)));
                     addParams(elements, method, address, methodId);
                 }
             }

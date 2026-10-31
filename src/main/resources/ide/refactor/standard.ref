@@ -113,3 +113,28 @@ refactoring encapsulate-fields "Encapsulates every public field of a type, skipp
   end
   return ${type}
 end
+
+refactoring copy-signature "Declares a method's signature, without a body, in another type"
+  param method : element(METHOD) "the method whose signature to copy"
+  param into : element(CLASS,INTERFACE) "where to declare it"
+  d := create METHOD ${into} ${name(method)}
+  set ${d} type ${type(method)}
+  for p in params(method)
+    q := create PARAM ${d} ${name(p)}
+    set ${q} type ${type(p)}
+  end
+  set ${d} abstract true
+  return ${d}
+end
+
+refactoring extract-interface "Creates an interface with some methods of a type, and the type implements it"
+  param type : element(CLASS) "the type to extract from"
+  param name : text "name of the new interface"
+  param methods : elements(METHOD) "the methods the interface declares"
+  i := create INTERFACE ${owner(type)} ${name}
+  for m in methods
+    copy-signature ${m} ${i}
+  end
+  set ${type} implements ${qualified(i)}
+  return ${i}
+end

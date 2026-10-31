@@ -56,6 +56,8 @@ public final class Verifier {
         var now = overrides(after);
         var violations = new ArrayList<Violation>();
         for (var pair : now) {
+            // overriding a method this transaction created changes no existing dispatch: nothing could call it before
+            if (!baseline.contains(pair.get(1))) continue;
             if (!before.contains(pair)) violations.add(new Violation("dispatch.new-override", pair.get(0), pair.get(1),
                     after.element(pair.get(0)).qualified() + " would override " + after.element(pair.get(1)).qualified()));
         }
