@@ -932,8 +932,8 @@ public final class JavaProject implements Projection {
         };
     }
 
-    private List<String> keysOf(Element callable) {
-        return ((Address.Callable) ids.address(callable.id())).keys();
+    private static List<String> keysOf(Element callable) {
+        return ((Address.Callable) callable.address()).keys();
     }
 
     private TypeDeclaration<?> typeDeclaration(String qualified) {

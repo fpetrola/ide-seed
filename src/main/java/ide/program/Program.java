@@ -222,8 +222,10 @@ public final class Program {
         return family;
     }
 
-    private static String signature(Element method) {
-        return method.qualified().substring(method.qualified().indexOf('#'));
+    /** Name and parameter type keys: what overriding compares. */
+    private static Object signature(Element method) {
+        var callable = (Address.Callable) method.address();
+        return List.of(callable.name(), callable.keys());
     }
 
     // ---- comparison

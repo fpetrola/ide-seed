@@ -78,7 +78,8 @@ final class GraphReader {
                         .map(t -> ids.get(new Address.Type(qualifiedOf((TypeDeclaration<?>) t)))).orElse(pkg);
                 var typeFacts = new HashMap<>(attributes(type));
                 if (type.isTopLevelType()) typeFacts.put(Fact.FILE, unit.getKey());
-                elements.add(new Element(typeId, kindOf(type), type.getNameAsString(), parent, typeName, Map.copyOf(typeFacts)));
+                elements.add(new Element(typeId, kindOf(type), type.getNameAsString(), parent, new Address.Type(typeName), typeName,
+                        Map.copyOf(typeFacts)));
                 for (var field : type.getFields()) {
                     for (var variable : field.getVariables()) {
                         var facts = new HashMap<>(attributes(field));
@@ -131,14 +132,15 @@ final class GraphReader {
     }
 
     private ElementId addPackage(List<Element> elements, String name) {
-        var id = ids.of(new Address.Package(name), Kind.PACKAGE);
-        elements.add(new Element(id, Kind.PACKAGE, name, null, name, Map.of()));
+        var address = new Address.Package(name);
+        var id = ids.of(address, Kind.PACKAGE);
+        elements.add(new Element(id, Kind.PACKAGE, name, null, address, name, Map.of()));
         return id;
     }
 
     private ElementId add(List<Element> elements, Address address, Kind kind, String name, ElementId parent, Map<Fact, String> facts) {
         var id = ids.of(address, kind);
-        elements.add(new Element(id, kind, name, parent, ids.render(address), Map.copyOf(facts)));
+        elements.add(new Element(id, kind, name, parent, address, ids.render(address), Map.copyOf(facts)));
         return id;
     }
 

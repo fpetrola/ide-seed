@@ -41,7 +41,14 @@ class ProgramTest {
     }
 
     private static Element element(ElementId id, Kind kind, String name, ElementId parent, String qualified) {
-        return new Element(id, kind, name, parent, qualified, Map.of(Fact.VISIBILITY, "package", Fact.STATIC, "false"));
+        Address address = switch (kind) {
+            case PACKAGE -> new Address.Package(name);
+            case CLASS, INTERFACE, ENUM -> new Address.Type(qualified);
+            case FIELD -> new Address.Field(parent, name);
+            case METHOD, CONSTRUCTOR -> new Address.Callable(parent, name, List.of());
+            case PARAM -> new Address.Param(parent, name);
+        };
+        return new Element(id, kind, name, parent, address, qualified, Map.of(Fact.VISIBILITY, "package", Fact.STATIC, "false"));
     }
 
     @Test
@@ -83,6 +90,7 @@ class ProgramTest {
     void diffTellsWhatWasLostGainedBornAndGone() {
         var before = program();
         var ax = element(new ElementId("field:9"), Kind.FIELD, "x", A, "a.A#x");
+        assertThat(ax.address()).isEqualTo(new Address.Field(A, "x"));
         var elements = new java.util.ArrayList<>(before.elements());
         elements.add(ax);
         elements.removeIf(e -> e.id().equals(I_NAME));

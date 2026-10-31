@@ -174,13 +174,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Qué ignora.** Texto, posiciones, archivos, parser, compilador, cuerpos de métodos.
 - **Prueba de autonomía.** Un test arma un grafo con tres elementos y dos referencias y ejercita consultas, diff y
   direcciones, sin parser.
-- **Estado actual.** `ide.graph`. Intrusiones: `superclass`, `implements` y `declared` como strings en un mapa;
-  `Reference.mode` string; la firma se obtiene cortando la dirección en `#`; consultas lineales (`find`,
-  `referencesTo`, `isSubclass`) llamadas dentro de bucles; `Program` es el nombre de la interfaz mutable; la
-  comparación de referencias vive en el Verifier; `Identity` está en `ide.java`, transfiere por prefijo de string y
-  arregla constructores con un regex.
-- **Abierto.** Genéricos en las claves de tipo (hoy el nombre simple con `<>` como texto); constantes de enum (no se
-  modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
+- **Estado actual** (fase 1 cerrada, 2026-10-31). `ide.program`: `Mode` y `Fact` tipados; extends, implements y el
+  tipo declarado son referencias; `Program` indexa por padre, site, destino y dirección, calcula `diff` y memoriza
+  los overriders; `Address` e `Identity` tipadas, con las claves de tipo de parámetro por id; cada `Element` lleva
+  su dirección, y la sobrescritura compara nombre y claves, no texto.
+- **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
+  enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
 
 ### 5.3 `projection`: el driver de lenguaje
 
@@ -347,12 +346,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 
 | #  | Tema                     | Decisión                                                                                   | Estado      |
 |----|--------------------------|--------------------------------------------------------------------------------------------|-------------|
-| 1  | Mapa y nombres           | core, program, projection, java, engine, refactoring, knowledge, session, adapters          | acordado, ajustable |
+| 1  | Mapa y nombres           | core, program, projection, java, engine, refactoring, knowledge, session, adapters          | tomada, 2026-10-31 (10610bc) |
 | 2  | Forma de los primitivos  | `Primitive` sellado y `apply(Primitive)` que devuelve `Change`                             | propuesta   |
-| 3  | Vínculos                 | extends, implements y declared son referencias; `Link` reemplaza los `set` de tipos        | propuesta   |
-| 4  | Identidad                | `Address` tipada con ids de dueño y de tipos de parámetro; reconciliación estructural después | propuesta |
+| 3  | Vínculos                 | extends, implements y declared son referencias; `Link` reemplaza los `set` de tipos        | referencias tomadas, 2026-10-31 (4d16bfe); `Link` en fase 2 |
+| 4  | Identidad                | `Address` tipada con ids de dueño y de tipos de parámetro; reconciliación estructural después | tomada, 2026-10-31 (67901c9) |
 | 5  | Edición                  | solo `EditSet` de texto; sin mutación del AST ni printer léxico                            | propuesta   |
-| 6  | Hechos                   | conjunto cerrado y tipado                                                                  | propuesta   |
+| 6  | Hechos                   | conjunto cerrado y tipado (claves `Fact`; los valores siguen siendo texto)                 | tomada, 2026-10-31 (4d16bfe) |
 | 7  | Cuerpos                  | fuera del grafo; el fragmento es una dirección opaca de la proyección                      | propuesta   |
 | 8  | Creación                 | `Create` recibe la especificación inicial (type, default, body)                            | propuesta   |
 | 9  | Rastro                   | `Trace` como árbol de datos; un único render a líneas                                      | propuesta   |
@@ -369,10 +368,10 @@ Registro de deuda de diseño, con la fase que la resuelve.
 
 | Intrusión                                                                          | Dónde                  | Fase |
 |------------------------------------------------------------------------------------|------------------------|------|
-| Vínculos como strings, modos como strings, firma cortando la dirección            | `ide.graph`            | 1    |
-| Consultas lineales dentro de bucles                                                | `ide.graph`            | 1    |
-| Comparación de referencias dentro del Verifier                                     | `ide.coherence`        | 1    |
-| Identidad por prefijos de string y regex; bug de rename de tipo usado como parámetro | `ide.java.Identity`  | 1 y 3 |
+| Vínculos como strings, modos como strings, firma cortando la dirección (resuelto en 4d16bfe y fase 1) | `ide.program` | 1 |
+| Consultas lineales dentro de bucles (resuelto en 4d16bfe)                          | `ide.program`          | 1    |
+| Comparación de referencias dentro del Verifier (resuelto en 4d16bfe)               | `ide.engine`           | 1    |
+| Identidad por prefijos de string y regex; bug de rename de tipo usado como parámetro (resuelto en 67901c9) | `ide.program.Identity` | 1 |
 | Interfaz mutable con nueve firmas y checkpoint sin tipo                            | `ide.graph.Program`    | 2    |
 | La Transaction interpreta atributos para deducir la intención                      | `ide.coherence`        | 2    |
 | Registro manual de los primitivos como refactorings                                | `ide.refactor`         | 2    |

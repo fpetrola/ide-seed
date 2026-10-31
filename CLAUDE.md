@@ -12,19 +12,25 @@ Every structural change is made of a few primitives; correctness comes from veri
 ## Map
 
 - `ide.core` — Capability, CapabilityRegistry, Param, Json, EventLog (JSONL), TextDiff. Knows nothing else.
-- `ide.graph` — Element/ElementId/Kind, Reference (id `site@ordinal`, mode read|write|update|call|new|type),
-  ProgramGraph (queries), Program (the primitives: create, delete, move, rename, set, retarget), LanguageRules SPI.
-- `ide.java` — the Java projection: JavaProject (units, primitives as minimal text edits, re-parse after each),
-  GraphReader (graph from units), Resolution (addresses, kinds, attributes), Identity (address → id, transfer),
-  Bodies (data flow and precedence for extract/inline), JavaRules, WorkspaceTypeSolver, JavacCheck, Imports/Text.
-- `ide.coherence` — Verifier (binding, access, dispatch views; javac view when the code compiled before),
+- `ide.program` — the graph: Element/ElementId/Kind, Fact (typed facts), Reference (id `site@ordinal`, Mode:
+  uses read|write|update|call|new|type and links extends|implements|declared), Program (indexed queries, diff,
+  hypothetical copies), Address (typed: types by qualified name, members by owner id, callables by parameter type
+  keys) and Identity (address → id; rebindType, rename, move, resign, forget).
+- `ide.projection` — the language contract: Projection (the primitives: create, delete, move, rename, set, retarget,
+  extract, inline, replaceSource; checkpoint/rollback; diagnostics; completion), LanguageRules, Diagnostic,
+  CompletionContext, PrimitiveRejected.
+- `ide.java` — the Java driver: JavaProject (units, primitives as minimal text edits, re-parse after each),
+  GraphReader (graph from units: packages and types, then members, then references), Keys (parameter type keys),
+  Resolution (kinds, modes, facts), Bodies (data flow and precedence for extract/inline), JavaRules,
+  WorkspaceTypeSolver, JavacCheck, Imports/Text.
+- `ide.engine` — Verifier (binding, access, dispatch views; javac view when the code compiled before),
   Repairer (plans from saved points), Transaction (baseline, intent folding, step tree), Plan/Remedy/QuickFix.
-- `ide.refactor` — Refactoring/Ctx/Args, Primitives, ChangeSignature (the only Java composite);
-  `ide.refactor.script` — the `.ref` language.
+- `ide.refactoring` — Refactoring/Ctx/Args, Primitives, ChangeSignature (the only Java composite);
+  `ide.refactoring.script` — the `.ref` language.
 - `ide.knowledge` — goals/effects planner; no remedy or quick fix is written in Java.
-- `ide.workbench.Workspace` — transactions, library, undo, log, fixes, completion, navigation, capabilities.
+- `ide.session.Workspace` — transactions, library, undo, log, fixes, completion, navigation, capabilities.
 
-Catalog: `src/main/resources/ide/refactor/standard.ref`. Knowledge: `src/main/resources/ide/knowledge/knowledge.ref`.
+Catalog: `src/main/resources/ide/refactoring/standard.ref`. Knowledge: `src/main/resources/ide/knowledge/knowledge.ref`.
 Realistic sample: `src/test/resources/samples/orders` (case table in `OrdersSampleTest`).
 
 ## Principles (do not break them; say so if an instruction does)
