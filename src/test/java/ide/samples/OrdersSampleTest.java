@@ -48,7 +48,19 @@ class OrdersSampleTest {
                 arguments("rename a method into an overload of another",
                         "rename", Map.of("element", "orders.model.Order#add(Line)", "name", "total"), "applied"),
                 arguments("rename an implementation alone breaks the interface",
-                        "rename", Map.of("element", "orders.model.Order#total()", "name", "sum"), "dispatch.lost-override"));
+                        "rename", Map.of("element", "orders.model.Order#total()", "name", "sum"), "dispatch.lost-override"),
+                arguments("introduce a factory for a constructor",
+                        "introduce-factory", Map.of("constructor", "orders.model.Line#new(String,int,double)", "name", "of"), "applied"),
+                arguments("extract an interface from a class",
+                        "extract-interface", Map.of("type", "orders.model.Line", "name", "Amount", "methods", List.of("orders.model.Line#amount()")), "applied"),
+                arguments("extract a loop that updates a local used afterwards",
+                        "extract-method", Map.of("method", "orders.model.Order#total()", "lines", "22-24", "name", "accumulate"), "applied"),
+                arguments("inline a getter called on another receiver",
+                        "inline-method", Map.of("method", "orders.model.Order#lines()"), "inline.receiver"),
+                arguments("rename a field that has no accessors",
+                        "rename-field-with-accessors", Map.of("field", "orders.model.Customer#name", "name", "fullName"), "applied"),
+                arguments("encapsulate every public field of a type",
+                        "encapsulate-fields", Map.of("type", "orders.model.Order"), "applied"));
     }
 
     @ParameterizedTest(name = "{0}")

@@ -661,12 +661,13 @@ public final class JavaProject implements Program {
         if (statements.size() != 1 || !statements.get(0).isReturnStmt() || statements.get(0).asReturnStmt().getExpression().isEmpty()) {
             throw new PrimitiveRejected("inline.body-shape", method.qualified() + " is not a single 'return expr;'");
         }
-        var body = statements.get(0).asReturnStmt().getExpression().get().clone();
-        if (body.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.qualified().equals(resolveMethod(c)))) {
+        var original = statements.get(0).asReturnStmt().getExpression().get(); // attached, so names resolve
+        if (original.findAll(MethodCallExpr.class).stream().anyMatch(c -> method.qualified().equals(resolveMethod(c)))) {
             throw new PrimitiveRejected("inline.recursive", method.qualified() + " calls itself");
         }
-        var thisMembers = body.findAll(NameExpr.class).stream().anyMatch(n -> resolveField(n) != null)
-                || body.findAll(MethodCallExpr.class).stream().anyMatch(c -> c.getScope().isEmpty());
+        var thisMembers = original.findAll(NameExpr.class).stream().anyMatch(n -> resolveField(n) != null)
+                || original.findAll(MethodCallExpr.class).stream().anyMatch(c -> c.getScope().isEmpty());
+        var body = original.clone();
         if (thisMembers && call.getScope().filter(scope -> !scope.isThisExpr()).isPresent()) {
             throw new PrimitiveRejected("inline.receiver", method.qualified() + " uses members of this; the call has another receiver");
         }
