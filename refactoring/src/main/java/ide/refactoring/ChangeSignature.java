@@ -37,7 +37,7 @@ public final class ChangeSignature implements Refactoring {
     }
 
     @Override
-    public String apply(Run run, Args args) {
+    public ElementId apply(Run run, Args args) {
         var projection = run.projection();
         var method = args.element("method", projection.program()).id();
         var items = parse(args.text("parameters"));
@@ -57,7 +57,7 @@ public final class ChangeSignature implements Refactoring {
         for (var param : params(run, method)) {
             if (!kept.contains(param.name())) projection.apply(new Primitive.Delete(param.id()));
         }
-        return method.value();
+        return method;
     }
 
     private static List<Element> params(Run run, ElementId method) {

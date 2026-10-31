@@ -31,6 +31,7 @@ effect import "import ${t}"
   when is-type-name(symbol)
   for t in import-candidates(symbol)
   do
+    # leak: a Java import; in etapa 2 an unresolved reference is in the graph and this is a retarget
     set ${top-in(path)} import ${t}
   end
 end
@@ -52,6 +53,7 @@ effect initialize-in-declaration "initialize ${symbol} in its declaration"
   makes initialized(symbol)
   ask value "initial value" "${default-value(type(field-in(path, symbol)))}"
   do
+    # leak: a Java initializer; in etapa 2 it is written in the neutral body language
     set ${field-in(path, symbol)} initializer ${value}
   end
 end

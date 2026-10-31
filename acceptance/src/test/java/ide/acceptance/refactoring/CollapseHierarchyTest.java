@@ -86,5 +86,7 @@ class CollapseHierarchyTest {
 
         assertThat(result.applied()).isFalse();
         assertThat(result.violations()).extracting(Violation::code).containsExactly("refactoring.precondition");
+        assertThat(result.violations()).extracting(Violation::detail)
+                .containsExactly("a.Dog has constructors; a.Animal has no equivalent"); // elements by address, not id
     }
 }

@@ -10,6 +10,7 @@ import ide.projection.Projection;
 import ide.refactoring.Args;
 import ide.refactoring.Library;
 import ide.refactoring.Run;
+import ide.refactoring.Value;
 import ide.refactoring.script.Script;
 
 import java.util.ArrayList;
@@ -57,10 +58,9 @@ public final class Knowledge implements Remedy, QuickFix {
 
     @Override
     public List<Plan> plans(Violation violation, Projection projection) {
-        var facts = new HashMap<String, Object>();
-        if (violation.site() != null) facts.put("site", violation.site().value());
-        if (violation.target() != null) facts.put("target", violation.target().value());
-        facts.putAll(violation.facts());
+        var facts = new HashMap<String, Object>(violation.facts());
+        if (violation.site() != null) facts.put("site", violation.site());
+        if (violation.target() != null) facts.put("target", violation.target());
         return search(violation.code(), facts, projection).plans();
     }
 
@@ -70,28 +70,33 @@ public final class Knowledge implements Remedy, QuickFix {
                 "line", String.valueOf(diagnostic.line())), projection).plans();
     }
 
-    /** The search for a code with the facts that came with it: each goal a question, each effect tried an answer or dropped. */
-    public Search search(String code, Map<String, Object> facts, Projection projection) {
+    /**
+     * The search for a code with the facts that came with it (element ids, text): each goal a question, each effect
+     * tried an answer or dropped.
+     */
+    public Search search(String code, Map<String, ?> given, Projection projection) {
+        var facts = new LinkedHashMap<String, Value>();
+        given.forEach((name, fact) -> facts.put(name, Value.of(fact)));
         var trace = new Trace();
         var candidates = new ArrayList<Map.Entry<Integer, Plan>>();
         for (var goal : goals) {
             if (!goal.code().equals(code)) continue;
-            var bound = goal.needs().args().stream().map(a -> String.valueOf(facts.get(a))).toList();
+            var bound = goal.needs().args().stream().map(a -> shown(facts.get(a), projection)).toList();
             trace.open(Trace.Kind.QUESTION, goal.needs().name() + "(" + String.join(", ", bound) + ")");
             for (var effect : effects) {
                 if (!effect.makes().name().equals(goal.needs().name())) continue;
-                var env = new LinkedHashMap<String, Object>(facts);
+                var env = new LinkedHashMap<>(facts);
                 for (var i = 0; i < effect.makes().args().size(); i++) {
                     env.put(effect.makes().args().get(i), facts.get(goal.needs().args().get(i)));
                 }
                 var run = Run.on(projection, library);
                 try {
-                    if (effect.when() != null && !Script.truthy(Script.evaluate(effect.when(), run, env))) {
+                    if (effect.when() != null && !Value.truthy(Script.evaluate(effect.when(), run, env))) {
                         trace.add(Trace.Kind.DROPPED, effect.name() + ": " + effect.when());
                         continue;
                     }
-                    var items = effect.forVariable() == null ? Collections.singletonList(null)
-                            : Script.list(Script.evaluate(effect.forItems(), run, env));
+                    var items = effect.forVariable() == null ? Collections.<Value>singletonList(null)
+                            : Value.items(Script.evaluate(effect.forItems(), run, env));
                     var rank = 0;
                     for (var item : items) {
                         var variables = new LinkedHashMap<>(env);
@@ -113,7 +118,13 @@ public final class Knowledge implements Remedy, QuickFix {
         return new Search(trace, candidates.stream().map(Map.Entry::getValue).toList());
     }
 
-    private void run(Effect effect, List<Plan.Ask> asks, Projection projection, Map<String, Object> variables,
+    /** An element as people read it: by its address. */
+    private static String shown(Value fact, Projection projection) {
+        return fact instanceof Value.Elem e && projection.program().contains(e.id())
+                ? projection.program().element(e.id()).qualified() : Value.asText(fact);
+    }
+
+    private void run(Effect effect, List<Plan.Ask> asks, Projection projection, Map<String, Value> variables,
                      Map<String, String> answers) {
         var args = new HashMap<String, Object>();
         effect.body().params().forEach(p -> args.put(p.name(), variables.get(p.name())));

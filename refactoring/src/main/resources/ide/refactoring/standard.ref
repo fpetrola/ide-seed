@@ -1,5 +1,7 @@
 # The standard catalog: every refactoring here is a composition of primitives and other refactorings.
 # The coherence engine verifies and repairs the result, so scripts state intent, not care.
+# Known leak (ARCHITECTURE.md, section 8): bodies are written in Java, each marked where it is. In etapa 2 they are
+# written in a neutral body language that each projection renders.
 
 refactoring generate-getter "public T getX() { return x; } for a field x of type T"
   param field : element(FIELD) "the field to read"
@@ -7,6 +9,7 @@ refactoring generate-getter "public T getX() { return x; } for a field x of type
   set ${getter} visibility public
   set ${getter} static ${attr(field, "static")}
   set ${getter} type ${type(field)}
+  # leak: Java body
   set ${getter} body "return #{${field}};"
   return ${getter}
 end
@@ -19,8 +22,10 @@ refactoring generate-setter "public void setX(T x) { this.x = x; } for a field x
   p := create PARAM ${setter} ${name(field)}
   set ${p} type ${type(field)}
   if eq(attr(field, "static"), "true")
+    # leak: Java body
     set ${setter} body "#{${owner(field)}}.#{${field}} = #{${p}};"
   else
+    # leak: Java body
     set ${setter} body "this.#{${field}} = #{${p}};"
   end
   return ${setter}
@@ -102,6 +107,7 @@ refactoring introduce-factory "Static factory for a constructor; every new outsi
     q := create PARAM ${f} ${name(p)}
     set ${q} type ${type(p)}
   end
+  # leak: Java body
   set ${f} body "return new #{${owner(constructor)}}(${join(paramnames(constructor), ", ")});"
   for r in refs(constructor) | not-within f
     retarget ${r} ${f}
@@ -199,7 +205,7 @@ refactoring collapse-hierarchy "Merges a class into its superclass: its members 
   param type : element(CLASS) "the class to merge away"
   let sup = superclass(type)
   require nonempty(sup) "${qualified(type)} has no superclass in the workspace"
-  require empty(constructors(type)) "${qualified(type)} has constructors; ${sup} has no equivalent"
+  require empty(constructors(type)) "${qualified(type)} has constructors; ${qualified(sup)} has no equivalent"
   for m in members(type)
     move ${m} ${sup}
   end

@@ -56,13 +56,13 @@ public final class Primitives {
             }
 
             @Override
-            public String apply(Run run, Args args) {
+            public ElementId apply(Run run, Args args) {
                 var program = run.program();
                 var values = new Object[components.length];
                 for (var i = 0; i < components.length; i++) values[i] = value(components[i], args, program);
                 var change = run.projection().apply(construct(constructor, values));
-                if (change.produced() != null) return change.produced().value();
-                return Arrays.stream(values).filter(ElementId.class::isInstance).map(v -> ((ElementId) v).value())
+                if (change.produced() != null) return change.produced();
+                return Arrays.stream(values).filter(ElementId.class::isInstance).map(ElementId.class::cast)
                         .findFirst().orElse(null);
             }
         };
@@ -83,24 +83,23 @@ public final class Primitives {
     private static Object value(RecordComponent component, Args args, Program program) {
         var name = component.getName();
         var type = component.getType();
-        var given = args.values().get(name);
-        if (given == null) {
+        if (args.values().get(name) == null) {
             if (!component.isAnnotationPresent(Primitive.Optional.class)) throw new IllegalArgumentException("missing argument: " + name);
             return null;
         }
         if (ElementId.class.equals(type)) return args.element(name, program).id();
-        if (type.isEnum()) return Enum.valueOf((Class<Enum>) type, String.valueOf(given).toUpperCase());
-        if (Map.class.equals(type)) return facts(given);
-        return String.valueOf(given);
+        if (type.isEnum()) return Enum.valueOf((Class<Enum>) type, args.text(name).toUpperCase());
+        if (Map.class.equals(type)) return facts(args, name);
+        return args.text(name);
     }
 
     /** Facts given as a map, or as text {@code type=int; visibility=public}. */
-    private static Map<Fact, String> facts(Object given) {
+    private static Map<Fact, String> facts(Args args, String name) {
         var facts = new LinkedHashMap<Fact, String>();
-        if (given instanceof Map<?, ?> map) {
+        if (args.values().get(name) instanceof Map<?, ?> map) {
             map.forEach((k, v) -> facts.put(k instanceof Fact f ? f : Fact.of(String.valueOf(k)), String.valueOf(v)));
         } else {
-            for (var pair : String.valueOf(given).split(";")) {
+            for (var pair : args.text(name).split(";")) {
                 if (pair.isBlank()) continue;
                 var eq = pair.indexOf('=');
                 facts.put(Fact.of(pair.substring(0, eq).strip()), pair.substring(eq + 1).strip());

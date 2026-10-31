@@ -3,6 +3,7 @@ package ide.refactoring;
 import ide.core.Param;
 import ide.engine.Repairer;
 import ide.engine.Transaction;
+import ide.program.ElementId;
 import ide.program.Program;
 import ide.projection.LanguageRules;
 import ide.projection.PrimitiveRejected;
@@ -58,8 +59,8 @@ public final class Run {
         return projection.rules();
     }
 
-    /** Runs another refactoring in this run; answers what it produced (an element id) or null. */
-    public String call(String refactoring, Map<String, ?> args) {
+    /** Runs another refactoring in this run; answers the element it produced or worked on, or null. */
+    public ElementId call(String refactoring, Map<String, ?> args) {
         var called = library.get(refactoring);
         if (transaction == null || called.level().equals("primitive")) return called.apply(this, new Args(args));
         transaction.enter(refactoring);

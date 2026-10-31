@@ -71,13 +71,13 @@ class KnowledgeTest {
         projection.apply(new Primitive.Set(id(p, "a.A#x"), "visibility", "private"));
         var knowledge = Knowledge.parse(REACH, Library.standard());
 
-        var search = knowledge.search("access.insufficient",
-                Map.of("site", id(p, "a.B#n()").value(), "target", id(p, "a.A#x").value()), projection);
+        var search = knowledge.search("access.insufficient", Map.of("site", id(p, "a.B#n()"), "target", id(p, "a.A#x")),
+                projection);
 
         assertThat(search.plans()).extracting(Plan::title).containsExactly("widen a.A#x to package",
                 "widen a.A#x to protected", "widen a.A#x to public", "bring a.A#x into a.B");
         assertThat(search.trace().lines()).containsExactly(
-                "? reachable(" + id(p, "a.B#n()").value() + ", " + id(p, "a.A#x").value() + ")",
+                "? reachable(a.B#n(), a.A#x)",
                 "  ! widen a.A#x to package",
                 "  ! widen a.A#x to protected",
                 "  ! widen a.A#x to public",
@@ -134,7 +134,7 @@ class KnowledgeTest {
         var a = id(projection.program(), "a.A");
         var knowledge = Knowledge.parse(ACCESSORS, Library.standard());
 
-        var plans = knowledge.search("type.bare", Map.of("type", a.value()), projection).plans();
+        var plans = knowledge.search("type.bare", Map.of("type", a), projection).plans();
         assertThat(plans).extracting(Plan::title).containsExactly("accessors for the fields of a.A",
                 "assume a.A needs no accessors");
 

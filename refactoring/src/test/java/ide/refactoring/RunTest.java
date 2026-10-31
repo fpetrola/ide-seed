@@ -49,7 +49,7 @@ class RunTest {
         var field = Run.on(projection, Library.standard()).call("encapsulate-field", Map.of("field", "a.A#x"));
 
         var p = projection.program();
-        assertThat(p.element(new ElementId(field)).fact(Fact.VISIBILITY)).isEqualTo("private");
+        assertThat(p.element(field).fact(Fact.VISIBILITY)).isEqualTo("private");
         assertThat(uses(p, "a.B#n()")).containsExactly("a.A#getX() call");
         assertThat(uses(p, "a.B#m()")).containsExactly("a.A#setX(int) call");
     }

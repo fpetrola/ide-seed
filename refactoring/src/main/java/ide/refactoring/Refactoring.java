@@ -1,6 +1,7 @@
 package ide.refactoring;
 
 import ide.core.Param;
+import ide.program.ElementId;
 
 import java.util.List;
 
@@ -21,6 +22,6 @@ public interface Refactoring {
         return "composite";
     }
 
-    /** Applies the change in a run; returns the id of the element it produced or worked on, if any (else null). */
-    String apply(Run run, Args args);
+    /** Applies the change in a run; answers the element it produced or worked on, if any (else null). */
+    ElementId apply(Run run, Args args);
 }

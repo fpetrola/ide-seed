@@ -1,7 +1,6 @@
 package ide.refactoring;
 
 import ide.core.Param;
-import ide.program.ElementId;
 import ide.program.Fact;
 import ide.projection.kit.MemoryProjection;
 import org.junit.jupiter.api.Test;
@@ -40,8 +39,8 @@ class PrimitivesTest {
         var moved = primitive("move").apply(run, new Args(Map.of("element", "a.A#x", "parent", "a.B")));
 
         var program = projection.program();
-        assertThat(program.element(new ElementId(created)).qualified()).isEqualTo("a.B#get()");
-        assertThat(program.element(new ElementId(created)).fact(Fact.VISIBILITY)).isEqualTo("public");
-        assertThat(program.element(new ElementId(moved)).qualified()).isEqualTo("a.B#x");
+        assertThat(program.element(created).qualified()).isEqualTo("a.B#get()");
+        assertThat(program.element(created).fact(Fact.VISIBILITY)).isEqualTo("public");
+        assertThat(program.element(moved).qualified()).isEqualTo("a.B#x");
     }
 }
