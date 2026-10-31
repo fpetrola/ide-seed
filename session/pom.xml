@@ -30,6 +30,12 @@
             <groupId>ide</groupId>
             <artifactId>ide-knowledge</artifactId>
         </dependency>
+        <!-- navigation and completion know no language: they are tested over a projection with none -->
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-projection-kit</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- the Java driver needs JavaParser to run; nothing above the driver may compile against it -->
         <dependency>
             <groupId>com.github.javaparser</groupId>

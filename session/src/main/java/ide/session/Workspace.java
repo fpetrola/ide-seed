@@ -33,6 +33,8 @@ public final class Workspace {
     private final Knowledge knowledge = Knowledge.standard(library);
     private final Repairer repairer;
     private final List<QuickFix> quickFixes = List.of(knowledge);
+    private final Navigation navigation;
+    private final Completion completion;
 
     private final java.util.Deque<Projection.Snapshot> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
@@ -45,6 +47,8 @@ public final class Workspace {
         this.project = project;
         this.rules = project.rules();
         this.repairer = new Repairer(List.of(knowledge));
+        this.navigation = new Navigation(project);
+        this.completion = new Completion(project);
         this.saved = sources();
     }
 
@@ -261,82 +265,29 @@ public final class Workspace {
         return result;
     }
 
-    /**
-     * Completion at {@code offset} of the editor text of {@code path}: for a bare name the locals in scope first;
-     * then accessible fields ({@code x}) and methods ({@code m()}) of the receiver (or enclosing type) and its
-     * superclasses, nearest first, overridden methods once; only static ones on a type name.
-     */
+    /** Completions at {@code offset} of the editor text of {@code path}. */
     public List<String> complete(String path, String text, int offset) {
-        var context = project.completionContext(path, text, offset);
-        if (context.isEmpty()) return List.of();
-        var graph = project.program();
-        var labels = new java.util.LinkedHashSet<String>();
-        context.get().locals().stream().filter(l -> l.startsWith(context.get().prefix())).forEach(labels::add);
-        for (var type : graph.superclassChain(context.get().receiver())) {
-            for (var member : graph.members(type.id())) {
-                if (!member.name().startsWith(context.get().prefix())) continue;
-                if (context.get().staticOnly() && !"true".equals(member.fact(ide.program.Fact.STATIC))) continue;
-                if (!rules.accessible(graph, context.get().site(), member.id())) continue;
-                labels.add(member.kind() == ide.program.Kind.METHOD ? member.name() + "()" : member.name());
-            }
-        }
-        return List.copyOf(labels);
+        return completion.at(path, text, offset);
     }
 
     /** The model as sorted text: {@code KIND qualified} per element, {@code site -> target (mode)} per reference. */
     public List<String> model() {
-        return project.program().outline();
+        return navigation.model();
     }
-
-    // ---- navigation
 
     /** Members whose code calls the method, or a method it overrides (such a call may dispatch to it). */
     public List<String> callers(String method) {
-        var graph = project.program();
-        var target = graph.find(method).orElseThrow(() -> new IllegalArgumentException("no element " + method));
-        var targets = new java.util.HashSet<ide.program.ElementId>();
-        targets.add(target.id());
-        var pending = new java.util.ArrayDeque<>(graph.overriddenAll(target));
-        while (!pending.isEmpty()) {
-            var next = pending.poll();
-            if (targets.add(next.id())) pending.addAll(graph.overriddenAll(next));
-        }
-        return graph.references().stream().filter(r -> r.mode() == ide.program.Mode.CALL && targets.contains(r.target()))
-                .map(r -> graph.element(r.site()).qualified()).distinct().sorted().toList();
+        return navigation.callers(method);
     }
 
     /** Supertypes (nearest first), the type marked with {@code >}, then subtypes indented by depth. */
     public List<String> hierarchy(String type) {
-        var graph = project.program();
-        var focus = graph.find(type).orElseThrow(() -> new IllegalArgumentException("no element " + type));
-        var lines = new java.util.ArrayList<String>();
-        var up = new java.util.ArrayDeque<>(graph.supertypes(focus));
-        var seen = new java.util.HashSet<ide.program.ElementId>();
-        while (!up.isEmpty()) {
-            var next = up.poll();
-            if (!seen.add(next.id())) continue;
-            lines.add(next.qualified());
-            up.addAll(graph.supertypes(next));
-        }
-        lines.add("> " + focus.qualified());
-        subtypes(graph, focus, 1, lines);
-        return lines;
-    }
-
-    private static void subtypes(ide.program.Program graph, ide.program.Element type, int depth, List<String> lines) {
-        graph.types().stream().filter(t -> graph.supertypes(t).contains(type))
-                .sorted(java.util.Comparator.comparing(ide.program.Element::qualified))
-                .forEach(t -> {
-                    lines.add("  ".repeat(depth) + t.qualified());
-                    subtypes(graph, t, depth + 1, lines);
-                });
+        return navigation.hierarchy(type);
     }
 
     /** The site of every use of an element, in reference order. */
     public List<String> references(String element) {
-        var graph = project.program();
-        var target = graph.find(element).orElseThrow(() -> new IllegalArgumentException("no element " + element));
-        return graph.referencesTo(target.id()).stream().map(r -> graph.element(r.site()).qualified()).toList();
+        return navigation.references(element);
     }
 
     public List<Diagnostic> diagnostics() {
