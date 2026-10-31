@@ -11,6 +11,8 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- performance probes are slow; run them with -DexcludedGroups=none -->
+        <excludedGroups>probe</excludedGroups>
     </properties>
 
     <dependencies>
@@ -46,7 +48,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <excludedGroups>probe</excludedGroups>
+                    <excludedGroups>${excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
         </plugins>
