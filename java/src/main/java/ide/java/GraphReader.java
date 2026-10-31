@@ -43,7 +43,7 @@ import static ide.java.Resolution.*;
 final class GraphReader {
 
     /** A graph and, for each of its reference ids, the node of the use. */
-    record Read(Program graph, Map<String, Node> nodes) {
+    record Read(Program program, Map<String, Node> nodes) {
     }
 
     private final Identity ids;

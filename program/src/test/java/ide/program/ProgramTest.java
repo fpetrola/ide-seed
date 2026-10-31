@@ -128,6 +128,26 @@ class ProgramTest {
     }
 
     @Test
+    void eachPrimitiveSaysWhatItMeansToChange() {
+        var p = program();
+        var created = new ElementId("field:9");
+
+        assertThat(new Primitive.Retarget("method:5@1", I_NAME).intent(p, null).expectations())
+                .containsExactly(new Change.Retargeted(B_NAME, A_NAME, I_NAME));
+        assertThat(new Primitive.Inline("method:5@1").intent(p, null).expectations())
+                .containsExactly(new Change.Dropped(B_NAME, A_NAME));
+        assertThat(new Primitive.Delete(B_X).intent(p, null).expectations()).containsExactly(new Change.UsesGone(B_X));
+        assertThat(new Primitive.Rename(B_X, "y").intent(p, null).pins()).containsExactly(new Change.Pin(B_X, Change.Aspect.NAME));
+        assertThat(new Primitive.Move(B_X, A, null).intent(p, null).pins()).containsExactly(new Change.Pin(B_X, Change.Aspect.PARENT));
+        assertThat(new Primitive.Set(B_X, "visibility", "private").intent(p, null).pins())
+                .containsExactly(new Change.Pin(B_X, Change.Aspect.VISIBILITY));
+        assertThat(new Primitive.Set(B_X, "static", "true").intent(p, null)).isEqualTo(Change.NONE);
+        assertThat(new Primitive.Create(Kind.FIELD, A, "y").intent(p, created)).isEqualTo(Change.produced(created)
+                .pin(created, Change.Aspect.PARENT, Change.Aspect.NAME));
+        assertThat(new Primitive.Create(Kind.PACKAGE, null, "b").intent(p, created)).isEqualTo(Change.produced(created));
+    }
+
+    @Test
     void outlineIsTheProgramWithoutIds() {
         assertThat(program().outline()).containsExactly(
                 "CLASS a.A", "CLASS a.B", "FIELD a.B#x", "INTERFACE a.I",

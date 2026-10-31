@@ -82,7 +82,7 @@ public final class Script implements Refactoring {
     @Override
     public String apply(Ctx ctx, Args args) {
         var env = new HashMap<String, Object>();
-        var graph = ctx.projection().graph();
+        var graph = ctx.projection().program();
         for (var param : params) {
             Object value = switch (param.type()) {
                 case "element" -> args.element(param.name(), graph).id().value();
@@ -158,7 +158,7 @@ public final class Script implements Refactoring {
     }
 
     Object eval(Expr expr, Ctx ctx, Map<String, Object> env) {
-        var functions = new ScriptFunctions(ctx.projection().graph(), ctx.rules());
+        var functions = new ScriptFunctions(ctx.projection().program(), ctx.rules());
         return switch (expr) {
             case Expr.Str s -> s.value();
             case Expr.Var v -> {

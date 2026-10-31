@@ -4,6 +4,7 @@ import ide.core.Param;
 import ide.program.Element;
 import ide.program.ElementId;
 import ide.program.Kind;
+import ide.program.Primitive;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,27 +37,29 @@ public final class ChangeSignature implements Refactoring {
     @Override
     public String apply(Ctx ctx, Args args) {
         var projection = ctx.projection();
-        var method = args.element("method", projection.graph()).id();
+        var method = args.element("method", projection.program()).id();
         var items = parse(args.text("parameters"));
         for (var item : items) {
             if (param(ctx, method, item.name()) != null) continue;
             if (item.type() == null || item.defaultValue() == null) {
                 throw new IllegalArgumentException("new parameter needs name:type=default: " + item.name());
             }
-            var created = projection.create(Kind.PARAM, method, item.name());
-            projection.set(created, "type", item.type());
-            projection.set(created, "default", item.defaultValue());
+            var created = projection.apply(new Primitive.Create(Kind.PARAM, method, item.name())).produced();
+            projection.apply(new Primitive.Set(created, "type", item.type()));
+            projection.apply(new Primitive.Set(created, "default", item.defaultValue()));
         }
-        for (var i = 0; i < items.size(); i++) projection.set(param(ctx, method, items.get(i).name()).id(), "order", String.valueOf(i));
+        for (var i = 0; i < items.size(); i++) {
+            projection.apply(new Primitive.Set(param(ctx, method, items.get(i).name()).id(), "order", String.valueOf(i)));
+        }
         var kept = items.stream().map(Item::name).toList();
-        for (var param : List.copyOf(projection.graph().children(method))) {
-            if (!kept.contains(param.name())) projection.delete(param.id());
+        for (var param : List.copyOf(projection.program().children(method))) {
+            if (!kept.contains(param.name())) projection.apply(new Primitive.Delete(param.id()));
         }
         return method.value();
     }
 
     private static Element param(Ctx ctx, ElementId method, String name) {
-        return ctx.projection().graph().children(method).stream()
+        return ctx.projection().program().children(method).stream()
                 .filter(p -> p.kind() == Kind.PARAM && p.name().equals(name)).findFirst().orElse(null);
     }
 

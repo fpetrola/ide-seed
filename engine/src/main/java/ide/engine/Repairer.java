@@ -2,9 +2,13 @@ package ide.engine;
 
 import ide.projection.LanguageRules;
 import ide.projection.Projection;
+import ide.program.Change;
+import ide.program.Fact;
 import ide.program.Program;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,15 +44,14 @@ public final class Repairer {
      *                 (the compiler view runs once the graph views are clean, it is the slowest)
      */
     public Outcome stabilize(Program baseline, boolean compiled, Projection projection) {
-        return stabilize(baseline, compiled, projection, Map.of());
+        return stabilize(baseline, compiled, projection, List.of());
     }
 
     /**
-     * @param pinned what the transaction changed on purpose, per element: "parent", "name" and/or "visibility".
-     *               A plan that changes a pinned aspect would undo the refactoring's intent, so it is undone instead.
+     * @param pinned what the transaction changed on purpose. A plan that changes a pinned aspect would undo the
+     *               refactoring's intent, so it is undone instead.
      */
-    public Outcome stabilize(Program baseline, boolean compiled, Projection projection,
-                             Map<ide.program.ElementId, java.util.Set<String>> pinned) {
+    public Outcome stabilize(Program baseline, boolean compiled, Projection projection, Collection<Change.Pin> pinned) {
         var repairs = new ArrayList<String>();
         var search = new ArrayList<String>();
         var branches = 0;
@@ -66,17 +69,17 @@ public final class Repairer {
                     search.add("  X branch cap reached");
                     return new Outcome(repairs, violations, search);
                 }
-                var saved = projection.checkpoint();
-                var intent = state(projection.graph(), pinned);
+                var saved = projection.snapshot();
+                var intent = state(projection.program(), pinned);
                 try {
                     plan.apply(projection);
                 } catch (RuntimeException failed) {
-                    projection.rollback(saved);
+                    projection.restore(saved);
                     search.add("  X " + plan.title() + ": " + String.valueOf(failed.getMessage()).lines().findFirst().orElse(""));
                     continue;
                 }
-                if (!state(projection.graph(), pinned).equals(intent)) {
-                    projection.rollback(saved);
+                if (!state(projection.program(), pinned).equals(intent)) {
+                    projection.restore(saved);
                     search.add("  X " + plan.title() + ": would undo what the refactoring did");
                     continue;
                 }
@@ -85,7 +88,7 @@ public final class Repairer {
                     search.add("  ! " + plan.title());
                     break;
                 }
-                projection.rollback(saved);
+                projection.restore(saved);
                 search.add("  X " + plan.title() + ": still " + target.code());
             }
             if (kept == null) return new Outcome(repairs, violations, search);
@@ -94,25 +97,23 @@ public final class Repairer {
         return new Outcome(repairs, verify(baseline, compiled, projection), search);
     }
 
-    private static Map<String, String> state(Program graph, Map<ide.program.ElementId, java.util.Set<String>> pinned) {
-        var state = new java.util.HashMap<String, String>();
-        pinned.forEach((id, aspects) -> {
-            if (!graph.contains(id)) return;
-            var e = graph.element(id);
-            for (var aspect : aspects) {
-                var value = switch (aspect) {
-                    case "parent" -> String.valueOf(e.parent());
-                    case "name" -> e.name();
-                    default -> e.fact(ide.program.Fact.of(aspect));
-                };
-                state.put(id + "." + aspect, value);
-            }
-        });
+    /** The current value of every pinned aspect. */
+    private static Map<Change.Pin, String> state(Program program, Collection<Change.Pin> pinned) {
+        var state = new HashMap<Change.Pin, String>();
+        for (var pin : pinned) {
+            if (!program.contains(pin.element())) continue;
+            var e = program.element(pin.element());
+            state.put(pin, switch (pin.aspect()) {
+                case PARENT -> String.valueOf(e.parent());
+                case NAME -> e.name();
+                case VISIBILITY -> String.valueOf(e.fact(Fact.VISIBILITY));
+            });
+        }
         return state;
     }
 
     private List<Violation> verify(Program baseline, boolean compiled, Projection projection) {
-        var violations = verifier.verify(baseline, projection.graph());
+        var violations = verifier.verify(baseline, projection.program());
         if (!violations.isEmpty() || !compiled) return violations;
         return projection.diagnostics().stream().map(d -> new Violation(d.code(), null, null,
                 d.path() + ":" + d.line() + ": " + d.message(),

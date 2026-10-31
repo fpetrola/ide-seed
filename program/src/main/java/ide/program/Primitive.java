@@ -6,6 +6,34 @@ package ide.program;
  */
 public sealed interface Primitive {
 
+    /**
+     * What applying this primitive means to change, as far as the program alone tells: what a verifier must expect
+     * and what a repair may not undo. A projection completes it with what only it knows (what an extract moved).
+     *
+     * @param before   the program the primitive applies to
+     * @param produced the element the primitive created, if any
+     */
+    default Change intent(Program before, ElementId produced) {
+        return switch (this) {
+            case Create c -> c.kind() == Kind.PACKAGE ? Change.produced(produced)
+                    : Change.produced(produced).pin(produced, Change.Aspect.PARENT, Change.Aspect.NAME);
+            case Delete d -> Change.NONE.expect(new Change.UsesGone(d.element()));
+            case Move m -> Change.NONE.pin(m.element(), Change.Aspect.PARENT);
+            case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
+            case Set s -> Fact.VISIBILITY.label().equals(s.attribute())
+                    ? Change.NONE.pin(s.element(), Change.Aspect.VISIBILITY) : Change.NONE;
+            case Retarget r -> {
+                var reference = before.reference(r.reference());
+                yield Change.NONE.expect(new Change.Retargeted(reference.site(), reference.target(), r.target()));
+            }
+            case Extract e -> Change.produced(produced);
+            case Inline i -> {
+                var reference = before.reference(i.reference());
+                yield Change.NONE.expect(new Change.Dropped(reference.site(), reference.target()));
+            }
+        };
+    }
+
     /** An empty element of {@code kind} named {@code name} inside {@code parent} (null for a package). */
     record Create(Kind kind, ElementId parent, String name) implements Primitive {
     }

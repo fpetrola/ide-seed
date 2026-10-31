@@ -39,7 +39,7 @@ public final class Workspace {
     private final List<QuickFix> quickFixes = List.of(knowledge);
     private final Map<String, Refactoring> refactorings = new java.util.TreeMap<>();
 
-    private final java.util.Deque<Object> undo = new java.util.ArrayDeque<>();
+    private final java.util.Deque<Projection.Snapshot> undo = new java.util.ArrayDeque<>();
     private EventLog log = EventLog.NONE;
     private List<String> lastSearch = List.of();
 
@@ -237,7 +237,7 @@ public final class Workspace {
         var tx = new Transaction(project);
         Result result;
         try {
-            tx.replaceSource(path, text);
+            tx.edit(path, text);
             result = tx.keep();
         } catch (PrimitiveRejected rejected) {
             result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
@@ -248,7 +248,7 @@ public final class Workspace {
     /** Reverts the last applied transaction. */
     public void undo() {
         if (undo.isEmpty()) throw new IllegalStateException("nothing to undo");
-        project.rollback(undo.pop());
+        project.restore(undo.pop());
         log.append(Map.of("event", "undo"));
     }
 
@@ -291,7 +291,7 @@ public final class Workspace {
     public List<String> complete(String path, String text, int offset) {
         var context = project.completionContext(path, text, offset);
         if (context.isEmpty()) return List.of();
-        var graph = project.graph();
+        var graph = project.program();
         var labels = new java.util.LinkedHashSet<String>();
         context.get().locals().stream().filter(l -> l.startsWith(context.get().prefix())).forEach(labels::add);
         for (var type : graph.superclassChain(context.get().receiver())) {
@@ -307,14 +307,14 @@ public final class Workspace {
 
     /** The model as sorted text: {@code KIND qualified} per element, {@code site -> target (mode)} per reference. */
     public List<String> model() {
-        return project.graph().outline();
+        return project.program().outline();
     }
 
     // ---- navigation
 
     /** Members whose code calls the method, or a method it overrides (such a call may dispatch to it). */
     public List<String> callers(String method) {
-        var graph = project.graph();
+        var graph = project.program();
         var target = graph.find(method).orElseThrow(() -> new IllegalArgumentException("no element " + method));
         var targets = new java.util.HashSet<ide.program.ElementId>();
         targets.add(target.id());
@@ -329,7 +329,7 @@ public final class Workspace {
 
     /** Supertypes (nearest first), the type marked with {@code >}, then subtypes indented by depth. */
     public List<String> hierarchy(String type) {
-        var graph = project.graph();
+        var graph = project.program();
         var focus = graph.find(type).orElseThrow(() -> new IllegalArgumentException("no element " + type));
         var lines = new java.util.ArrayList<String>();
         var up = new java.util.ArrayDeque<>(graph.supertypes(focus));
@@ -356,7 +356,7 @@ public final class Workspace {
 
     /** The site of every use of an element, in reference order. */
     public List<String> references(String element) {
-        var graph = project.graph();
+        var graph = project.program();
         var target = graph.find(element).orElseThrow(() -> new IllegalArgumentException("no element " + element));
         return graph.referencesTo(target.id()).stream().map(r -> graph.element(r.site()).qualified()).toList();
     }

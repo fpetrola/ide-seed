@@ -1,61 +1,64 @@
 package ide.engine;
 
 import ide.program.Change;
-import ide.program.ElementId;
-import ide.program.Kind;
-import ide.projection.Projection;
+import ide.program.Primitive;
 import ide.program.Program;
+import ide.projection.CompletionContext;
+import ide.projection.Diagnostic;
+import ide.projection.Projection;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
- * A program under change. Primitives pass through; intended rebindings ({@link #retarget}) are folded into the
- * baseline so that the verifier expects them instead of reporting them.
+ * A program under change. Every primitive passes through {@link #apply}: the projection applies it and declares its
+ * change, whose expectations are folded into the baseline (the verifier expects them instead of reporting them) and
+ * whose pins repairs may not undo. The transaction knows nothing of what a primitive means.
  */
 public final class Transaction implements Projection {
 
     private final Projection projection;
-    private final Object checkpoint;
+    private final Snapshot start;
     private Program baseline;
     private final boolean compiled;
     private final List<String> steps = new ArrayList<>();
     private final List<String> search = new ArrayList<>();
-    private final java.util.LinkedHashSet<String> obligations = new java.util.LinkedHashSet<>();
-    /** Elements the refactoring changed on purpose; repairs may not undo that. */
-    private final Map<ElementId, java.util.Set<String>> pinned = new java.util.HashMap<>();
+    private final Set<String> obligations = new LinkedHashSet<>();
+    private final Set<Change.Pin> pinned = new LinkedHashSet<>();
     private int depth;
 
     public Transaction(Projection projection) {
         this.projection = projection;
-        this.checkpoint = projection.checkpoint();
-        this.baseline = projection.graph();
+        this.start = projection.snapshot();
+        this.baseline = projection.program();
         this.compiled = projection.diagnostics().isEmpty();
     }
 
-    /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else rolls back. */
+    /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else restores the start. */
     public Result commit(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
         outcome.repairs().forEach(repair -> steps.add("! " + repair));
         search.addAll(outcome.search());
         if (!compiled) obligations.add("types were not checked: the code did not compile before");
         if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps, search, List.copyOf(obligations));
-        projection.rollback(checkpoint);
+        projection.restore(start);
         return Result.aborted(outcome.violations(), steps, search);
     }
 
-    /** A point inside the transaction to come back to: projection state and the baseline's expectations. */
-    public record Mark(Object checkpoint, Program baseline, int steps) {
+    /** A point inside the transaction to come back to: the projection's state and the baseline's expectations. */
+    public record Mark(Snapshot snapshot, Program baseline, int steps) {
     }
 
     public Mark mark() {
-        return new Mark(projection.checkpoint(), baseline, steps.size());
+        return new Mark(projection.snapshot(), baseline, steps.size());
     }
 
     /** Undoes everything since the mark, keeping the steps that were logged (they show what was attempted). */
     public void back(Mark mark) {
-        projection.rollback(mark.checkpoint());
+        projection.restore(mark.snapshot());
         baseline = mark.baseline();
     }
 
@@ -79,14 +82,19 @@ public final class Transaction implements Projection {
     }
 
     /** The state before the transaction, for undo. */
-    public Object before() {
-        return checkpoint;
+    public Snapshot before() {
+        return start;
     }
 
-    /** Rolls back; {@code reason} may be null when nothing went wrong (e.g. an expansion). */
+    /** Restores the start; {@code reason} may be null when nothing went wrong (e.g. an expansion). */
     public Result abort(Violation reason) {
-        projection.rollback(checkpoint);
+        projection.restore(start);
         return Result.aborted(reason == null ? List.of() : List.of(reason), steps, search);
+    }
+
+    /** Keeps a manual edit as it is: the user's text is the authority, there is nothing to verify against. */
+    public Result keep() {
+        return Result.ok(List.of(), steps, search, List.copyOf(obligations));
     }
 
     /** Marks the start of a refactoring call; primitives until {@link #exit()} are nested under it. */
@@ -99,130 +107,64 @@ public final class Transaction implements Projection {
         depth--;
     }
 
-    private void pin(ElementId element, String... aspects) {
-        pinned.computeIfAbsent(element, e -> new java.util.HashSet<>()).addAll(List.of(aspects));
+    @Override
+    public Change apply(Primitive primitive) {
+        var before = projection.program();
+        var change = projection.apply(primitive);
+        baseline = baseline.expecting(change);
+        pinned.addAll(change.pins());
+        log("' " + describe(primitive, before, projection.program(), change));
+        return change;
+    }
+
+    @Override
+    public void edit(String path, String text) {
+        projection.edit(path, text);
+        log("' edit " + path);
+    }
+
+    /** A primitive as the steps show it: elements by their address before it, and what it produced after. */
+    private static String describe(Primitive primitive, Program before, Program after, Change change) {
+        return switch (primitive) {
+            case Primitive.Create c -> "create " + c.kind() + " " + after.element(change.produced()).qualified();
+            case Primitive.Delete d -> "delete " + before.element(d.element()).qualified();
+            case Primitive.Move m -> "move " + before.element(m.element()).qualified() + " -> " + after.element(m.parent()).qualified();
+            case Primitive.Rename r -> "rename " + before.element(r.element()).qualified() + " -> " + r.name();
+            case Primitive.Set s -> "set " + after.element(s.element()).qualified() + " " + s.attribute() + " = " + s.value();
+            case Primitive.Retarget r -> "retarget " + r.reference() + " " + before.reference(r.reference()).name()
+                    + " -> " + after.element(r.target()).qualified();
+            case Primitive.Extract e -> "extract " + before.element(e.method()).qualified() + " " + e.fragment()
+                    + " -> " + after.element(change.produced()).qualified();
+            case Primitive.Inline i -> "inline " + i.reference() + " " + before.reference(i.reference()).name();
+        };
     }
 
     private void log(String step) {
         steps.add("  ".repeat(depth) + step);
     }
 
-    private String name(ElementId id) {
-        return projection.graph().element(id).qualified();
+    @Override
+    public Program program() {
+        return projection.program();
     }
 
     @Override
-    public Program graph() {
-        return projection.graph();
+    public Snapshot snapshot() {
+        return projection.snapshot();
     }
 
     @Override
-    public List<ide.projection.Diagnostic> diagnostics() {
+    public void restore(Snapshot snapshot) {
+        projection.restore(snapshot);
+    }
+
+    @Override
+    public List<Diagnostic> diagnostics() {
         return projection.diagnostics();
     }
 
     @Override
-    public java.util.Optional<ide.projection.CompletionContext> completionContext(String path, String text, int offset) {
+    public Optional<CompletionContext> completionContext(String path, String text, int offset) {
         return projection.completionContext(path, text, offset);
-    }
-
-    @Override
-    public Object checkpoint() {
-        return projection.checkpoint();
-    }
-
-    @Override
-    public void rollback(Object checkpoint) {
-        projection.rollback(checkpoint);
-    }
-
-    @Override
-    public ElementId create(Kind kind, ElementId parent, String name) {
-        var id = projection.create(kind, parent, name);
-        if (kind != ide.program.Kind.PACKAGE) pin(id, "parent", "name");
-        log("' create " + kind + " " + name(id));
-        return id;
-    }
-
-    @Override
-    public void move(ElementId member, ElementId newParent, ElementId before) {
-        var from = name(member);
-        projection.move(member, newParent, before);
-        pin(member, "parent");
-        log("' move " + from + " -> " + name(newParent));
-    }
-
-    @Override
-    public void replaceSource(String path, String text) {
-        projection.replaceSource(path, text);
-        log("' edit " + path);
-    }
-
-    /** Keeps a manual edit as it is: the user's text is the authority, there is nothing to verify against. */
-    public Result keep() {
-        return Result.ok(List.of(), steps, search, List.copyOf(obligations));
-    }
-
-    @Override
-    public void delete(ElementId element) {
-        var name = name(element);
-        projection.delete(element);
-        baseline = baseline.expecting(new Change.UsesGone(element)); // what it used goes with it
-        log("' delete " + name);
-    }
-
-    @Override
-    public void rename(ElementId element, String name) {
-        var from = name(element);
-        projection.rename(element, name);
-        pin(element, "name");
-        log("' rename " + from + " -> " + name);
-    }
-
-    @Override
-    public void set(ElementId element, String attribute, String value) {
-        var oldLink = link(element, attribute);
-        projection.set(element, attribute, value);
-        // the declaration now links to another type, on purpose: the baseline expects the new link
-        oldLink.ifPresent(old -> link(element, attribute)
-                .ifPresent(now -> baseline = baseline.expecting(new Change.Retargeted(element, old.id(), now.id()))));
-        if (attribute.equals("visibility")) pin(element, "visibility");
-        log("' set " + name(element) + " " + attribute + " = " + value);
-    }
-
-    /** The workspace type an attribute links to: the superclass, or the declared type. */
-    private java.util.Optional<ide.program.Element> link(ElementId element, String attribute) {
-        return switch (attribute) {
-            case "superclass" -> projection.graph().superclass(element);
-            case "type" -> projection.graph().declaredType(element);
-            default -> java.util.Optional.empty();
-        };
-    }
-
-    @Override
-    public ElementId extract(ElementId from, String fragment, String name) {
-        var where = name(from);
-        var created = projection.extract(from, fragment, name);
-        for (var moved : projection.graph().references()) { // what the fragment used is now used from the new method
-            if (moved.site().equals(created)) baseline = baseline.expecting(new Change.Resited(moved.target(), from, created));
-        }
-        log("' extract " + where + " " + fragment + " -> " + name(created));
-        return created;
-    }
-
-    @Override
-    public void inline(String call) {
-        var reference = projection.graph().reference(call);
-        projection.inline(call);
-        baseline = baseline.expecting(new Change.Dropped(reference.site(), reference.target())); // the call is meant to go
-        log("' inline " + call + " " + reference.name());
-    }
-
-    @Override
-    public void retarget(String ref, ElementId target) {
-        var reference = projection.graph().reference(ref);
-        projection.retarget(ref, target);
-        baseline = baseline.expecting(new Change.Retargeted(reference.site(), reference.target(), target));
-        log("' retarget " + ref + " " + reference.name() + " -> " + name(target));
     }
 }
