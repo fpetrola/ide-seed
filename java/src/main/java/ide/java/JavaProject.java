@@ -26,6 +26,13 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import ide.java.semantics.Bodies;
+import ide.java.semantics.Completion;
+import ide.java.semantics.JavacCheck;
+import ide.java.semantics.Keys;
+import ide.java.semantics.Reader;
+import ide.java.semantics.WorkspaceTypeSolver;
+import ide.java.syntax.Decl;
 import ide.java.syntax.Imports;
 import ide.java.syntax.Lists;
 import ide.java.syntax.Members;
@@ -60,7 +67,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static ide.java.Resolution.*;
+import static ide.java.semantics.Resolution.*;
 
 /**
  * Java sources in memory, projected to a {@link Program}. The text is the truth: every primitive is a set of text
@@ -77,18 +84,17 @@ public final class JavaProject implements Projection {
     private static final JavaRules RULES = new JavaRules();
 
     private final WorkspaceTypeSolver typeSolver;
-    private final GraphReader reader;
+    private final Reader reader;
     private final Sources sources;
     private final Identity ids = new Identity();
     private final Keys keys = new Keys(ids);
-    private Program graph;
-    private Map<String, Node> referenceNodes = Map.of();
+    private Reader.Reading reading;
     private List<Diagnostic> diagnostics;
     private Set<String> emptyPackages = new TreeSet<>();
 
     private JavaProject() {
         typeSolver = new WorkspaceTypeSolver(this::trees, new ReflectionTypeSolver());
-        reader = new GraphReader(ids, keys, typeSolver);
+        reader = new Reader(ids, keys, typeSolver);
         sources = new Sources(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
     }
 
@@ -140,64 +146,21 @@ public final class JavaProject implements Projection {
         return diagnostics;
     }
 
-    private static final String MARKER = "__ide_complete__";
-
-    /**
-     * Inserts a marker identifier at the cursor (and a {@code ;} if needed to parse), parses that copy and resolves
-     * the receiver of the marker: the scope's type for {@code expr.prefix}, the enclosing type for a bare name.
-     */
     @Override
     public Optional<CompletionContext> completionContext(String path, String text, int offset) {
-        program(); // identities of the saved version, which the edited text is matched against
-        var start = offset;
-        while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) start--;
-        var prefix = text.substring(start, offset);
-        var parsed = sources.parseDetached(text.substring(0, offset) + MARKER + text.substring(offset))
-                .or(() -> sources.parseDetached(text.substring(0, offset) + MARKER + ";" + text.substring(offset)));
-        if (parsed.isEmpty()) return Optional.empty();
-        var name = prefix + MARKER;
-        var site = parsed.get().findFirst(Node.class, n -> n instanceof NodeWithSimpleName<?> named
-                && named.getNameAsString().equals(name) && (n instanceof NameExpr || n instanceof FieldAccessExpr));
-        if (site.isEmpty()) return Optional.empty();
-        var siteId = reader.siteOf(site.get());
-        if (siteId == null) return Optional.empty();
-        try {
-            if (site.get() instanceof FieldAccessExpr access) {
-                var typeName = access.getScope() instanceof NameExpr scopeName ? reader.resolveTypeName(scopeName) : null;
-                var receiver = typeName != null ? typeName
-                        : access.getScope().calculateResolvedType().asReferenceType().getQualifiedName();
-                return Optional.ofNullable(ids.get(new Address.Type(receiver)))
-                        .map(r -> new CompletionContext(r, prefix, siteId, typeName != null, List.of()));
-            }
-            var enclosing = site.get().findAncestor(TypeDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow().toString();
-            return Optional.ofNullable(ids.get(new Address.Type(enclosing)))
-                    .map(r -> new CompletionContext(r, prefix, siteId, false, localsBefore(site.get())));
-        } catch (RuntimeException unresolved) {
-            return Optional.empty();
-        }
-    }
-
-    /** Locals declared before {@code node} in its method, then the method's parameters; nearest first. */
-    private static List<String> localsBefore(Node node) {
-        var method = node.findAncestor(CallableDeclaration.class);
-        if (method.isEmpty()) return List.of();
-        var position = node.getBegin().orElseThrow();
-        var locals = new ArrayList<String>();
-        method.get().findAll(VariableDeclarator.class).stream()
-                .filter(v -> v.getEnd().orElseThrow().isBefore(position))
-                .forEach(v -> locals.addFirst(v.getNameAsString()));
-        ((CallableDeclaration<?>) method.get()).getParameters().reversed().forEach(p -> locals.add(p.getNameAsString()));
-        return locals;
+        program(); // the identities of the saved version, which the edited text is matched against
+        return Completion.at(sources, reader, ids, text, offset);
     }
 
     @Override
     public Program program() {
-        if (graph == null) {
-            var read = reader.read(sources.units(), emptyPackages);
-            graph = read.program();
-            referenceNodes = read.nodes();
-        }
-        return graph;
+        return reading().program();
+    }
+
+    /** The program as last read, with where each element is declared and the node of each use. */
+    private Reader.Reading reading() {
+        if (reading == null) reading = reader.read(sources.units(), emptyPackages);
+        return reading;
     }
 
     @Override
@@ -301,13 +264,13 @@ public final class JavaProject implements Projection {
                 yield ids.of(address, Kind.CLASS);
             }
             case FIELD -> {
-                var type = typeDeclaration(owner.qualified());
+                var type = typeDeclaration(owner);
                 var unit = sources.unitOf(type);
                 sources.apply(edits(e -> Members.appendField(e, unit, type, "Object " + name + ";")));
                 yield ids.of(address, Kind.FIELD);
             }
             case METHOD -> {
-                var type = typeDeclaration(owner.qualified());
+                var type = typeDeclaration(owner);
                 var unit = sources.unitOf(type);
                 sources.apply(edits(e -> Members.append(e, unit, type, Render.emptyMethod(name, Members.indentation(unit, type)))));
                 yield ids.of(address, Kind.METHOD);
@@ -317,14 +280,15 @@ public final class JavaProject implements Projection {
                 if (!calls.isEmpty() && argument == null) {
                     throw new PrimitiveRejected("create.argument", "the calls of " + owner.qualified() + " need an argument for " + name);
                 }
-                var method = (MethodDeclaration) declaration(owner);
+                var method = declaration(owner).as(MethodDeclaration.class);
                 var edits = new EditSet();
                 Lists.append(edits, sources.unitOf(method), method.getParameters(), method.getName(), "Object " + name);
                 for (var call : calls) Lists.append(edits, sources.unitOf(call), call.getArguments(), call.getName(), argument);
                 var names = new ArrayList<>(parameterNames(method));
                 names.add(name);
+                var path = sources.unitOf(method).path();
                 sources.apply(edits);
-                resign(owner, names);
+                resign(owner, path, names);
                 yield ids.of(address, Kind.PARAM);
             }
         };
@@ -354,15 +318,15 @@ public final class JavaProject implements Projection {
         }
         var moved = ids.address(member).withOwner(newParent);
         if (ids.has(moved)) throw new PrimitiveRejected("projection.duplicate", ids.render(moved) + " already exists");
-        var node = declaration(element);
+        var node = declaration(element).node();
         var from = sources.unitOf(node);
-        var type = typeDeclaration(target.qualified());
+        var type = typeDeclaration(target);
         var to = sources.unitOf(type);
         var text = Members.text(from, node, Members.indentation(to, type));
         var edits = new EditSet();
         Members.remove(edits, from, node);
         if (before == null) Members.append(edits, to, type, text);
-        else Members.insertBefore(edits, to, declaration(g.element(before)), text);
+        else Members.insertBefore(edits, to, declaration(g.element(before)).node(), text);
         sources.apply(edits);
         ids.move(member, newParent);
     }
@@ -392,7 +356,7 @@ public final class JavaProject implements Projection {
         var targets = new ArrayList<>(List.of(type.id()));
         program().children(type.id()).stream().filter(e -> e.kind() == Kind.CONSTRUCTOR).forEach(c -> targets.add(c.id()));
         for (var target : targets) {
-            for (var ref : program().referencesTo(target)) users.add(sources.unitOf(referenceNodes.get(ref.id())).path());
+            for (var ref : program().referencesTo(target)) users.add(sources.unitOf(reading().use(ref.id())).path());
         }
         var edits = new EditSet();
         for (var unit : sources.units()) {
@@ -451,7 +415,7 @@ public final class JavaProject implements Projection {
         }
         var uses = g.referencesTo(id).stream().map(r -> g.element(r.site()).qualified()).distinct().toList();
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", element.qualified() + " is used by " + uses);
-        var node = declaration(element);
+        var node = declaration(element).node();
         if (node instanceof FieldDeclaration field && field.getVariables().size() > 1) {
             throw new IllegalArgumentException("deleting one of several variables is not supported: " + element);
         }
@@ -470,7 +434,7 @@ public final class JavaProject implements Projection {
         }
         var renamed = ids.address(id).withName(name);
         if (ids.has(renamed)) throw new PrimitiveRejected("projection.duplicate", ids.render(renamed) + " already exists");
-        var node = declaration(element);
+        var node = declaration(element).node();
         var unit = sources.unitOf(node);
         var edits = new EditSet();
         switch (node) {
@@ -480,7 +444,7 @@ public final class JavaProject implements Projection {
             case MethodDeclaration method -> edits.replace(unit, method.getName(), name);
             default -> throw new IllegalArgumentException("unsupported rename: " + element);
         }
-        for (var ref : program().referencesTo(id)) renameUse(edits, referenceNodes.get(ref.id()), name);
+        for (var ref : program().referencesTo(id)) renameUse(edits, reading().use(ref.id()), name);
         sources.apply(edits);
         ids.rename(id, name);
     }
@@ -513,7 +477,7 @@ public final class JavaProject implements Projection {
         g.children(type.id()).stream().filter(e -> e.kind() == Kind.CONSTRUCTOR).forEach(c -> targets.add(c.id()));
         for (var target : targets) {
             for (var ref : g.referencesTo(target)) {
-                switch (referenceNodes.get(ref.id())) {
+                switch (reading().use(ref.id())) {
                     case ClassOrInterfaceType t -> names.add(t.getName());
                     case ObjectCreationExpr creation -> names.add(creation.getType().getName());
                     case NameExpr receiver -> names.add(receiver);
@@ -521,7 +485,7 @@ public final class JavaProject implements Projection {
                 }
             }
         }
-        var declaration = typeDeclaration(type.qualified());
+        var declaration = typeDeclaration(type);
         declaration.getConstructors().forEach(c -> names.add(c.getName()));
         names.add(declaration.getName());
         var edits = new EditSet();
@@ -556,7 +520,7 @@ public final class JavaProject implements Projection {
     }
 
     private void modifiers(ElementId id, ModifierEdit edit) {
-        var node = declaration(program().element(id));
+        var node = declaration(program().element(id)).node();
         var unit = sources.unitOf(node);
         sources.apply(edits(e -> edit.make(e, unit, (NodeWithModifiers<?>) node)));
     }
@@ -565,7 +529,7 @@ public final class JavaProject implements Projection {
     private List<MethodCallExpr> callsTo(ElementId method) {
         var calls = new ArrayList<MethodCallExpr>();
         for (var ref : program().referencesTo(method)) {
-            if (referenceNodes.get(ref.id()) instanceof MethodCallExpr call) calls.add(call);
+            if (reading().use(ref.id()) instanceof MethodCallExpr call) calls.add(call);
         }
         return calls;
     }
@@ -573,7 +537,7 @@ public final class JavaProject implements Projection {
     /** Moves a parameter just before another (or last), in the declaration and in every call. */
     private void moveParam(Element param, Element before) {
         var method = program().element(param.parent());
-        var declaration = (MethodDeclaration) declaration(method);
+        var declaration = declaration(method).as(MethodDeclaration.class);
         var names = parameterNames(declaration);
         var from = names.indexOf(param.name());
         var anchor = before == null ? names.size() : names.indexOf(before.name());
@@ -584,8 +548,9 @@ public final class JavaProject implements Projection {
         for (var call : callsTo(method.id())) reorder(edits, call.getArguments(), from, index);
         var reordered = new ArrayList<>(names);
         reordered.add(index, reordered.remove(from));
+        var path = sources.unitOf(declaration).path();
         sources.apply(edits);
-        resign(method, reordered);
+        resign(method, path, reordered);
     }
 
     /** Deletes a top-level type nothing uses: its file goes, and so do the imports that name it. */
@@ -612,7 +577,7 @@ public final class JavaProject implements Projection {
     /** Removes a parameter the body does not use, and the matching argument from every call. */
     private void deleteParam(Element param) {
         var method = program().element(param.parent());
-        var declaration = (MethodDeclaration) declaration(method);
+        var declaration = declaration(method).as(MethodDeclaration.class);
         var used = declaration.findAll(NameExpr.class, n -> n.getNameAsString().equals(param.name())).stream()
                 .anyMatch(n -> {
                     try {
@@ -628,9 +593,10 @@ public final class JavaProject implements Projection {
         remove(edits, declaration.getParameters(), index);
         for (var call : callsTo(method.id())) remove(edits, call.getArguments(), index);
         names.remove(index);
+        var path = sources.unitOf(declaration).path();
         sources.apply(edits);
         ids.forget(param.id());
-        resign(method, names);
+        resign(method, path, names);
     }
 
     private void reorder(EditSet edits, com.github.javaparser.ast.NodeList<? extends Node> items, int from, int to) {
@@ -652,9 +618,9 @@ public final class JavaProject implements Projection {
     }
 
     /** After a parameter list change, the method's identity follows its re-parsed declaration (found by its parameter names). */
-    private void resign(Element method, List<String> parameterNames) {
+    private void resign(Element method, String path, List<String> parameterNames) {
         var callable = (Address.Callable) ids.address(method.id());
-        var declaration = typeDeclaration(ids.render(ids.address(callable.owner()))).getMethodsByName(method.name()).stream()
+        var declaration = typeIn(sources.unit(path), ids.render(ids.address(callable.owner()))).getMethodsByName(method.name()).stream()
                 .filter(m -> parameterNames(m).equals(parameterNames))
                 .findFirst().orElseThrow();
         ids.resign(method.id(), keys.of(declaration));
@@ -662,7 +628,7 @@ public final class JavaProject implements Projection {
 
     /** Adds an import to the unit of a top-level type. */
     private void addImport(ElementId id, String qualified) {
-        var type = typeDeclaration(program().element(id).qualified());
+        var type = typeDeclaration(program().element(id));
         var unit = sources.unitOf(type);
         sources.apply(edits(e -> Imports.add(e, unit, qualified)));
     }
@@ -670,11 +636,11 @@ public final class JavaProject implements Projection {
     /** The declared type, as written; a workspace type given by qualified name is imported and written simply. */
     private void setType(ElementId id, String type) {
         var element = program().element(id);
-        var node = declaration(element);
+        var node = declaration(element).node();
         var unit = sources.unitOf(node);
         // a parameter's type is part of its method's address: what the method is, is read before the text changes
         var owner = element.kind() == Kind.PARAM ? program().element(element.parent()) : null;
-        var names = owner == null ? null : parameterNames((CallableDeclaration<?>) declaration(owner));
+        var names = owner == null ? null : parameterNames(declaration(owner).as(CallableDeclaration.class));
         var edits = new EditSet();
         var written = type.contains(".") && ids.has(new Address.Type(type)) ? importing(edits, unit, type) : type;
         switch (node) {
@@ -684,12 +650,12 @@ public final class JavaProject implements Projection {
             default -> throw new IllegalArgumentException("unsupported type change: " + element);
         }
         sources.apply(edits);
-        if (owner != null) resign(owner, names);
+        if (owner != null) resign(owner, unit.path(), names);
     }
 
     /** Replaces a method body with a one-statement-per-line template; {@code #{id}} renders as the element's name. */
     private void setBody(ElementId id, String template) {
-        var method = (MethodDeclaration) declaration(program().element(id));
+        var method = declaration(program().element(id)).as(MethodDeclaration.class);
         var unit = sources.unitOf(method);
         var indent = unit.indentation(method.getBegin().orElseThrow().line);
         sources.apply(edits(e -> e.replace(unit, method.getBody().orElseThrow(), Render.block(render(template), indent))));
@@ -702,7 +668,7 @@ public final class JavaProject implements Projection {
 
     /** Writes the extends clause: a qualified name of the same package as a simple name, any other text as it is. */
     private void setSuperclass(ElementId id, String superclass) {
-        var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id).qualified());
+        var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id));
         var unit = sources.unitOf(type);
         var name = simpleIfSamePackage(unit, superclass);
         var edits = new EditSet();
@@ -713,7 +679,7 @@ public final class JavaProject implements Projection {
 
     /** One more interface a class implements (or an interface extends). */
     private void addImplements(ElementId id, String qualified) {
-        var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id).qualified());
+        var type = (ClassOrInterfaceDeclaration) typeDeclaration(program().element(id));
         var unit = sources.unitOf(type);
         var name = simpleIfSamePackage(unit, qualified);
         var list = type.isInterface() ? type.getExtendedTypes() : type.getImplementedTypes();
@@ -747,7 +713,7 @@ public final class JavaProject implements Projection {
             return;
         }
         if (element.kind() != Kind.METHOD) throw new IllegalArgumentException("unsupported: abstract on " + element);
-        var method = (MethodDeclaration) declaration(element);
+        var method = declaration(element).as(MethodDeclaration.class);
         var unit = sources.unitOf(method);
         var edits = new EditSet();
         if (program().element(element.parent()).kind() != Kind.INTERFACE) {
@@ -762,7 +728,7 @@ public final class JavaProject implements Projection {
     /** The initial value of a field, as written. */
     private void setInitializer(ElementId id, String value) {
         var element = program().element(id);
-        var field = (FieldDeclaration) declaration(element);
+        var field = declaration(element).as(FieldDeclaration.class);
         var unit = sources.unitOf(field);
         var variable = field.getVariables().stream().filter(v -> v.getNameAsString().equals(element.name())).findFirst().orElseThrow();
         var edits = new EditSet();
@@ -775,7 +741,7 @@ public final class JavaProject implements Projection {
         requireIdentifier(name);
         var source = program().element(from);
         var owner = program().element(source.parent());
-        var method = (MethodDeclaration) declaration(source);
+        var method = declaration(source).as(MethodDeclaration.class);
         var dash = fragment.indexOf('-');
         var first = Integer.parseInt(fragment.substring(0, dash).strip());
         var last = Integer.parseInt(fragment.substring(dash + 1).strip());
@@ -795,7 +761,7 @@ public final class JavaProject implements Projection {
         var params = flow.inputs().entrySet().stream().map(e -> e.getValue().asString() + " " + e.getKey())
                 .collect(Collectors.joining(", "));
         var unit = sources.unitOf(method);
-        var type = typeDeclaration(owner.qualified());
+        var type = typeDeclaration(owner);
         var indent = Members.indentation(unit, type);
         var begin = selected.getFirst().getBegin().orElseThrow().line;
         var end = selected.getLast().getEnd().orElseThrow().line;
@@ -809,7 +775,7 @@ public final class JavaProject implements Projection {
         var edits = new EditSet().replaceLines(unit, begin, end, unit.indentation(begin) + callLine + "\n");
         Members.append(edits, unit, type, modifiers + outputType + " " + name + "(" + params + ") {\n" + body + indent + "}");
         sources.apply(edits);
-        var created = typeDeclaration(owner.qualified()).getMethodsByName(name).getFirst();
+        var created = typeIn(sources.unit(unit.path()), owner.qualified()).getMethodsByName(name).getFirst();
         return ids.of(new Address.Callable(owner.id(), name, keys.of(created)), Kind.METHOD);
     }
 
@@ -821,11 +787,11 @@ public final class JavaProject implements Projection {
      */
     private void inline(String refId) {
         var ref = program().reference(refId);
-        if (!(referenceNodes.get(refId) instanceof MethodCallExpr call)) {
+        if (!(reading().use(refId) instanceof MethodCallExpr call)) {
             throw new PrimitiveRejected("inline.not-a-call", refId + " is not a call");
         }
         var method = program().element(ref.target());
-        var declaration = (MethodDeclaration) declaration(method);
+        var declaration = declaration(method).as(MethodDeclaration.class);
         var statements = declaration.getBody().map(b -> b.getStatements()).orElseThrow();
         if (statements.size() != 1 || !statements.get(0).isReturnStmt() || statements.get(0).asReturnStmt().getExpression().isEmpty()) {
             throw new PrimitiveRejected("inline.body-shape", method.qualified() + " is not a single 'return expr;'");
@@ -877,7 +843,7 @@ public final class JavaProject implements Projection {
             retargetType(ref, program().element(targetId));
             return;
         }
-        var node = (Expression) referenceNodes.get(refId);
+        var node = (Expression) reading().use(refId);
         if (node.isObjectCreationExpr() && ref.mode() != Mode.NEW) throw new IllegalStateException(ref.toString());
         var target = program().element(targetId);
         var unit = sources.unitOf(node);
@@ -922,7 +888,7 @@ public final class JavaProject implements Projection {
 
     /** A type use now names {@code type}: its simple name, imported when another package declares it. */
     private void retargetType(Reference ref, Element type) {
-        var node = referenceNodes.get(ref.id());
+        var node = reading().use(ref.id());
         var unit = sources.unitOf(node);
         var edits = new EditSet();
         edits.replace(unit, node instanceof ClassOrInterfaceType t ? t.getName() : node, type.name());
@@ -932,34 +898,19 @@ public final class JavaProject implements Projection {
 
     // ---- declarations and edits
 
-    private Node declaration(Element element) {
-        if (element.kind() == Kind.PARAM) {
-            return ((CallableDeclaration<?>) declaration(program().element(element.parent())))
-                    .getParameterByName(element.name()).orElseThrow();
-        }
-        if (element.kind().isType()) return typeDeclaration(element.qualified());
-        var type = typeDeclaration(program().element(element.parent()).qualified());
-        return switch (element.kind()) {
-            case FIELD -> type.getFieldByName(element.name()).orElseThrow();
-            case CONSTRUCTOR -> type.getConstructors().stream()
-                    .filter(c -> keys.of(c).equals(keysOf(element)))
-                    .findFirst().orElseThrow();
-            case METHOD -> type.getMethods().stream()
-                    .filter(m -> m.getNameAsString().equals(element.name()) && keys.of(m).equals(keysOf(element)))
-                    .findFirst().orElseThrow();
-            default -> throw new IllegalArgumentException("not a member: " + element);
-        };
+    /** Where an element is declared, as last read. */
+    private Decl declaration(Element element) {
+        return reading().declaration(element.id());
     }
 
-    private static List<String> keysOf(Element callable) {
-        return ((Address.Callable) callable.address()).keys();
+    private TypeDeclaration<?> typeDeclaration(Element type) {
+        return declaration(type).as(TypeDeclaration.class);
     }
 
-    private TypeDeclaration<?> typeDeclaration(String qualified) {
-        return sources.trees().stream()
-                .flatMap(cu -> types(cu).stream())
-                .filter(t -> t.getFullyQualifiedName().map(Object::toString).orElse("").equals(qualified))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("no type " + qualified));
+    /** A type in a unit just edited: the reading is stale until identity has followed the edit. */
+    private static TypeDeclaration<?> typeIn(Unit unit, String qualified) {
+        return types(unit.tree()).stream().filter(t -> Reader.qualifiedOf(t).equals(qualified)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("no type " + qualified + " in " + unit.path()));
     }
 
     private static EditSet edits(java.util.function.Consumer<EditSet> making) {
@@ -973,8 +924,7 @@ public final class JavaProject implements Projection {
         JavaParserFacade.clearInstances(); // resolution caches point into replaced trees
         sources.trees().forEach(JavaProject::forgetResolvedTypes);
         typeSolver.reset();
-        graph = null;
-        referenceNodes = Map.of();
+        reading = null;
         diagnostics = null;
     }
 

@@ -1,4 +1,4 @@
-package ide.java;
+package ide.java.semantics;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
@@ -35,13 +35,13 @@ import java.util.List;
 import java.util.Map;
 
 /** How uses resolve and how declarations are described in the graph: kinds, modes, facts. */
-final class Resolution {
+public final class Resolution {
 
     private Resolution() {
     }
 
     /** The constructor a {@code new} resolves to, or null. */
-    static ResolvedConstructorDeclaration resolveConstructor(ObjectCreationExpr creation) {
+    public static ResolvedConstructorDeclaration resolveConstructor(ObjectCreationExpr creation) {
         try {
             return creation.resolve();
         } catch (RuntimeException unresolved) {
@@ -50,7 +50,7 @@ final class Resolution {
     }
 
     /** Qualified name of the type a type use resolves to, or null. */
-    static String resolveType(ClassOrInterfaceType type) {
+    public static String resolveType(ClassOrInterfaceType type) {
         try {
             return type.resolve().asReferenceType().getQualifiedName();
         } catch (RuntimeException unresolved) {
@@ -58,7 +58,7 @@ final class Resolution {
         }
     }
 
-    static Mode modeOf(Node use) {
+    public static Mode modeOf(Node use) {
         if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr) return Mode.CALL;
         if (use instanceof ObjectCreationExpr) return Mode.NEW;
         if (use instanceof ClassOrInterfaceType type) return linkMode(type);
@@ -79,7 +79,7 @@ final class Resolution {
      * A type mention is a link when it is an extends or implements clause, or the whole declared type of a field,
      * parameter or method; any other mention (a type argument, a local's type, a cast) is a plain type use.
      */
-    static Mode linkMode(ClassOrInterfaceType type) {
+    public static Mode linkMode(ClassOrInterfaceType type) {
         var parent = type.getParentNode().orElse(null);
         return switch (parent) {
             case ClassOrInterfaceDeclaration c -> c.getExtendedTypes().stream().anyMatch(t -> t == type) ? Mode.EXTENDS
@@ -94,7 +94,7 @@ final class Resolution {
     }
 
     /** The method a method reference ({@code Book::code}) resolves to, or null. */
-    static ResolvedMethodDeclaration resolveMethodReference(MethodReferenceExpr reference) {
+    public static ResolvedMethodDeclaration resolveMethodReference(MethodReferenceExpr reference) {
         try {
             return reference.resolve();
         } catch (RuntimeException unresolved) {
@@ -103,7 +103,7 @@ final class Resolution {
     }
 
     /** The method a call resolves to, or null. */
-    static ResolvedMethodDeclaration resolveMethodStrictly(MethodCallExpr call) {
+    public static ResolvedMethodDeclaration resolveMethodStrictly(MethodCallExpr call) {
         try {
             return call.resolve();
         } catch (RuntimeException unresolved) {
@@ -111,7 +111,7 @@ final class Resolution {
         }
     }
 
-    static List<Expression> fieldUses(CompilationUnit cu) {
+    public static List<Expression> fieldUses(CompilationUnit cu) {
         var uses = new ArrayList<Expression>();
         uses.addAll(cu.findAll(NameExpr.class));
         uses.addAll(cu.findAll(FieldAccessExpr.class));
@@ -119,7 +119,7 @@ final class Resolution {
     }
 
     /** The field the expression resolves to, or null if it is not a (resolvable) field use. */
-    static ResolvedFieldDeclaration resolveField(Expression expr) {
+    public static ResolvedFieldDeclaration resolveField(Expression expr) {
         try {
             ResolvedValueDeclaration decl = expr.isNameExpr() ? expr.asNameExpr().resolve() : expr.asFieldAccessExpr().resolve();
             return decl.isField() ? (ResolvedFieldDeclaration) decl : null;
@@ -129,7 +129,7 @@ final class Resolution {
     }
 
     /** The resolved description of a declared type, or the type as written when it does not resolve. */
-    static String describe(Type type) {
+    public static String describe(Type type) {
         try {
             return type.resolve().describe();
         } catch (RuntimeException unresolved) {
@@ -138,7 +138,7 @@ final class Resolution {
     }
 
     /** Classes, interfaces and enums of a unit, outermost first. */
-    static List<TypeDeclaration<?>> types(CompilationUnit cu) {
+    public static List<TypeDeclaration<?>> types(CompilationUnit cu) {
         var types = new ArrayList<TypeDeclaration<?>>();
         cu.findAll(TypeDeclaration.class).forEach(t -> {
             if (t instanceof ClassOrInterfaceDeclaration || t instanceof EnumDeclaration) types.add(t);
@@ -146,13 +146,13 @@ final class Resolution {
         return types;
     }
 
-    static Kind kindOf(TypeDeclaration<?> type) {
+    public static Kind kindOf(TypeDeclaration<?> type) {
         if (type instanceof EnumDeclaration) return Kind.ENUM;
         return ((ClassOrInterfaceDeclaration) type).isInterface() ? Kind.INTERFACE : Kind.CLASS;
     }
 
     /** The facts a declaration's modifiers state. */
-    static Map<Fact, String> attributes(NodeWithModifiers<?> node) {
+    public static Map<Fact, String> attributes(NodeWithModifiers<?> node) {
         var visibility = node.getAccessSpecifier().asString();
         return Map.of(Fact.VISIBILITY, visibility.isEmpty() ? "package" : visibility,
                 Fact.STATIC, String.valueOf(node.hasModifier(Modifier.Keyword.STATIC)),

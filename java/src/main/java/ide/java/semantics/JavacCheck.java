@@ -1,4 +1,4 @@
-package ide.java;
+package ide.java.semantics;
 
 import com.sun.source.util.JavacTask;
 import ide.projection.Diagnostic;
@@ -14,12 +14,12 @@ import java.util.List;
 import java.util.Map;
 
 /** Runs javac over in-memory sources (attribution only, nothing written) and reports errors as {@code javac.<code>}. */
-final class JavacCheck {
+public final class JavacCheck {
 
     private JavacCheck() {
     }
 
-    static List<Diagnostic> errors(Map<String, String> sources) {
+    public static List<Diagnostic> errors(Map<String, String> sources) {
         var compiler = ToolProvider.getSystemJavaCompiler();
         var collector = new DiagnosticCollector<JavaFileObject>();
         var files = sources.entrySet().stream().map(e -> source(e.getKey(), e.getValue())).toList();

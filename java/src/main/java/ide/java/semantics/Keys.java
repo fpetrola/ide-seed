@@ -1,4 +1,4 @@
-package ide.java;
+package ide.java.semantics;
 
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.type.Type;
@@ -17,31 +17,31 @@ import java.util.regex.Pattern;
  * its id (so renaming or moving a type changes no callable's address) and every other type written by its simple
  * name. Declarations and uses are keyed the same way, so they agree.
  */
-final class Keys {
+public final class Keys {
 
     private static final Pattern TOKEN = Pattern.compile("[\\w$.]+");
 
     private final Identity ids;
 
-    Keys(Identity ids) {
+    public Keys(Identity ids) {
         this.ids = ids;
     }
 
-    List<String> of(CallableDeclaration<?> callable) {
+    public List<String> of(CallableDeclaration<?> callable) {
         return callable.getParameters().stream().map(p -> of(p.getType())).toList();
     }
 
-    List<String> of(ResolvedMethodLikeDeclaration callable) {
+    public List<String> of(ResolvedMethodLikeDeclaration callable) {
         var keys = new ArrayList<String>();
         for (var i = 0; i < callable.getNumberOfParams(); i++) keys.add(of(callable.getParam(i).getType()));
         return keys;
     }
 
-    String of(Type type) {
+    public String of(Type type) {
         return of(Resolution.describe(type));
     }
 
-    String of(ResolvedType type) {
+    public String of(ResolvedType type) {
         return of(type.describe());
     }
 

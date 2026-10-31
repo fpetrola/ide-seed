@@ -1,4 +1,4 @@
-package ide.java;
+package ide.java.semantics;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.BinaryExpr;
@@ -38,13 +38,13 @@ import java.util.List;
 import java.util.Map;
 
 /** Expression-level helpers for the body primitives (inline, extract): purity, precedence, parentheses. */
-final class Bodies {
+public final class Bodies {
 
     private Bodies() {
     }
 
     /** Evaluating it twice, or not at all, cannot be told apart: names, literals, this, and field reads of those. */
-    static boolean trivial(Expression e) {
+    public static boolean trivial(Expression e) {
         return e instanceof NameExpr || e instanceof ThisExpr || e instanceof IntegerLiteralExpr || e instanceof LongLiteralExpr
                 || e instanceof DoubleLiteralExpr || e instanceof BooleanLiteralExpr || e instanceof CharLiteralExpr
                 || e instanceof StringLiteralExpr || e instanceof NullLiteralExpr
@@ -52,7 +52,7 @@ final class Bodies {
     }
 
     /** Whether {@code child}, placed where {@code slot} is, needs parentheses to keep its meaning. */
-    static boolean needsParentheses(Expression child, Node slot) {
+    public static boolean needsParentheses(Expression child, Node slot) {
         if (!(child instanceof BinaryExpr inner)) return false;
         var parent = slot.getParentNode().orElse(null);
         if (parent instanceof UnaryExpr) return true;
@@ -62,11 +62,11 @@ final class Bodies {
         return outer.getRight() == slot; // a - (b - c): same level on the right changes the grouping
     }
 
-    static Expression parenthesized(Expression e) {
+    public static Expression parenthesized(Expression e) {
         return new EnclosedExpr(e);
     }
 
-    static boolean primary(Expression e) {
+    public static boolean primary(Expression e) {
         return !(e instanceof BinaryExpr) && !(e instanceof UnaryExpr) && !(e instanceof com.github.javaparser.ast.expr.ConditionalExpr)
                 && !(e instanceof com.github.javaparser.ast.expr.AssignExpr) && !(e instanceof com.github.javaparser.ast.expr.CastExpr)
                 && !(e instanceof com.github.javaparser.ast.expr.InstanceOfExpr) && !(e instanceof com.github.javaparser.ast.expr.LambdaExpr)
@@ -74,7 +74,7 @@ final class Bodies {
     }
 
     /** The statements of the outermost block of {@code method} that lie whole within lines first..last. */
-    static List<Statement> statementsWithin(MethodDeclaration method, int first, int last) {
+    public static List<Statement> statementsWithin(MethodDeclaration method, int first, int last) {
         for (var block : method.findAll(BlockStmt.class)) {
             var inside = block.getStatements().stream().filter(s -> s.getBegin().orElseThrow().line >= first
                     && s.getEnd().orElseThrow().line <= last).toList();
@@ -86,7 +86,7 @@ final class Bodies {
     }
 
     /** A return, or a break/continue whose loop or switch is outside the fragment; null if none. */
-    static Statement jumpOut(List<Statement> fragment) {
+    public static Statement jumpOut(List<Statement> fragment) {
         for (var statement : fragment) {
             for (var jump : statement.findAll(Statement.class, s -> s instanceof ReturnStmt || s instanceof BreakStmt || s instanceof ContinueStmt)) {
                 if (jump.findAncestor(LambdaExpr.class).filter(l -> statement.isAncestorOf(l)).isPresent()) continue;
@@ -100,13 +100,13 @@ final class Bodies {
     }
 
     /** Data flow of a fragment: locals it reads from before (inputs) and values it sets that are read after. */
-    record Flow(Map<String, Type> inputs, Map<String, Type> outputs, java.util.Set<String> inside) {
-        boolean declaredInside(String name) {
+    public record Flow(Map<String, Type> inputs, Map<String, Type> outputs, java.util.Set<String> inside) {
+        public boolean declaredInside(String name) {
             return inside.contains(name);
         }
     }
 
-    static Flow flow(MethodDeclaration method, List<Statement> fragment) {
+    public static Flow flow(MethodDeclaration method, List<Statement> fragment) {
         var start = fragment.getFirst().getBegin().orElseThrow();
         var end = fragment.getLast().getEnd().orElseThrow();
         var before = new LinkedHashMap<String, Type>();
@@ -144,7 +144,7 @@ final class Bodies {
     }
 
     /** Shifts lines so the least indented one starts with {@code indent}. */
-    static String reindent(String text, String indent) {
+    public static String reindent(String text, String indent) {
         var lines = text.lines().toList();
         var least = lines.stream().filter(l -> !l.isBlank()).mapToInt(l -> l.length() - l.stripLeading().length()).min().orElse(0);
         var out = new StringBuilder();

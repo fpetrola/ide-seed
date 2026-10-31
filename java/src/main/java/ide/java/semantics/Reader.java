@@ -1,8 +1,8 @@
-package ide.java;
+package ide.java.semantics;
 
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -19,6 +19,8 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory;
+import ide.java.syntax.Decl;
 import ide.java.text.Unit;
 import ide.program.Address;
 import ide.program.Element;
@@ -39,65 +41,78 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static ide.java.Resolution.*;
+import static ide.java.semantics.Resolution.*;
 
-/** Reads the program: builds the graph from the units, resolving uses with the workspace's type solver. */
-final class GraphReader {
+/**
+ * Reads the program from the units: elements (packages and types first, since members key their parameter types by
+ * type id), then the uses that resolve to them. Identity decides who is who: a known address keeps its id.
+ */
+public final class Reader {
 
-    /** A graph and, for each of its reference ids, the node of the use. */
-    record Read(Program program, Map<String, Node> nodes) {
+    /** What a reading gives: the program, the node behind each reference, and where each element is declared. */
+    public record Reading(Program program, Map<String, Node> uses, Map<ElementId, Decl> declarations) {
+
+        public Decl declaration(ElementId element) {
+            var declaration = declarations.get(element);
+            if (declaration == null) throw new IllegalArgumentException("no declaration of " + element);
+            return declaration;
+        }
+
+        public Node use(String reference) {
+            var use = uses.get(reference);
+            if (use == null) throw new IllegalArgumentException("no use " + reference);
+            return use;
+        }
     }
 
     private final Identity ids;
     private final Keys keys;
     private final WorkspaceTypeSolver typeSolver;
 
-    GraphReader(Identity ids, Keys keys, WorkspaceTypeSolver typeSolver) {
+    public Reader(Identity ids, Keys keys, WorkspaceTypeSolver typeSolver) {
         this.ids = ids;
         this.keys = keys;
         this.typeSolver = typeSolver;
     }
 
-    /** The graph of {@code units}, plus the node behind each reference id. */
-    Read read(Collection<Unit> units, Set<String> emptyPackages) {
+    public Reading read(Collection<Unit> units, Set<String> emptyPackages) {
         var elements = new ArrayList<Element>();
-        var references = new ArrayList<Reference>();
-        var nodes = new HashMap<String, Node>();
+        var declarations = new HashMap<ElementId, Decl>();
         var packages = new LinkedHashMap<String, ElementId>();
-        // packages and types first: member addresses key their parameter types by id
         for (var unit : units) {
-            var cu = unit.tree();
-            cu.getPackageDeclaration().ifPresent(p -> packages.computeIfAbsent(p.getNameAsString(), n -> addPackage(elements, n)));
-            for (var type : types(cu)) ids.of(new Address.Type(qualifiedOf(type)), Kind.CLASS);
+            unit.tree().getPackageDeclaration().ifPresent(p -> packages.computeIfAbsent(p.getNameAsString(), n -> addPackage(elements, n)));
+            for (var type : types(unit.tree())) ids.of(new Address.Type(qualifiedOf(type)), Kind.CLASS);
         }
         for (var name : emptyPackages) packages.computeIfAbsent(name, n -> addPackage(elements, n));
         for (var unit : units) {
-            var cu = unit.tree();
-            var pkg = cu.getPackageDeclaration().map(p -> packages.get(p.getNameAsString())).orElse(null);
-            for (var type : types(cu)) {
+            var pkg = unit.tree().getPackageDeclaration().map(p -> packages.get(p.getNameAsString())).orElse(null);
+            for (var type : types(unit.tree())) {
                 var typeName = qualifiedOf(type);
                 var typeId = ids.get(new Address.Type(typeName));
                 var parent = type.getParentNode().filter(TypeDeclaration.class::isInstance)
                         .map(t -> ids.get(new Address.Type(qualifiedOf((TypeDeclaration<?>) t)))).orElse(pkg);
                 var typeFacts = new HashMap<>(attributes(type));
                 if (type.isTopLevelType()) typeFacts.put(Fact.FILE, unit.path());
-                if (type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration c && !c.isInterface()
-                        && c.getExtendedTypes().isNonEmpty()) {
+                if (type instanceof ClassOrInterfaceDeclaration c && !c.isInterface() && c.getExtendedTypes().isNonEmpty()) {
                     typeFacts.put(Fact.SUPERCLASS, c.getExtendedTypes(0).asString());
                 }
                 elements.add(new Element(typeId, kindOf(type), type.getNameAsString(), parent, new Address.Type(typeName), typeName,
                         Map.copyOf(typeFacts)));
+                declarations.put(typeId, new Decl(unit, type));
                 for (var field : type.getFields()) {
                     for (var variable : field.getVariables()) {
                         var facts = new HashMap<>(attributes(field));
                         facts.put(Fact.TYPE, variable.getType().asString());
-                        add(elements, new Address.Field(typeId, variable.getNameAsString()), Kind.FIELD, variable.getNameAsString(), typeId, facts);
+                        var id = add(elements, new Address.Field(typeId, variable.getNameAsString()), Kind.FIELD,
+                                variable.getNameAsString(), typeId, facts);
+                        declarations.put(id, new Decl(unit, field));
                     }
                 }
                 for (var constructor : type.getConstructors()) {
                     var id = add(elements, new Address.Callable(typeId, "new", keys.of(constructor)), Kind.CONSTRUCTOR,
                             type.getNameAsString(), typeId, attributes(constructor));
-                    addParams(elements, constructor, id);
+                    declarations.put(id, new Decl(unit, constructor));
+                    addParams(elements, declarations, unit, constructor, id);
                 }
                 for (var method : type.getMethods()) {
                     var facts = new HashMap<>(attributes(method));
@@ -108,21 +123,25 @@ final class GraphReader {
                     }
                     var id = add(elements, new Address.Callable(typeId, method.getNameAsString(), keys.of(method)), Kind.METHOD,
                             method.getNameAsString(), typeId, facts);
-                    addParams(elements, method, id);
+                    declarations.put(id, new Decl(unit, method));
+                    addParams(elements, declarations, unit, method, id);
                 }
             }
         }
-        // references only once every element has its id: a use may point into a unit processed later
+        // references only once every element has its id: a use may point into a unit read later
+        var references = new ArrayList<Reference>();
+        var uses = new HashMap<String, Node>();
+        var ordinals = new HashMap<ElementId, Integer>();
         for (var unit : units) {
             var cu = unit.tree();
-            var uses = new ArrayList<Node>();
-            uses.addAll(fieldUses(cu));
-            uses.addAll(cu.findAll(MethodCallExpr.class));
-            uses.addAll(cu.findAll(ClassOrInterfaceType.class));
-            uses.addAll(cu.findAll(ObjectCreationExpr.class));
-            uses.addAll(cu.findAll(MethodReferenceExpr.class));
-            uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
-            for (var use : uses) {
+            var nodes = new ArrayList<Node>();
+            nodes.addAll(fieldUses(cu));
+            nodes.addAll(cu.findAll(MethodCallExpr.class));
+            nodes.addAll(cu.findAll(ClassOrInterfaceType.class));
+            nodes.addAll(cu.findAll(ObjectCreationExpr.class));
+            nodes.addAll(cu.findAll(MethodReferenceExpr.class));
+            nodes.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
+            for (var use : nodes) {
                 var target = switch (use) {
                     case MethodCallExpr call -> resolveMethod(call);
                     case ObjectCreationExpr creation -> callable(resolveConstructor(creation));
@@ -133,10 +152,18 @@ final class GraphReader {
                         yield field != null ? field(field) : use instanceof NameExpr name ? type(resolveTypeName(name)) : null;
                     }
                 };
-                addReference(references, nodes, use, target);
+                if (target == null) continue; // JDK and unresolved uses are not tracked yet
+                var site = siteOf(use);
+                var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1); // the site, and the use's place in it
+                uses.put(id, use);
+                var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
+                        : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
+                        : ((NodeWithSimpleName<?>) use).getNameAsString();
+                var mode = use instanceof NameExpr && ids.address(target) instanceof Address.Type ? Mode.TYPE : modeOf(use);
+                references.add(new Reference(id, site, target, name, mode));
             }
         }
-        return new Read(new Program(elements, references), nodes);
+        return new Reading(new Program(elements, references), uses, declarations);
     }
 
     private ElementId addPackage(List<Element> elements, String name) {
@@ -152,28 +179,13 @@ final class GraphReader {
         return id;
     }
 
-    private void addParams(List<Element> elements, CallableDeclaration<?> callable, ElementId owner) {
+    private void addParams(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, CallableDeclaration<?> callable,
+                           ElementId owner) {
         for (var param : callable.getParameters()) {
-            add(elements, new Address.Param(owner, param.getNameAsString()), Kind.PARAM, param.getNameAsString(), owner,
+            var id = add(elements, new Address.Param(owner, param.getNameAsString()), Kind.PARAM, param.getNameAsString(), owner,
                     Map.of(Fact.TYPE, param.getType().asString()));
+            declarations.put(id, new Decl(unit, param));
         }
-    }
-
-    /**
-     * Records a use of a workspace element (JDK and unresolved uses are not tracked yet).
-     * Its id is the site plus the ordinal of the use within the site, in source order.
-     */
-    private void addReference(List<Reference> references, Map<String, Node> nodes, Node use, ElementId target) {
-        if (target == null) return;
-        var site = siteOf(use);
-        var ordinal = references.stream().filter(r -> r.site().equals(site)).count();
-        var id = site + "@" + ordinal;
-        nodes.put(id, use);
-        var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
-                : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
-                : ((NodeWithSimpleName<?>) use).getNameAsString();
-        var mode = use instanceof NameExpr && ids.address(target) instanceof Address.Type ? Mode.TYPE : modeOf(use);
-        references.add(new Reference(id, site, target, name, mode));
     }
 
     // ---- from resolved declarations to ids (null when not in the workspace)
@@ -196,11 +208,10 @@ final class GraphReader {
     }
 
     /** A name used as a type (e.g. the receiver in {@code Money.of(1)}): its qualified name, or null. */
-    String resolveTypeName(NameExpr name) {
+    public String resolveTypeName(NameExpr name) {
         if (name.getParentNode().filter(p -> p instanceof MethodCallExpr || p instanceof FieldAccessExpr).isEmpty()) return null;
         try {
-            var type = com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory.getContext(name, typeSolver)
-                    .solveType(name.getNameAsString());
+            var type = JavaParserFactory.getContext(name, typeSolver).solveType(name.getNameAsString());
             return type.isSolved() ? type.getCorrespondingDeclaration().getQualifiedName() : null;
         } catch (RuntimeException unresolved) {
             return null;
@@ -208,7 +219,7 @@ final class GraphReader {
     }
 
     /** The workspace method the call resolves to, or null. */
-    ElementId resolveMethod(MethodCallExpr call) {
+    public ElementId resolveMethod(MethodCallExpr call) {
         var resolved = callable(resolveMethodStrictly(call));
         return resolved != null ? resolved : resolveThroughBounds(call);
     }
@@ -240,7 +251,7 @@ final class GraphReader {
     }
 
     /** The innermost element containing the node: a parameter (its declared type), a method or field, else its type. */
-    ElementId siteOf(Node node) {
+    public ElementId siteOf(Node node) {
         var type = node.findAncestor(TypeDeclaration.class).orElseThrow();
         var owner = ids.get(new Address.Type(qualifiedOf(type)));
         var method = node.findAncestor(CallableDeclaration.class);
@@ -258,7 +269,7 @@ final class GraphReader {
         return callable instanceof ConstructorDeclaration ? "new" : callable.getNameAsString();
     }
 
-    static String qualifiedOf(TypeDeclaration<?> type) {
+    public static String qualifiedOf(TypeDeclaration<?> type) {
         return type.getFullyQualifiedName().orElseThrow();
     }
 }

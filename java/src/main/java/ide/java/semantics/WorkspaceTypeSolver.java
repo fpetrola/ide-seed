@@ -1,4 +1,4 @@
-package ide.java;
+package ide.java.semantics;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -19,14 +19,14 @@ import java.util.function.Supplier;
  * Resolves types declared in the in-memory workspace, falling back to the JDK. The index of workspace types is
  * dropped whenever units are replaced, so it never points into stale ASTs.
  */
-final class WorkspaceTypeSolver implements TypeSolver {
+public final class WorkspaceTypeSolver implements TypeSolver {
 
     private final Supplier<Collection<CompilationUnit>> units;
     private final TypeSolver jdk;
     private TypeSolver parent;
     private Map<String, ResolvedReferenceTypeDeclaration> index;
 
-    WorkspaceTypeSolver(Supplier<Collection<CompilationUnit>> units, TypeSolver jdk) {
+    public WorkspaceTypeSolver(Supplier<Collection<CompilationUnit>> units, TypeSolver jdk) {
         this.units = units;
         this.jdk = jdk;
         jdk.setParent(this);
@@ -43,7 +43,7 @@ final class WorkspaceTypeSolver implements TypeSolver {
     }
 
     /** Forgets the index; called whenever units are replaced. */
-    void reset() {
+    public void reset() {
         index = null;
     }
 
