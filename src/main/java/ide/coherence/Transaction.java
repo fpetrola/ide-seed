@@ -5,6 +5,9 @@ import ide.graph.Kind;
 import ide.graph.Program;
 import ide.graph.ProgramGraph;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * A program under change. Primitives pass through; intended rebindings ({@link #retarget}) are folded into the
  * baseline so that the verifier expects them instead of reporting them.
@@ -14,6 +17,8 @@ public final class Transaction implements Program {
     private final Program program;
     private final Object checkpoint;
     private ProgramGraph baseline;
+    private final List<String> steps = new ArrayList<>();
+    private int depth;
 
     public Transaction(Program program) {
         this.program = program;
@@ -24,14 +29,33 @@ public final class Transaction implements Program {
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else rolls back. */
     public Result commit(Repairer repairer) {
         var outcome = repairer.stabilize(baseline, program);
-        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs());
+        outcome.repairs().forEach(repair -> steps.add("! " + repair));
+        if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), steps);
         program.rollback(checkpoint);
-        return Result.aborted(outcome.violations());
+        return Result.aborted(outcome.violations(), steps);
     }
 
     public Result abort(Violation reason) {
         program.rollback(checkpoint);
-        return Result.aborted(java.util.List.of(reason));
+        return Result.aborted(List.of(reason), steps);
+    }
+
+    /** Marks the start of a refactoring call; primitives until {@link #exit()} are nested under it. */
+    public void enter(String call) {
+        log(". " + call);
+        depth++;
+    }
+
+    public void exit() {
+        depth--;
+    }
+
+    private void log(String step) {
+        steps.add("  ".repeat(depth) + step);
+    }
+
+    private String name(ElementId id) {
+        return program.graph().element(id).qualified();
     }
 
     @Override
@@ -51,22 +75,29 @@ public final class Transaction implements Program {
 
     @Override
     public ElementId create(Kind kind, ElementId parent, String name) {
-        return program.create(kind, parent, name);
+        var id = program.create(kind, parent, name);
+        log("' create " + kind + " " + name(id));
+        return id;
     }
 
     @Override
     public void move(ElementId member, ElementId newParent, ElementId before) {
+        var from = name(member);
         program.move(member, newParent, before);
+        log("' move " + from + " -> " + name(newParent));
     }
 
     @Override
     public void rename(ElementId element, String name) {
+        var from = name(element);
         program.rename(element, name);
+        log("' rename " + from + " -> " + name);
     }
 
     @Override
     public void set(ElementId element, String attribute, String value) {
         program.set(element, attribute, value);
+        log("' set " + name(element) + " " + attribute + " = " + value);
     }
 
     @Override
@@ -74,5 +105,6 @@ public final class Transaction implements Program {
         var reference = program.graph().reference(ref);
         program.retarget(ref, target);
         baseline = baseline.retargeted(reference.site(), reference.target(), target);
+        log("' retarget " + ref + " " + reference.name() + " -> " + name(target));
     }
 }

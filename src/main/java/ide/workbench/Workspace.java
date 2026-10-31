@@ -59,7 +59,12 @@ public final class Workspace {
 
             @Override
             public String call(String id, Map<String, ?> callArgs) {
-                return refactoring(id).apply(this, new Args(callArgs));
+                tx.enter(id);
+                try {
+                    return refactoring(id).apply(this, new Args(callArgs));
+                } finally {
+                    tx.exit();
+                }
             }
         };
         try {
