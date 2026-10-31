@@ -38,9 +38,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The AST is never edited. Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
-- `engine` (projection) — Verifier (binding, access, dispatch views; javac view when the code compiled before),
-  Repairer (plans from saved points, typed pins), Transaction (intercepts `apply`, folds each declared Change into
-  the baseline, step tree), Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
+- `engine` (projection) — Transaction (intercepts `apply`, folds each declared Change into the baseline, pins),
+  Verifier (a list of Views compared through a Comparison: BindingView, AccessView, DispatchView, and CompilerView,
+  costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
+  only place that writes sigils), Result, Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
 - `refactoring` (projection) — Refactoring/Ctx/Args, Primitives (read off the Primitive records: nothing registered
   by hand), ChangeSignature (the only Java composite); the `.ref`
   language in `ide.refactoring.script`; the catalog `refactoring/src/main/resources/ide/refactoring/standard.ref`.

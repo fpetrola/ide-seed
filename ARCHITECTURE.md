@@ -299,10 +299,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Qué ignora.** Lenguajes, scripts, conocimiento, sesión.
 - **Prueba de autonomía.** Sobre `MemoryProjection`, con una vista y un remedio escritos en el test: llega al punto
   fijo, respeta los topes, no mueve pins, deshace cuando no puede.
-- **Estado actual** (después de la fase 2). `Transaction` intercepta `apply`, pliega el `Change` declarado y acumula
-  pins tipados; no conoce ningún atributo. Tiene tests propios sobre la proyección en memoria (transacción y
-  reparador). Queda para la fase 4: `Verifier` son tres chequeos entrelazados en una clase, la vista del compilador
-  está dentro de `Repairer`, y el rastro son strings con sigilos armados al registrar.
+- **Estado actual** (fase 4 cerrada, 2026-10-31). `Transaction` intercepta `apply`, pliega el `Change` declarado y
+  acumula pins tipados; no conoce ningún atributo. Las vistas son una clase cada una (`BindingView`, `AccessView`,
+  `DispatchView`, `CompilerView`) detrás de `View` y `Comparison`; `Verifier` es una lista de vistas, y las costosas
+  corren solo si las baratas no ven nada. La exención de lo que ya estaba roto vive en la vista que la necesita
+  (acceso). `Trace` es un árbol de datos y el único lugar que escribe sigilos; el planificador de `knowledge` también
+  responde su deducción como `Trace`. Tests propios sobre la proyección en memoria: transacción, reparador, rastro y
+  cada vista sola.
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
@@ -410,16 +413,16 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo                                    | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 |
-|-------------------------------------------|----------------------|---------------------|---------------------|
-| program                                   | 8                    | 12                  | 12                  |
-| projection-kit                            | (no existía)         | 8                   | 8                   |
-| java                                      | 0                    | 8                   | 24                  |
-| engine                                    | 0                    | 9                   | 9                   |
-| refactoring                               | 1                    | 3                   | 3                   |
-| core, projection, knowledge               | 0                    | 0                   | 0                   |
-| session                                   | 13                   | 13                  | 13                  |
-| acceptance                                | 102                  | 103                 | 104                 |
+| Módulo                                    | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 |
+|-------------------------------------------|----------------------|---------------------|---------------------|---------------------|
+| program                                   | 8                    | 12                  | 12                  | 12                  |
+| projection-kit                            | (no existía)         | 8                   | 8                   | 8                   |
+| java                                      | 0                    | 8                   | 24                  | 24                  |
+| engine                                    | 0                    | 9                   | 9                   | 17                  |
+| refactoring                               | 1                    | 3                   | 3                   | 3                   |
+| core, projection, knowledge               | 0                    | 0                   | 0                   | 0                   |
+| session                                   | 13                   | 13                  | 13                  | 13                  |
+| acceptance                                | 102                  | 103                 | 104                 | 104                 |
 
 ## 7. Decisiones
 
@@ -433,7 +436,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 6  | Hechos                   | conjunto cerrado y tipado (claves `Fact`; los valores siguen siendo texto)                 | tomada, 2026-10-31 (4d16bfe) |
 | 7  | Cuerpos                  | fuera del grafo; el fragmento es una dirección opaca de la proyección (líneas en Java, posiciones de usos en memoria) | tomada, 2026-10-31 (f64f7dd) |
 | 8  | Creación                 | `Create` recibe los hechos con que nace y, para un parámetro, el argumento de las llamadas  | tomada, 2026-10-31 (8f0ed6a) |
-| 9  | Rastro                   | `Trace` como árbol de datos; un único render a líneas                                      | propuesta   |
+| 9  | Rastro                   | `Trace` como árbol de datos; un único render a líneas                                      | tomada, 2026-10-31 (34a3b0e) |
 | 10 | Conformidad              | `projection-kit`: `MemoryProjection` y `ProjectionContract`, que corre contra cada driver   | tomada, 2026-10-31 (f64f7dd) |
 | 11 | Referencias no resueltas | entran al grafo con destino desconocido; import pasa a ser retarget                        | diferida, etapa 2 |
 | 12 | Cuerpos en plantillas    | lenguaje neutral de cuerpos renderizado por la proyección                                  | diferida, etapa 2 |
@@ -459,8 +462,8 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; quedan `import` e `initializer`) | `ide.java.primitives.SetAttribute` | etapa 2 |
 | `MemoryProjection` en un solo archivo grande (resuelto en 9c507a0)                  | `projection-kit`       | 3    |
 | Búsqueda de declaración, unidad y ruta repetida por primitivo (resuelto en 646c9bc) | `ide.java`             | 3    |
-| Vistas no enchufables; vista del compilador dentro del reparador                   | `ide.coherence`        | 4    |
-| Rastro como strings con sigilos                                                    | `ide.coherence`        | 4    |
+| Vistas no enchufables; vista del compilador dentro del reparador (resuelto en 6bbf600) | `ide.engine`       | 4    |
+| Rastro como strings con sigilos (resuelto en 34a3b0e)                              | `ide.engine`           | 4    |
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge  | `ide.workbench`, `ide.knowledge` | 5 |
 | Valores de scripts como strings; id o dirección resuelto en cada función           | `ide.refactor.script`  | 5    |
 | Plantillas de cuerpo en Java dentro del catálogo; `set import`                     | `standard.ref`, `knowledge.ref` | etapa 2 |
@@ -535,7 +538,11 @@ rename de 2,1 s a 1,1 s.
   se eliminan `changed()`, el printer léxico y los marcadores de defaults; `Identity` tipada en uso.
 - Criterio de cierre: la fachada ronda las 150 líneas; ninguna mutación del AST; `PerformanceProbe` igual o mejor.
 
-### Fase 4: vistas y rastro en `engine`
+### Fase 4: vistas y rastro en `engine` (cerrada, 2026-10-31)
+
+Hecha en dos ciclos, 34a3b0e y 6bbf600. `StepsTest` pasó sin cambios: `Result.steps()` son las líneas del rastro.
+Los tests que leen la búsqueda de reparaciones o el `why` pasan por el render (`lines()`). Las vistas no se
+configuran todavía desde la sesión: usa `Verifier.standard()`; agregar una vista es una clase y una línea ahí.
 
 - Objetivo: `View` enchufable, `Trace` como datos.
 - Tests rojos: `ViewsTest` (cada vista sola sobre dos grafos armados a mano); `TraceTest` (árbol y render);
