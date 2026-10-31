@@ -37,6 +37,32 @@ public final class Transaction implements Program {
         return Result.aborted(outcome.violations(), steps);
     }
 
+    /** A point inside the transaction to come back to: program state and the baseline's expectations. */
+    public record Mark(Object checkpoint, ProgramGraph baseline, int steps) {
+    }
+
+    public Mark mark() {
+        return new Mark(program.checkpoint(), baseline, steps.size());
+    }
+
+    /** Undoes everything since the mark, keeping the steps that were logged (they show what was attempted). */
+    public void back(Mark mark) {
+        program.rollback(mark.checkpoint());
+        baseline = mark.baseline();
+    }
+
+    /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
+    public Violation check(Repairer repairer) {
+        var outcome = repairer.stabilize(baseline, compiled, program);
+        outcome.repairs().forEach(repair -> log("! " + repair));
+        return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
+    }
+
+    /** Records a discarded attempt. */
+    public void discarded(String reason) {
+        log("X " + reason);
+    }
+
     /** The state before the transaction, for undo. */
     public Object before() {
         return checkpoint;

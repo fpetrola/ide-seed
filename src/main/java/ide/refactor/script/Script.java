@@ -115,6 +115,8 @@ public final class Script implements Refactoring {
                 }
                 case Stmt.If branch ->
                         run(ScriptFunctions.truthy(eval(branch.condition(), ctx, env)) ? branch.then() : branch.otherwise(), ctx, env);
+                case Stmt.Try attempt -> ctx.attempt(interpolate(attempt.label(), ctx, env).toString(),
+                        () -> run(attempt.body(), ctx, env));
                 case Stmt.Require require -> {
                     if (!ScriptFunctions.truthy(eval(require.condition(), ctx, env))) {
                         throw new PrimitiveRejected("refactoring.precondition", interpolate(require.message(), ctx, env).toString());
@@ -177,6 +179,7 @@ public final class Script implements Refactoring {
             n++;
             if (s instanceof Stmt.For f) n += count(f.body());
             if (s instanceof Stmt.If i) n += count(i.then()) + count(i.otherwise());
+            if (s instanceof Stmt.Try t) n += count(t.body());
         }
         return n;
     }

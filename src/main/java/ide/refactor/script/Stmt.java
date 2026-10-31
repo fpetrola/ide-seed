@@ -17,6 +17,9 @@ sealed interface Stmt {
     record If(Expr condition, List<Stmt> then, List<Stmt> otherwise) implements Stmt {
     }
 
+    record Try(String label, List<Stmt> body) implements Stmt {
+    }
+
     record Require(Expr condition, String message) implements Stmt {
     }
 

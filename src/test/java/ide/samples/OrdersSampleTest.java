@@ -2,6 +2,7 @@ package ide.samples;
 
 import ide.coherence.Violation;
 import ide.workbench.Workspace;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -67,6 +68,21 @@ class OrdersSampleTest {
             assertThat(result.violations()).extracting(Violation::code).contains(expected);
             assertThat(ws.diagnostics()).isEmpty();
         }
+    }
+
+    @Test
+    void encapsulateFieldsSkipsWhatCannotBeEncapsulatedAndKeepsTheRest() throws IOException {
+        var ws = Workspace.of(sources());
+
+        var result = ws.invoke("encapsulate-fields", Map.of("type", "orders.model.Customer"));
+
+        assertThat(result.applied()).isTrue();
+        assertThat(ws.source("orders/model/Customer.java"))
+                .contains("private String name;", "public String getName()", "public int discount;")
+                .doesNotContain("getDiscount");
+        assertThat(ws.source("orders/service/Billing.java")).contains("order.customer.getName()");
+        assertThat(result.steps()).anyMatch(step -> step.startsWith("  X orders.model.Customer#discount: retarget.update"));
+        assertThat(ws.diagnostics()).isEmpty();
     }
 
     static Map<String, String> sources() throws IOException {

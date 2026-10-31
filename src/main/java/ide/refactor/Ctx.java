@@ -14,6 +14,12 @@ public interface Ctx {
     /** Applies another refactoring in the same transaction; returns what it produced (an element id) or null. */
     String call(String refactoring, Map<String, ?> args);
 
+    /**
+     * Runs {@code body} as an attempt: if it is rejected or the result does not verify (after repairs), everything
+     * it did is undone, the attempt is recorded as discarded and the transaction goes on. Returns whether it stayed.
+     */
+    boolean attempt(String label, Runnable body);
+
     /** Language semantics, for scripts that ask (e.g. which visibilities are wider). */
     ide.graph.LanguageRules rules();
 

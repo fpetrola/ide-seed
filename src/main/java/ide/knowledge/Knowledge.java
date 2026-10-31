@@ -134,6 +134,12 @@ public final class Knowledge implements Remedy, QuickFix {
             }
 
             @Override
+            public boolean attempt(String label, Runnable body) {
+                body.run(); // effects are judged as a whole by the repairer
+                return true;
+            }
+
+            @Override
             public List<Param> params(String refactoring) {
                 return library.apply(refactoring).params();
             }

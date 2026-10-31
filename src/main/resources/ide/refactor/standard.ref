@@ -103,3 +103,13 @@ refactoring introduce-factory "Static factory for a constructor; every new outsi
   set ${constructor} visibility private
   return ${f}
 end
+
+refactoring encapsulate-fields "Encapsulates every public field of a type, skipping the ones that cannot be"
+  param type : element(CLASS) "the type whose public fields to encapsulate"
+  for f in fields(type) | with-attr "visibility=public"
+    try "${qualified(f)}"
+      encapsulate-field ${f}
+    end
+  end
+  return ${type}
+end

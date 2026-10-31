@@ -126,6 +126,26 @@ public final class Workspace {
             public LanguageRules rules() {
                 return rules;
             }
+
+            @Override
+            public boolean attempt(String label, Runnable body) {
+                var mark = tx.mark();
+                tx.enter("try " + label);
+                String failure;
+                try {
+                    body.run();
+                    var left = tx.check(repairer);
+                    failure = left == null ? null : left.code() + " " + left.detail();
+                } catch (PrimitiveRejected rejected) {
+                    failure = rejected.code() + " " + rejected.getMessage();
+                } finally {
+                    tx.exit();
+                }
+                if (failure == null) return true;
+                tx.back(mark);
+                tx.discarded(label + ": " + failure);
+                return false;
+            }
         };
         Result result;
         try {

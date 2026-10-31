@@ -12,6 +12,7 @@ import java.util.List;
  * refactoring &lt;id&gt; ["description"]
  *   param &lt;name&gt; : text|bool|element(KINDS)|elements(KINDS)|choice(A,B) ["description"]
  *   let v = expr  |  v := &lt;id&gt; args  |  &lt;id&gt; args  |  for x in expr ... end  |  if expr ... [else ...] end
+ *   try "label" ... end
  *   require expr "message"  |  fail "message"  |  return arg
  * end
  * </pre>
@@ -102,6 +103,12 @@ public final class ScriptParser {
                 next++;
             }
             return new Stmt.If(condition, then, otherwise);
+        }
+        if (line.startsWith("try ")) {
+            var label = unquote(line.substring(4).strip());
+            var body = block("end");
+            next++;
+            return new Stmt.Try(label, body);
         }
         if (line.startsWith("require ")) {
             var tokens = new Tokens(line.substring(8));
