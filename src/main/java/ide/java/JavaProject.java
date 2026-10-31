@@ -155,13 +155,32 @@ public final class JavaProject implements Program {
         var siteId = siteOf(site.get());
         if (siteId == null) return Optional.empty();
         try {
-            String receiver = site.get() instanceof FieldAccessExpr access
-                    ? access.getScope().calculateResolvedType().asReferenceType().getQualifiedName()
-                    : site.get().findAncestor(TypeDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow().toString();
-            return Optional.ofNullable(ids.get(receiver)).map(r -> new CompletionContext(r, prefix, siteId));
+            if (site.get() instanceof FieldAccessExpr access) {
+                var typeName = access.getScope() instanceof NameExpr scopeName ? resolveTypeName(scopeName) : null;
+                var receiver = typeName != null ? typeName
+                        : access.getScope().calculateResolvedType().asReferenceType().getQualifiedName();
+                return Optional.ofNullable(ids.get(receiver))
+                        .map(r -> new CompletionContext(r, prefix, siteId, typeName != null, List.of()));
+            }
+            var enclosing = site.get().findAncestor(TypeDeclaration.class).orElseThrow().getFullyQualifiedName().orElseThrow().toString();
+            return Optional.ofNullable(ids.get(enclosing))
+                    .map(r -> new CompletionContext(r, prefix, siteId, false, localsBefore(site.get())));
         } catch (RuntimeException unresolved) {
             return Optional.empty();
         }
+    }
+
+    /** Locals declared before {@code node} in its method, then the method's parameters; nearest first. */
+    private static List<String> localsBefore(Node node) {
+        var method = node.findAncestor(CallableDeclaration.class);
+        if (method.isEmpty()) return List.of();
+        var position = node.getBegin().orElseThrow();
+        var locals = new ArrayList<String>();
+        method.get().findAll(VariableDeclarator.class).stream()
+                .filter(v -> v.getEnd().orElseThrow().isBefore(position))
+                .forEach(v -> locals.addFirst(v.getNameAsString()));
+        ((CallableDeclaration<?>) method.get()).getParameters().reversed().forEach(p -> locals.add(p.getNameAsString()));
+        return locals;
     }
 
     @Override
@@ -1049,7 +1068,8 @@ public final class JavaProject implements Program {
 
     private static Map<String, String> attributes(NodeWithModifiers<?> node) {
         var visibility = node.getAccessSpecifier().asString();
-        return Map.of("visibility", visibility.isEmpty() ? "package" : visibility);
+        return Map.of("visibility", visibility.isEmpty() ? "package" : visibility,
+                "static", String.valueOf(node.hasModifier(Modifier.Keyword.STATIC)));
     }
 
     // ---- identity

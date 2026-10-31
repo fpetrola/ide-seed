@@ -74,4 +74,60 @@ class CompletionTest {
         assertThat(ws.complete("a/Q.java", editing, editing.indexOf("p.") + 2))
                 .containsExactly("x", "pkg", "getX()", "helper()", "prot()", "name");
     }
+
+    @Test
+    void aBareNameCompletesLocalsThenMembersOfTheEnclosingTypes() {
+        var r = """
+                package a;
+
+                class R extends Base {
+                    int count;
+
+                    int compute(int cost) {
+                        int carry = 1;
+                        return 0;
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Base.java", BASE, "a/R.java", r));
+        var editing = r.replace("return 0;", "return c");
+
+        assertThat(ws.complete("a/R.java", editing, editing.indexOf("return c") + 8))
+                .containsExactly("carry", "cost", "count", "compute()");
+        var all = ws.complete("a/R.java", editing.replace("return c", "return "), editing.indexOf("return c") + 7);
+        assertThat(all).contains("carry", "cost", "count", "compute()", "name");
+    }
+
+    @Test
+    void aTypeAsReceiverCompletesItsStaticMembers() {
+        var money = """
+                package a;
+
+                public class Money {
+                    public static final Money ZERO = null;
+                    public long cents;
+
+                    public static Money of(long cents) {
+                        return null;
+                    }
+
+                    public long cents() {
+                        return cents;
+                    }
+                }
+                """;
+        var u = """
+                package a;
+
+                class U {
+                    Object m() {
+                        return null;
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Money.java", money, "a/U.java", u));
+        var editing = u.replace("return null;", "return Money.");
+
+        assertThat(ws.complete("a/U.java", editing, editing.indexOf("Money.") + 6)).containsExactly("ZERO", "of()");
+    }
 }

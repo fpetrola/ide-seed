@@ -282,17 +282,20 @@ public final class Workspace {
     }
 
     /**
-     * Completion at {@code offset} of the editor text of {@code path}: accessible fields ({@code x}) and methods
-     * ({@code m()}) of the receiver and its superclasses, nearest first, overridden methods once.
+     * Completion at {@code offset} of the editor text of {@code path}: for a bare name the locals in scope first;
+     * then accessible fields ({@code x}) and methods ({@code m()}) of the receiver (or enclosing type) and its
+     * superclasses, nearest first, overridden methods once; only static ones on a type name.
      */
     public List<String> complete(String path, String text, int offset) {
         var context = project.completionContext(path, text, offset);
         if (context.isEmpty()) return List.of();
         var graph = project.graph();
         var labels = new java.util.LinkedHashSet<String>();
+        context.get().locals().stream().filter(l -> l.startsWith(context.get().prefix())).forEach(labels::add);
         for (var type : graph.superclassChain(context.get().receiver())) {
             for (var member : graph.members(type.id())) {
                 if (!member.name().startsWith(context.get().prefix())) continue;
+                if (context.get().staticOnly() && !"true".equals(member.attribute("static"))) continue;
                 if (!rules.accessible(graph, context.get().site(), member.id())) continue;
                 labels.add(member.kind() == ide.graph.Kind.METHOD ? member.name() + "()" : member.name());
             }
