@@ -189,7 +189,7 @@ final class Workbench extends JPanel {
             switch (action) {
                 case "apply-edit" -> applyEdits();
                 case "save" -> {
-                    applyEdits();
+                    if (!applyEdits()) return;
                     ide.call("save", Map.of());
                     say("saved");
                     refresh();
@@ -454,15 +454,28 @@ final class Workbench extends JPanel {
         this.opener = opener;
     }
 
-    /** Applies what the editors say and the program does not yet: an edit by hand each, shown as it went. */
-    private void applyEdits() {
+    /**
+     * Applies what the editors say and the program does not yet: an edit by hand each, shown as it went. What the
+     * program does not take (a text halfway written) stays in its editor as it is, its problems said by the check;
+     * false then, and whoever asked does nothing on a program that is not what the editor shows.
+     */
+    private boolean applyEdits() {
         var unapplied = editors.unapplied();
-        if (unapplied.isEmpty()) return;
-        unapplied.forEach((path, text) -> {
-            shown("edit " + path, ide.record("edit", Map.of("path", path, "text", text)));
-            editors.applied(path, text);
-        });
+        if (unapplied.isEmpty()) return true;
+        var all = true;
+        for (var entry : unapplied.entrySet()) {
+            var report = ide.record("edit", Map.of("path", entry.getKey(), "text", entry.getValue()));
+            views.steps(strings(report.get("steps")));
+            if (Boolean.TRUE.equals(report.get("applied"))) {
+                editors.applied(entry.getKey(), entry.getValue());
+            } else {
+                all = false;
+                say(entry.getKey() + " is not applied yet: " + String.join("; ", strings(report.get("violations"))));
+            }
+        }
         refresh();
+        if (!all) check();
+        return all;
     }
 
     /**
@@ -470,6 +483,7 @@ final class Workbench extends JPanel {
      * what the refactoring suggests; and the refactoring with what it is given.
      */
     private void refactor(String capability) {
+        if (!applyEdits()) return;
         var form = Form.of(ide.capability(capability), ide, candidates(), editors.selectedLines());
         dialogs.fill(form.title(), form, values -> preview(capability, form.args(values)))
                 .ifPresent(values -> change(capability, form.args(values)));
@@ -493,7 +507,7 @@ final class Workbench extends JPanel {
     private void contextActions() {
         var path = editors.current().orElseThrow(() -> new IllegalStateException("no file is open"));
         var line = String.valueOf(editors.line());
-        applyEdits();
+        if (!applyEdits()) return;
         var offered = new java.util.ArrayList<Dialogs.Option>();
         ide.list("fixes", Map.of("path", path, "line", line)).forEach(title -> offered.add(Dialogs.Option.of(title, "FIX")));
         var fixes = offered.size();
@@ -586,7 +600,7 @@ final class Workbench extends JPanel {
     /** Selects what the selection is inside, a step wider each time, as IntelliJ's Ctrl+W does. */
     private void extendSelection() {
         var path = editors.current().orElseThrow(() -> new IllegalStateException("no file is open"));
-        applyEdits();
+        if (!applyEdits()) return;
         var now = editors.selection();
         var spans = ide.records("around", Map.of("path", path, "line", String.valueOf(editors.line()), "column", String.valueOf(editors.column())));
         for (var span : spans) {
@@ -655,6 +669,7 @@ final class Workbench extends JPanel {
 
     /** A new name for the element under the caret, written where it is, as IDEs rename in place. */
     private void rename() {
+        if (!applyEdits()) return;
         var selection = selection();
         if (selection.isEmpty()) {
             say("rename: the caret is on no element");
@@ -672,7 +687,7 @@ final class Workbench extends JPanel {
 
     /** Runs a change after applying what the editors say, and shows what it did. */
     private void change(String capability, Map<String, ?> args) {
-        applyEdits();
+        if (!applyEdits()) return;
         shown(capability, ide.record(capability, args));
         refresh();
     }
@@ -686,7 +701,7 @@ final class Workbench extends JPanel {
 
     /** The element under the caret, with its kind; what the editors say is applied first, so that it is the program's. */
     private Optional<Form.Selection> selection() {
-        applyEdits();
+        if (!applyEdits()) return Optional.empty();
         var path = editors.current();
         if (path.isEmpty()) return Optional.empty();
         var at = ide.record("at", Map.of("path", path.get(), "line", String.valueOf(editors.line()), "column", String.valueOf(editors.column())));

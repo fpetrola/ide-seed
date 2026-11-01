@@ -96,6 +96,25 @@ class WorkbenchTest {
     }
 
     @Test
+    void whatIsWrittenHalfwayStaysInTheEditorWhateverIsAsked() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/B.java", 5, 16);
+        var halfway = B.replace("return a.m(1);", "return a.m(1) +");
+        workbench.type("a/B.java", halfway);
+
+        workbench.act("context-actions");
+        workbench.act("extend-selection");
+        workbench.act("save");
+        workbench.act("rename");
+        workbench.act("introduce-constant");
+        workbench.check();
+
+        assertThat(workbench.text("a/B.java")).isEqualTo(halfway);
+        assertThat(dialogs.told).isEmpty();
+        assertThat(workbench.views().problems()).anySatisfy(p -> assertThat(p).startsWith("a/B.java:5:"));
+    }
+
+    @Test
     void f3GoesToTheDeclarationAndBackComesBack() throws IOException {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 18); // a.m(1): on m
