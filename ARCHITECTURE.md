@@ -542,23 +542,22 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     posición o por nombre, según el esquema (una lista de elementos con comas, una verdad como true o false,
     `param.clave=valor` para los que toman varios por nombre); la respuesta JSON se escribe como texto. `help` es el
     esquema de cada capacidad. `Command`, `Text`, `Cli`, `Main`; `target/ide-cli.jar`.
-  - `ui`: una ventana Swing. Los archivos del proyecto por paquete con la cantidad de problemas; un editor
-    RSyntaxTextArea por archivo (colores de Java, tema oscuro, problemas subrayados y marcados en una tira al costado,
-    y lo escrito sin aplicar nunca se pisa); abajo, Problems, Changes, Steps, Output y Results. Un formulario es el
-    esquema de una capacidad: un elemento se elige de los de las clases que toma, precargado con el que está bajo el
-    cursor si encaja, con vista previa del diff. Las teclas son las de Eclipse (`Keymap`): Ctrl+S aplica el editor,
-    Ctrl+1, Alt+Shift+R/T/C/V, F3 y Alt+flechas, F4, Ctrl+Alt+H, Ctrl+Shift+G, Ctrl+Shift+T y Ctrl+O con un quick
-    pick que filtra por iniciales, Ctrl+L, Ctrl+. y Ctrl+, , Ctrl+Space, zoom y Ctrl+Shift+L. Se prueba sin pantalla:
-    las partes son paneles y los diálogos una interfaz (`Dialogs`) que los tests guionan. La ventana aparece enseguida
-    y el proyecto se lee y compila fuera de su camino; si no se puede abrir, lo dice (y si no entra en memoria, que se
-    abra la raíz de fuentes de un módulo). `target/ide-ui.jar`.
+  - `ui`: una ventana Swing que se ve y se usa como IntelliJ: Darcula (FlatLaf) con Inter y JetBrains Mono, el editor
+    RSyntaxTextArea con los colores Darcula, ocurrencias del nombre bajo el cursor, problemas subrayados y marcados en
+    el margen, Ctrl+Click para navegar, y completion en un popup en el cursor (Ctrl+Space o después de un punto) con el
+    ícono de cada candidato. Quick fix, menú de refactor, rename en el lugar e ir a línea son popups chicos sin marco
+    en el cursor; open type y outline, popups de búsqueda que filtran por iniciales; el formulario de un refactoring es
+    un diálogo con vista previa coloreada y botón Refactor. Abajo, tool windows: Problems, Changes (diff coloreado),
+    Steps (árbol), Output y Results, con íconos. Teclas de Eclipse (`Keymap`). Se prueba sin pantalla: los diálogos son
+    una interfaz (`Dialogs`) que los tests guionan. Sin carpeta abre un proyecto de ejemplo (una tienda, copiada a
+    `~/.ideseed/example`) cuyos archivos dicen qué probar en cada uno; `ExampleTest` verifica que cada refactoring y
+    quick fix propuesto funciona. `target/ide-ui.jar`.
   - `mcp`: JSON-RPC 2.0 por stdio, una línea por mensaje: `initialize`, `ping`, `tools/list` (cada capacidad una
     herramienta, su esquema un JSON Schema) y `tools/call` (lo que responde la capacidad, o un resultado de error).
     Si una llamada cambia las herramientas, como `define`, avisa con `notifications/tools/list_changed`.
     `target/ide-mcp.jar`.
-- **Abierto.** En la UI: la vista Steps como árbol, el diff lado a lado, la lamparita en el margen, defaults vivos en
-  los formularios, autocompletado en un popup junto al cursor (hoy es un quick pick), el tema Dracula (está el oscuro
-  de RSyntaxTextArea). De la spec quedan fuera de este ítem el build incremental con ECJ y el runner de `main`.
+- **Abierto.** En la UI: el diff lado a lado, la lamparita en el margen, defaults vivos en los formularios, el árbol
+  de tipos de F4 y Ctrl+T como popup. De la spec quedan fuera de este ítem el build incremental con ECJ y el runner de `main`.
 
 ## 6. Cómo se testea
 
