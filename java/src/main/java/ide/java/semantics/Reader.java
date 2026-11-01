@@ -178,6 +178,12 @@ public final class Reader {
                 else references.add(new Reference(id, site, target, name, mode));
             }
         }
+        for (var use : unresolved) { // what a written type that binds nothing may mean joins the program too
+            if (!use.mode().isTypeUse()) continue;
+            for (var type : JdkTypes.named(use.name())) {
+                library(type.getName(), type.getPackageName(), type.getSimpleName(), kindOf(type), library);
+            }
+        }
         elements.addAll(library.values());
         return new Reading(new Program(elements, references, unresolved), uses, declarations);
     }
@@ -185,15 +191,18 @@ public final class Reader {
     /** The element of a resolved type: the workspace's, or a library's, which joins the program the first time. */
     private ElementId named(ResolvedTypeDeclaration type, Map<String, Element> library) {
         if (type == null) return null;
-        var qualified = type.getQualifiedName();
-        var workspace = ids.get(new Address.Type(qualified));
+        var workspace = ids.get(new Address.Type(type.getQualifiedName()));
         if (workspace != null) return workspace;
+        return library(type.getQualifiedName(), type.getPackageName(), type.getName(), kindOf(type), library);
+    }
+
+    /** A type of a library, with its package: public, and its own name as its identity. */
+    private static ElementId library(String qualified, String pkg, String name, Kind kind, Map<String, Element> library) {
         var known = library.get(qualified);
         if (known != null) return known.id();
-        var pkg = type.getPackageName();
-        library.computeIfAbsent(pkg, name -> new Element(new ElementId("lib:" + name), Kind.PACKAGE, name, null,
-                new Address.Package(name), name, Map.of(Fact.LIBRARY, "true")));
-        var element = new Element(new ElementId("lib:" + qualified), kindOf(type), type.getName(), library.get(pkg).id(),
+        library.computeIfAbsent(pkg, p -> new Element(new ElementId("lib:" + p), Kind.PACKAGE, p, null,
+                new Address.Package(p), p, Map.of(Fact.LIBRARY, "true")));
+        var element = new Element(new ElementId("lib:" + qualified), kind, name, library.get(pkg).id(),
                 new Address.Type(qualified), qualified, Map.of(Fact.LIBRARY, "true", Fact.VISIBILITY, "public"));
         library.put(qualified, element);
         return element.id();

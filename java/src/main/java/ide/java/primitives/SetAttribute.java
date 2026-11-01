@@ -49,10 +49,6 @@ final class SetAttribute {
             case "superclass" -> superclass(c, id, value);
             case "type" -> type(c, id, value);
             case "body" -> body(c, id, value);
-            case "import" -> {
-                var type = c.declaration(c.program().element(id));
-                c.sources().apply(Shared.edits(e -> Imports.add(e, type.unit(), value)));
-            }
             case "initializer" -> initializer(c, id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }

@@ -3,6 +3,7 @@ package ide.engine;
 import ide.program.Change;
 import ide.program.Primitive;
 import ide.program.Program;
+import ide.program.Unresolved;
 import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
@@ -149,7 +150,8 @@ public final class Transaction implements Projection {
             case Primitive.Set s -> "set " + after.element(s.element()).qualified() + " " + s.attribute() + " = " + s.value();
             case Primitive.Link l -> "link " + after.element(l.element()).qualified() + " " + l.mode().label()
                     + " " + after.element(l.target()).qualified();
-            case Primitive.Retarget r -> "retarget " + r.reference() + " " + before.reference(r.reference()).name()
+            case Primitive.Retarget r -> "retarget " + r.reference() + " " + before.unresolved(r.reference())
+                    .map(Unresolved::name).orElseGet(() -> before.reference(r.reference()).name())
                     + " -> " + after.element(r.target()).qualified();
             case Primitive.Extract e -> "extract " + before.element(e.method()).qualified() + " " + e.fragment()
                     + " -> " + after.element(change.produced()).qualified();

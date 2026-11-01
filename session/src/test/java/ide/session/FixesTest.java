@@ -35,7 +35,7 @@ class FixesTest {
         assertThat(fixes.why("a/P.java", 5).lines()).containsExactly(
                 "javac.cant.resolve.location total",
                 "? resolves(total)",
-                "  X import: is-type-name(symbol)",
+                "  X import: nonempty(unresolved-in(path, symbol))",
                 "  ! create field total");
     }
 }

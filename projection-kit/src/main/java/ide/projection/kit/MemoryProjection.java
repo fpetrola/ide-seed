@@ -28,16 +28,11 @@ import java.util.Optional;
  */
 public final class MemoryProjection implements Projection {
 
-    /** No access is ever restricted, every visibility exists, nothing can be imported. */
+    /** No access is ever restricted, and every visibility exists. */
     public static final LanguageRules OPEN = new LanguageRules() {
         @Override
         public boolean accessible(Program program, ElementId site, ElementId target) {
             return true;
-        }
-
-        @Override
-        public List<String> importCandidates(Program program, String simpleName) {
-            return List.of();
         }
 
         @Override
@@ -52,11 +47,6 @@ public final class MemoryProjection implements Projection {
         public boolean accessible(Program program, ElementId site, ElementId target) {
             return !"private".equals(program.element(target).fact(Fact.VISIBILITY))
                     || program.topLevel(site).id().equals(program.topLevel(target).id());
-        }
-
-        @Override
-        public List<String> importCandidates(Program program, String simpleName) {
-            return List.of();
         }
 
         @Override
@@ -139,6 +129,12 @@ public final class MemoryProjection implements Projection {
 
     void rules(LanguageRules rules) {
         this.rules = rules;
+    }
+
+    /** The file a top-level type is said to be in: a fact of the projection, which no primitive sets. */
+    void file(ElementId type, String path) {
+        graph.nodes.put(type, graph.nodes.get(type).with(Fact.FILE, path));
+        program = null;
     }
 
     /** A use from {@code site} written {@code name} that binds nothing. */

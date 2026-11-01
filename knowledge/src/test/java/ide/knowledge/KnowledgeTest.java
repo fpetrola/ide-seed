@@ -6,6 +6,7 @@ import ide.engine.Transaction;
 import ide.engine.Violation;
 import ide.program.ElementId;
 import ide.program.Fact;
+import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Primitive;
 import ide.program.Program;
@@ -133,6 +134,25 @@ class KnowledgeTest {
         var plans = Knowledge.standard(Library.standard()).plans(violation, projection);
 
         assertThat(plans).extracting(Plan::title).startsWith("open-visibility a.A#x private -> package");
+    }
+
+    @Test
+    void theImportFixBindsTheUnresolvedUseToATypeNamedLikeIt() {
+        var projection = MemoryProjection.builder()
+                .library("java.util.List", Kind.INTERFACE)
+                .type("a.U").file("a.U", "a/U.java").method("a.U", "names", "void")
+                .unresolved("a.U#names()", "List", Mode.DECLARED)
+                .build();
+        var diagnostic = new Diagnostic("javac.cant.resolve.location", "a/U.java", 4, "List", "cannot find symbol");
+
+        var plans = Knowledge.standard(Library.standard()).plans(diagnostic, projection);
+        plans.getFirst().apply(projection);
+
+        assertThat(plans).extracting(Plan::title).containsExactly("import java.util.List");
+        var p = projection.program();
+        assertThat(p.unresolved()).isEmpty();
+        assertThat(p.referencesFrom(id(p, "a.U#names()"))).extracting(r -> p.element(r.target()).qualified())
+                .containsExactly("java.util.List");
     }
 
     /** Accessors for every field, all or nothing per field; or assuming none are needed. */

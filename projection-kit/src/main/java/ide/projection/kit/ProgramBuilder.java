@@ -47,6 +47,12 @@ public final class ProgramBuilder {
         return this;
     }
 
+    /** The source file a top-level type is in ({@code a/U.java}), as a projection with files would say. */
+    public ProgramBuilder file(String type, String path) {
+        projection.file(id(type), path);
+        return this;
+    }
+
     /** A use from {@code site}, written {@code name}, that binds nothing. */
     public ProgramBuilder unresolved(String site, String name, Mode mode) {
         projection.unresolved(id(site), name, mode);

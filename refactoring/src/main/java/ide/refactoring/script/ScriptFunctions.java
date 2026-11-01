@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
 
 /**
  * The functions and filters scripts can use, over typed values. Where an element is expected, an element value is
- * one by id, and a text is an address (what a script writes by hand); a reference is a reference value.
+ * one by id, and a text is an address (what a script writes by hand); a reference, or a use that binds nothing, is a
+ * reference value.
  */
 final class ScriptFunctions {
 
@@ -58,7 +59,10 @@ final class ScriptFunctions {
                 var all = rules.visibilities(graph, element(args, 0).id());
                 yield texts(all.subList(all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1, all.size()));
             }
-            case "import-candidates" -> texts(rules.importCandidates(graph, text(args, 0)));
+            case "unresolved-in" -> graph.unresolved().stream() // a use in the file at a path, binding nothing by that name
+                    .filter(use -> use.name().equals(text(args, 1)) && text(args, 0).equals(graph.topLevel(use.site()).fact(Fact.FILE)))
+                    .<Value>map(use -> new Value.Ref(use.id())).findFirst().orElse(null);
+            case "types-named" -> elems(graph.types().stream().filter(type -> type.name().equals(text(args, 0))).toList());
             case "is-type-name" -> bool(!text(args, 0).isEmpty() && Character.isUpperCase(text(args, 0).charAt(0)));
             // queries
             case "members" -> elems(graph.members(element(args, 0).id()));

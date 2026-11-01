@@ -26,13 +26,12 @@ effect pull-up-dependency "pull-up-dependency ${qualified(target)} -> ${qualifie
   end
 end
 
-effect import "import ${t}"
+effect import "import ${qualified(t)}"
   makes resolves(symbol)
-  when is-type-name(symbol)
-  for t in import-candidates(symbol)
+  when nonempty(unresolved-in(path, symbol))
+  for t in types-named(symbol)
   do
-    # leak: a Java import; in etapa 2 an unresolved reference is in the graph and this is a retarget
-    set ${top-in(path)} import ${t}
+    retarget ${unresolved-in(path, symbol)} ${t}
   end
 end
 

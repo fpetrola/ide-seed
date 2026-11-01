@@ -88,6 +88,11 @@ public final class Resolution {
         }
     }
 
+    /** The kind a type of the JDK has in the program. */
+    public static Kind kindOf(Class<?> type) {
+        return type.isInterface() ? Kind.INTERFACE : type.isEnum() ? Kind.ENUM : Kind.CLASS;
+    }
+
     /** The kind a resolved type has in the program. */
     public static Kind kindOf(ResolvedTypeDeclaration type) {
         return type.isInterface() || type.isAnnotation() ? Kind.INTERFACE : type.isEnum() ? Kind.ENUM : Kind.CLASS;

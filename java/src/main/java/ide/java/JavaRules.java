@@ -25,15 +25,6 @@ public final class JavaRules implements LanguageRules {
     }
 
     @Override
-    public List<String> importCandidates(Program graph, String simpleName) {
-        var candidates = new java.util.ArrayList<String>();
-        graph.types().stream().filter(t -> t.name().equals(simpleName) && t.fact(Fact.FILE) != null)
-                .forEach(t -> candidates.add(t.qualified()));
-        candidates.addAll(JdkTypes.named(simpleName));
-        return candidates;
-    }
-
-    @Override
     public List<String> visibilities() {
         return List.of("private", "package", "protected", "public");
     }
