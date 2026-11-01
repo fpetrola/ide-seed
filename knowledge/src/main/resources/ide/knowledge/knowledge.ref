@@ -238,3 +238,25 @@ effect create-constructor "create constructor in ${name(scope(unresolved-in(path
     end
   end
 end
+
+# A final field assigned: it is not final any more (the field the name at the problem binds).
+goal ecj.FinalFieldAssignment needs assignable(symbol)
+
+effect unfinal "make ${name(f)} not final"
+  makes assignable(symbol)
+  for f in element-at(path, line, column) | of-kind "FIELD"
+  do
+    set ${f} final false
+  end
+end
+
+# An override that hides what it overrides: it is as visible again, or more.
+goal ecj.MethodReducesVisibility needs visible-as-overridden(symbol)
+
+effect widen-override "make ${name(inside(path, line, column))}() ${v}"
+  makes visible-as-overridden(symbol)
+  for v in wider(inside(path, line, column), overridden(inside(path, line, column)))
+  do
+    set ${inside(path, line, column)} visibility ${v}
+  end
+end

@@ -70,10 +70,13 @@ final class ScriptFunctions {
             // language
             case "default-value" -> text(rules.defaultValue(text(args, 0)));
             case "can-access" -> bool(rules.accessible(graph, element(args, 0).id(), element(args, 1).id()));
-            case "wider" -> {
+            case "wider" -> { // than it is; or, given another element, at least as wide as that one too
                 var all = rules.visibilities(graph, element(args, 0).id());
-                yield texts(all.subList(all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1, all.size()));
+                var from = all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1;
+                if (args.size() > 1) from = Math.max(from, all.indexOf(element(args, 1).fact(Fact.VISIBILITY)));
+                yield texts(all.subList(Math.min(from, all.size()), all.size()));
             }
+            case "overridden" -> graph.overridden(element(args, 0)).map(e -> elem(e.id())).orElse(null);
             case "unresolved-in" -> graph.unresolved().stream() // a use in the file at a path, binding nothing by that name
                     .filter(use -> use.name().equals(text(args, 1)) && text(args, 0).equals(graph.topLevel(use.site()).fact(Fact.FILE)))
                     .filter(use -> args.size() < 3 || used(use.mode()).equals(text(args, 2)))

@@ -220,4 +220,40 @@ class IdeQuickFixesTest {
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/Money.java")).contains("Money(long amount, String string) {");
     }
+
+    @Test
+    void aFinalFieldAssignedStopsBeingFinalAndAnOverrideIsAsVisibleAsWhatItOverrides() {
+        var ws = Workspace.of(Map.of("a/A.java", """
+                package a;
+
+                class A {
+                    final int count = 0;
+
+                    public int size() {
+                        return 0;
+                    }
+                }
+                """, "a/B.java", """
+                package a;
+
+                class B extends A {
+                    void reset(A other) {
+                        other.count = 1;
+                    }
+
+                    int size() {
+                        return 1;
+                    }
+                }
+                """));
+
+        assertThat(ws.fixes("a/B.java", 8)).containsExactly("make size() public");
+
+        ws.fix("a/B.java", 5, "make count not final");
+        ws.fix("a/B.java", 8, "make size() public");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/A.java")).contains("    int count = 0;");
+        assertThat(ws.source("a/B.java")).contains("public int size() {");
+    }
 }

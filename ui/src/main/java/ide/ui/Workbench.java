@@ -517,16 +517,16 @@ final class Workbench extends JPanel {
     }
 
     /**
-     * The bulb at the caret's line: red when the line has a problem, yellow when the caret is on or inside something a
-     * refactoring takes; none while the editor says something not applied yet, which the program does not know.
+     * The bulb at the caret's line: red when the line has an error, yellow when it has a warning or the caret is on or
+     * inside something a refactoring takes; none while the editor says something not applied yet, which the program does not know.
      */
     private void bulb() {
         var path = editors.current();
         if (path.isEmpty()) return;
         var line = editors.line();
-        var problem = problems.stream().anyMatch(p -> path.get().equals(p.get("path")) && ((Number) p.get("line")).intValue() == line);
-        if (problem) {
-            editors.bulb("FIX");
+        var here = problems.stream().filter(p -> path.get().equals(p.get("path")) && ((Number) p.get("line")).intValue() == line).toList();
+        if (!here.isEmpty()) { // red for an error, yellow for a warning, as IntelliJ's
+            editors.bulb(here.stream().anyMatch(p -> !"WARNING".equals(p.get("severity"))) ? "FIX" : "INTENTION");
             return;
         }
         if (!editors.unapplied().isEmpty()) {
