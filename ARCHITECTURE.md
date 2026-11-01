@@ -347,7 +347,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   6 responde posiciones desde su lectura (`semantics.Positions`): un uso se encuentra por el nombre con que está
   escrito, así el cursor sobre `a` en `a.m(1)` está en `a` y no en la llamada. Lee Java hasta 21 (antes leía al nivel
   por defecto de JavaParser y un proyecto con un `instanceof` con patrón no abría): un record es una clase y un tipo
-  anotación una interfaz, para el lector y para el type solver del workspace. Sus bibliotecas son el JDK y los jars
+  anotación una interfaz, para el lector y para el type solver del workspace; un tipo declarado dentro de un método es
+  del método, como sus variables locales, y no un tipo del programa. Sus bibliotecas son el JDK y los jars
   del classpath que le dan (`JavaProjection.of(sources, classpath)`): los tipos de un jar ligan como los del JDK, leídos
   sin cargar una clase, y javac compila siempre contra ese classpath; antes, sin classpath, javac leía el del IDE y el
   código analizado compilaba contra JavaParser y Guava aunque su proyecto no los tuviera.

@@ -79,12 +79,17 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   violation or a diagnostic with the facts each gives, backward: what an effect `needs` holds by a `fact` or is made
   first by another effect (plans of at most 4 effects, the 12 cheapest); effects run on the real Run, straight on the
   projection; no remedy or quick fix is written in Java.
-- `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — parts over a `JavaProjection`:
+- `maven` (nothing) — what Maven says about a project: `Maven.project(folder)` is the nearest folder with a pom.xml,
+  and `classpath(cache)` is what `dependency:build-classpath` answers (test scope, every module of a reactor),
+  remembered in a file while the POMs' sizes and times do not change; what Maven cannot resolve is said, not thrown.
+  Its tests run Maven (dependencies already in `~/.m2`).
+- `session` (java, engine, refactoring, knowledge, maven; JavaParser only at run time) — parts over a `JavaProjection`:
   Session (each operation a transaction; undo, event log, saving; a fix must make its diagnostic disappear), Fixes
   (the quick fixes of a line; a Fix is a diagnostic and its plan), Navigation and Completion (no language: tested
   over MemoryProjection), Capabilities (each refactoring and operation with its schema, including what the adapters
   asked for: save, edit, asks, at, where, elements). `Workspace` builds the parts and only delegates;
-  `Workspace.open(folder)` reads a project, logs to `.ide/events.jsonl` there and saves there.
+  `Workspace.open(folder)` reads a project (skipping target, build, out and hidden folders), gives the Java driver
+  the classpath Maven says it has (cached in `.ide/classpath.txt`), logs to `.ide/events.jsonl` there and saves there.
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,
   completion over Java text), the samples in `acceptance/src/test/resources/samples` (case tables in
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.
