@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   public interface I
  * package b
  *   public class C           public A a; public String label; public Money price; public int use(A other)
+ *                            public static class Note, which nothing uses
  * </pre>
  * {@code String} is the library's: the program names it, and a projection never changes it. {@code Money} is nowhere:
  * the use binds nothing, until a retarget binds it.
@@ -43,7 +44,7 @@ public abstract class ProjectionContract {
 
     /** The fixture's outline. */
     public static final List<String> FIXTURE = List.of(
-            "CLASS a.A", "CLASS a.B", "CLASS b.C", "CLASS java.lang.String (library)",
+            "CLASS a.A", "CLASS a.B", "CLASS b.C", "CLASS b.C.Note", "CLASS java.lang.String (library)",
             "FIELD a.A#x", "FIELD b.C#a", "FIELD b.C#label", "FIELD b.C#price",
             "INTERFACE a.I",
             "METHOD a.A#k(int)", "METHOD a.A#m(int)", "METHOD a.A#total()", "METHOD a.B#n()", "METHOD b.C#use(A)",
@@ -79,7 +80,9 @@ public abstract class ProjectionContract {
                 new Scenario("set a visibility", p -> new Primitive.Set(id(p, "a.A#k(int)"), "visibility", "public")),
                 new Scenario("link a declared type", p -> new Primitive.Link(id(p, "b.C#a"), Mode.DECLARED, id(p, "a.B"))),
                 new Scenario("retarget a call", p -> new Primitive.Retarget(reference(p, "a.B#n()", "a.A#m(int)"), id(p, "a.A#k(int)"))),
+                new Scenario("retarget a parameter's type", p -> new Primitive.Retarget(reference(p, "b.C#use(A)/other", "a.A"), id(p, "a.B"))),
                 new Scenario("delete an unused method", p -> new Primitive.Delete(id(p, "a.A#k(int)"))),
+                new Scenario("delete a nested type", p -> new Primitive.Delete(id(p, "b.C.Note"))),
                 new Scenario("create a method", p -> new Primitive.Create(Kind.METHOD, id(p, "a.B"), "fresh")),
                 new Scenario("add a parameter", p -> new Primitive.Create(Kind.PARAM, id(p, "a.A#m(int)"), "q",
                         Map.of(Fact.TYPE, "long"), "0")),
@@ -152,26 +155,32 @@ public abstract class ProjectionContract {
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
-    /** Obligation 1: an element keeps its id through rename, move, set and link. */
+    /**
+     * Obligation 1: an element keeps its id through rename, move, set, link and retarget, also when what it does
+     * changes its address: a method whose parameter is declared with another type is the same method.
+     */
     @Test
-    void elementsKeepTheirIdsThroughRenameMoveSetAndLink() {
+    void elementsKeepTheirIdsThroughRenameMoveSetLinkAndRetarget() {
         var projection = fixture();
         var p = projection.program();
         var x = id(p, "a.A#x");
         var k = id(p, "a.A#k(int)");
         var a = id(p, "a.A");
         var field = id(p, "b.C#a");
+        var use = id(p, "b.C#use(A)");
 
         projection.apply(new Primitive.Rename(x, "y"));
         projection.apply(new Primitive.Move(k, id(p, "a.B"), null));
         projection.apply(new Primitive.Set(k, "visibility", "public"));
         projection.apply(new Primitive.Link(field, Mode.DECLARED, id(p, "a.B")));
+        projection.apply(new Primitive.Retarget(reference(p, "b.C#use(A)/other", "a.A"), id(p, "a.B")));
         projection.apply(new Primitive.Rename(a, "Base"));
 
         var after = projection.program();
         assertThat(after.find("a.Base#y")).map(Element::id).contains(x);
         assertThat(after.find("a.B#k(int)")).map(Element::id).contains(k);
         assertThat(after.find("a.Base")).map(Element::id).contains(a);
+        assertThat(after.find("b.C#use(B)")).map(Element::id).contains(use);
         assertThat(after.declaredType(field)).map(Element::qualified).contains("a.B");
         assertThat(after.element(k).fact(Fact.VISIBILITY)).isEqualTo("public");
     }

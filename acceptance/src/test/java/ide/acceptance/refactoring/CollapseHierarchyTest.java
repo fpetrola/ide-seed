@@ -67,6 +67,47 @@ class CollapseHierarchyTest {
     }
 
     @Test
+    void aNestedClassCollapsesIntoItsSuperclassToo() {
+        var ws = Workspace.of(Map.of("a/Shapes.java", """
+                package a;
+
+                public class Shapes {
+                    static class Shape {
+                        int sides;
+                    }
+
+                    static class Square extends Shape {
+                        int side;
+                    }
+
+                    int count(Square square) {
+                        return square.side + square.sides;
+                    }
+                }
+                """));
+
+        var result = ws.invoke("collapse-hierarchy", Map.of("type", "a.Shapes.Square"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Shapes.java")).isEqualTo("""
+                package a;
+
+                public class Shapes {
+                    static class Shape {
+                        int sides;
+
+                        int side;
+                    }
+
+                    int count(Shape square) {
+                        return square.side + square.sides;
+                    }
+                }
+                """);
+        assertThat(ws.diagnostics()).isEmpty();
+    }
+
+    @Test
     void aClassWithConstructorsHasNoEquivalentInItsSuperclass() {
         var ws = Workspace.of(Map.of("a/Animal.java", ANIMAL, "b/Kennel.java", KENNEL, "a/Dog.java", """
                 package a;

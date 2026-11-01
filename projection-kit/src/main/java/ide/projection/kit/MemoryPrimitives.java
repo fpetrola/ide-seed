@@ -213,14 +213,19 @@ final class MemoryPrimitives {
             throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind a " + use.mode().label() + " of "
                     + use.name() + " to " + graph.render(target));
         }
+        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), use.mode()));
+        declare(graph, use.site(), use.mode(), target);
+    }
+
+    /** A declaration names {@code target} now: its type or superclass as written, and its method's signature. */
+    private static void declare(MemoryGraph graph, ElementId site, Mode mode, ElementId target) {
         var name = graph.nodes.get(target).name();
-        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, name, use.mode()));
-        var site = graph.nodes.get(use.site());
-        if (use.mode() == Mode.DECLARED) {
-            graph.nodes.put(use.site(), site.with(Fact.TYPE, name));
-            if (site.kind() == Kind.PARAM) graph.resign(site.parent());
+        var node = graph.nodes.get(site);
+        if (mode == Mode.DECLARED) {
+            graph.nodes.put(site, node.with(Fact.TYPE, name));
+            if (node.kind() == Kind.PARAM) graph.resign(node.parent());
         }
-        if (use.mode() == Mode.EXTENDS) graph.nodes.put(use.site(), site.with(Fact.SUPERCLASS, name));
+        if (mode == Mode.EXTENDS) graph.nodes.put(site, node.with(Fact.SUPERCLASS, name));
     }
 
     private static void retarget(MemoryGraph graph, String reference, ElementId target) {
@@ -238,6 +243,7 @@ final class MemoryPrimitives {
         else throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot express a " + use.mode().label()
                     + " of " + graph.render(use.target()) + " with " + graph.render(target));
         graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), mode));
+        declare(graph, use.site(), mode, target);
     }
 
     /** The fragment is a range of the method's uses by position: {@code "1-2"} is its second and third use. */

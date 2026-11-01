@@ -1,5 +1,6 @@
 package ide.java.primitives;
 
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -8,6 +9,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import ide.java.syntax.Imports;
 import ide.java.text.EditSet;
 import ide.program.Change;
+import ide.program.Element;
 import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Primitive;
@@ -15,11 +17,14 @@ import ide.program.Program;
 import ide.program.Unresolved;
 import ide.projection.PrimitiveRejected;
 
+import java.util.List;
+
 /**
  * Points a use at another element. A use of the same kind just names the other one; a type use names the other type
  * (imported if needed); a field read becomes {@code getter()}, a write {@code x = v} used as a statement
  * {@code setter(v)}, a {@code new} a factory call. Updates (compound assignment, ++/--) and assignments whose value
- * is used are refused: they would change how many times things are evaluated.
+ * is used are refused: they would change how many times things are evaluated. A type written in a parameter is part
+ * of its method's signature: the method keeps its identity at its new address.
  */
 final class RetargetUse {
 
@@ -31,6 +36,7 @@ final class RetargetUse {
         if (unresolved.isPresent()) return bind(unresolved.get(), retarget, c, before);
         var ref = before.reference(retarget.reference());
         var target = before.element(retarget.target());
+        var signature = Signature.of(c, before.element(ref.site())); // read before the text changes
         var node = c.use(ref.id());
         var unit = c.sources().unitOf(node);
         var edits = new EditSet();
@@ -67,6 +73,7 @@ final class RetargetUse {
             }
         }
         c.sources().apply(edits);
+        signature.follow(c);
         return retarget.intent(before, null);
     }
 
@@ -76,11 +83,29 @@ final class RetargetUse {
         if (!(c.use(use.id()) instanceof ClassOrInterfaceType node) || !target.kind().isType()) {
             throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind " + use.name() + " to " + target.qualified());
         }
+        var signature = Signature.of(c, before.element(use.site()));
         var unit = c.sources().unitOf(node);
         var edits = new EditSet();
         var name = Imports.nameable(edits, unit, target.qualified());
         if (!node.getNameAsString().equals(name)) edits.replace(unit, node.getName(), name);
         c.sources().apply(edits);
+        signature.follow(c);
         return retarget.intent(before, null);
+    }
+
+    /** The method whose signature a use in one of its parameters is part of (none for other uses), read before the text changes. */
+    private record Signature(Element method, String path, List<String> parameters) {
+
+        static Signature of(Context c, Element site) {
+            if (site.kind() != Kind.PARAM) return new Signature(null, null, null);
+            var method = c.program().element(site.parent());
+            var declaration = c.declaration(method);
+            return new Signature(method, declaration.unit().path(), Shared.parameterNames(declaration.as(CallableDeclaration.class)));
+        }
+
+        /** The method keeps its identity at its new address. */
+        void follow(Context c) {
+            if (method != null) Shared.resign(c, method, path, parameters);
+        }
     }
 }

@@ -1,6 +1,7 @@
 package ide.java.syntax;
 
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import ide.java.text.EditSet;
 import ide.java.text.Unit;
 
@@ -47,10 +48,12 @@ public final class Imports {
         return unit.tree().getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
     }
 
-    /** Whether the unit names {@code qualified} by its simple name already: same package, or imported. */
+    /** Whether the unit names {@code qualified} by its simple name already: same package, imported, or declared in it. */
     public static boolean names(Unit unit, String qualified) {
         var dot = qualified.lastIndexOf('.');
         var pkg = dot < 0 ? "" : qualified.substring(0, dot);
-        return pkg.equals(packageOf(unit)) || unit.tree().getImports().stream().anyMatch(i -> i.getNameAsString().equals(qualified));
+        return pkg.equals(packageOf(unit)) || unit.tree().getImports().stream().anyMatch(i -> i.getNameAsString().equals(qualified))
+                || unit.tree().findAll(TypeDeclaration.class).stream()
+                .anyMatch(type -> qualified.equals(type.getFullyQualifiedName().orElse("")));
     }
 }

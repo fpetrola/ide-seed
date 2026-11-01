@@ -21,7 +21,8 @@ import java.util.List;
 
 /**
  * Deletes an element nothing references: a member's lines (its comment included), a parameter the body does not use
- * (and its argument in every call), or a top-level type's file (and the imports that name it).
+ * (and its argument in every call), or a type, with the imports that name it: a top-level type's file, a nested
+ * type's lines.
  */
 final class DeleteElement {
 
@@ -51,11 +52,16 @@ final class DeleteElement {
         var uses = before.referencesTo(type.id()).stream().filter(r -> !inside(before, r.site(), type.id()))
                 .map(r -> before.element(r.site()).qualified()).distinct().toList();
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", type.qualified() + " is used by " + uses);
-        var path = type.fact(Fact.FILE);
-        if (path == null) throw new IllegalArgumentException("only top-level types can be deleted so far: " + type);
         var edits = new EditSet();
         for (var unit : c.sources().units()) Imports.of(unit, type.qualified()).ifPresent(i -> Imports.remove(edits, unit, i));
-        c.sources().change(edits.texts(), List.of(path));
+        var path = type.fact(Fact.FILE);
+        if (path != null) {
+            c.sources().change(edits.texts(), List.of(path));
+        } else {
+            var declaration = c.declaration(type);
+            Members.remove(edits, declaration.unit(), declaration.node());
+            c.sources().apply(edits);
+        }
         c.ids().forget(type.id());
     }
 

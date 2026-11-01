@@ -58,6 +58,9 @@ class JavaProjectionContractTest extends ProjectionContract {
                         public int use(A other) {
                             return other.hashCode();
                         }
+
+                        public static class Note {
+                        }
                     }
                     """);
 
