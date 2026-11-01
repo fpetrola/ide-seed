@@ -344,8 +344,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   distinto en la misma edición que lo quita, así ningún uso liga otra cosa en el medio; un retarget del tipo escrito
   en un parámetro le lleva la identidad al método; y un archivo nombra sin import los tipos que declara. Desde el ítem
   6 responde posiciones desde su lectura (`semantics.Positions`): un uso se encuentra por el nombre con que está
-  escrito, así el cursor sobre `a` en `a.m(1)` está en `a` y no en la llamada.
-- **Abierto.** Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
+  escrito, así el cursor sobre `a` en `a.m(1)` está en `a` y no en la llamada. Lee Java hasta 21 (antes leía al nivel
+  por defecto de JavaParser y un proyecto con un `instanceof` con patrón no abría): un record es una clase y un tipo
+  anotación una interfaz, para el lector y para el type solver del workspace.
+- **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. El classpath es solo el
+  JDK: lo que viene de bibliotecas externas (las dependencias de Maven de un proyecto) no liga y javac lo reporta. Todo
+  el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
+  módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
   cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez.
   Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
@@ -494,7 +499,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `.ide/events.jsonl` ahí y guarda ahí (`save()`); uno hecho en memoria no tiene dónde guardar. Entraron las
   capacidades que pidieron los adaptadores: `save`, `edit`, `asks` (las preguntas de un fix, con su default), `at`
   (el elemento y su clase en una posición), `where` (dónde está declarado), `elements` (de unas clases, o de un
-  archivo) y las respuestas de `fix`. `ls` responde ordenado y las respuestas con campos los mantienen en orden.
+  archivo) y las respuestas de `fix`. `ls` responde ordenado y las respuestas con campos los mantienen en orden. Una
+  carpeta se lee sin lo que escriben los builds y las herramientas: carpetas `target`, `build`, `out` y ocultas.
 - **Abierto.** `Capabilities` lista las operaciones a mano: si un día se desfasan de la fachada, se derivan de ella.
   `model` sigue sin ser capacidad: ningún adaptador la pidió (`elements` alcanzó).
 
@@ -518,7 +524,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     cursor si encaja, con vista previa del diff. Las teclas son las de Eclipse (`Keymap`): Ctrl+S aplica el editor,
     Ctrl+1, Alt+Shift+R/T/C/V, F3 y Alt+flechas, F4, Ctrl+Alt+H, Ctrl+Shift+G, Ctrl+Shift+T y Ctrl+O con un quick
     pick que filtra por iniciales, Ctrl+L, Ctrl+. y Ctrl+, , Ctrl+Space, zoom y Ctrl+Shift+L. Se prueba sin pantalla:
-    las partes son paneles y los diálogos una interfaz (`Dialogs`) que los tests guionan. `target/ide-ui.jar`.
+    las partes son paneles y los diálogos una interfaz (`Dialogs`) que los tests guionan. La ventana aparece enseguida
+    y el proyecto se lee y compila fuera de su camino; si no se puede abrir, lo dice (y si no entra en memoria, que se
+    abra la raíz de fuentes de un módulo). `target/ide-ui.jar`.
   - `mcp`: JSON-RPC 2.0 por stdio, una línea por mensaje: `initialize`, `ping`, `tools/list` (cada capacidad una
     herramienta, su esquema un JSON Schema) y `tools/call` (lo que responde la capacidad, o un resultado de error).
     Si una llamada cambia las herramientas, como `define`, avisa con `notifications/tools/list_changed`.
