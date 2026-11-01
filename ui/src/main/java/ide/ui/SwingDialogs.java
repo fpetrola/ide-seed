@@ -321,14 +321,22 @@ final class SwingDialogs implements Dialogs {
         }
     }
 
-    /** A window with no frame that waits, as a menu does, until it answers or goes away. */
     /**
-     * A popup with no frame: a modal dialog, so that it has the keys (a plain window often does not get them), gone with
-     * Escape, with a choice, or when people click elsewhere.
+     * A popup with no frame that waits, as a menu does, until it answers or goes away: with Escape, with a choice, or
+     * when people click anywhere else. A dialog, so that it has the keys (a plain window often does not get them), but
+     * not a modal one: a modal dialog takes the clicks of the window behind it, and then a click there closes nothing.
+     * It waits in a loop of its own instead.
      */
     private final class Popup {
 
-        private final JDialog dialog = new JDialog(owner, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        private final JDialog dialog = new JDialog(owner, java.awt.Dialog.ModalityType.MODELESS);
+        private final java.awt.SecondaryLoop waiting = java.awt.Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+        private final java.awt.event.AWTEventListener clickElsewhere = event -> {
+            if (event.getID() == java.awt.event.MouseEvent.MOUSE_PRESSED && event.getSource() instanceof Component pressed
+                    && javax.swing.SwingUtilities.getWindowAncestor(pressed) != dialog && pressed != dialog) {
+                close(null);
+            }
+        };
         private String answer;
         private boolean closed;
 
@@ -356,7 +364,9 @@ final class SwingDialogs implements Dialogs {
                     close(null);
                 }
             });
-            dialog.setVisible(true); // returns once it is closed
+            java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(clickElsewhere, java.awt.AWTEvent.MOUSE_EVENT_MASK);
+            dialog.setVisible(true);
+            if (!closed) waiting.enter(); // returns once it is closed
             return Optional.ofNullable(answer);
         }
 
@@ -364,7 +374,9 @@ final class SwingDialogs implements Dialogs {
             if (closed) return;
             closed = true;
             this.answer = answer;
+            java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(clickElsewhere);
             dialog.dispose();
+            waiting.exit();
         }
     }
 
