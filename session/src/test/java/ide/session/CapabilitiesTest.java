@@ -73,10 +73,12 @@ class CapabilitiesTest {
                 """));
         var capabilities = ws.capabilities();
 
-        assertThat(capabilities.invoke("at", Map.of("path", "a/P.java", "line", "4", "column", "16"))).isEqualTo("\"a.P#x\"");
+        assertThat(capabilities.invoke("at", Map.of("path", "a/P.java", "line", "4", "column", "16")))
+                .isEqualTo("{\"element\":\"a.P#x\",\"kind\":\"FIELD\"}");
         assertThat(capabilities.invoke("at", Map.of("path", "a/P.java", "line", "1", "column", "1"))).isEqualTo("null");
         assertThat(capabilities.invoke("where", Map.of("element", "a.P#x"))).isEqualTo("{\"path\":\"a/P.java\",\"line\":4,\"column\":16}");
         assertThat(capabilities.invoke("elements", Map.of("kinds", "CLASS,FIELD"))).isEqualTo("[\"a.P\",\"a.P#x\",\"a.U\"]");
+        assertThat(capabilities.invoke("elements", Map.of("path", "a/U.java"))).isEqualTo("[\"a.U\",\"a.U#total()\"]");
         assertThat(capabilities.invoke("asks", Map.of("path", "a/U.java", "line", "5", "title", "create field count")))
                 .isEqualTo("[{\"name\":\"type\",\"question\":\"type of the new field\",\"default\":\"int\"}]");
 

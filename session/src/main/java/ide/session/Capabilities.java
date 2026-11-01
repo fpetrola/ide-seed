@@ -8,6 +8,7 @@ import ide.refactoring.Refactoring;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Everything a workspace can do, as capabilities for the adapters: each refactoring in its library, and each of its
@@ -29,7 +30,7 @@ final class Capabilities {
         var refactoring = Param.of("refactoring", "text");
         var itsArgs = Param.of("args", "text");
         return registry
-                .register(Capability.of("ls", "Source files", List.of(), args -> List.copyOf(workspace.files())))
+                .register(Capability.of("ls", "Source files", List.of(), args -> workspace.files().stream().sorted().toList()))
                 .register(Capability.of("show", "Source of a file", List.of(path), args -> workspace.source(text(args, "path"))))
                 .register(Capability.of("diff", "Net diff of unsaved changes", List.of(), args -> workspace.diff()))
                 .register(Capability.of("undo", "Reverts the last applied transaction", List.of(), args -> {
@@ -61,13 +62,15 @@ final class Capabilities {
                         args -> Session.report(workspace.edit(text(args, "path"), text(args, "text")))))
                 .register(Capability.of("at", "The element whose name is at a line and column of a file",
                         List.of(path, line, Param.of("column", "text")),
-                        args -> workspace.at(text(args, "path"), number(args, "line"), number(args, "column")).orElse(null)))
+                        args -> workspace.at(text(args, "path"), number(args, "line"), number(args, "column"))
+                                .map(e -> entries("element", e.qualified(), "kind", e.kind().name())).orElse(null)))
                 .register(Capability.of("where", "Where an element is declared: file, line and column",
                         List.of(Param.of("element", "element")), args -> workspace.where(text(args, "element"))
                                 .map(at -> entries("path", at.path(), "line", at.line(), "column", at.column())).orElse(null)))
-                .register(Capability.of("elements", "The workspace's elements of some kinds (comma-separated), or all",
-                        List.of(Param.of("kinds", "text").optional()), args -> workspace.elements(args.containsKey("kinds")
-                                ? List.of(text(args, "kinds").split(",")) : List.of())))
+                .register(Capability.of("elements", "The workspace's elements of some kinds (comma-separated), or all; in a file, if given",
+                        List.of(Param.of("kinds", "text").optional(), Param.of("path", "text").optional()),
+                        args -> workspace.elements(args.containsKey("kinds") ? List.of(text(args, "kinds").split(",")) : List.of(),
+                                Optional.ofNullable(args.get("path")).map(String::valueOf))))
                 .register(Capability.of("why", "How the fixes for a line are deduced", List.of(path, line),
                         args -> workspace.why(text(args, "path"), number(args, "line")).lines()))
                 .register(Capability.of("complete", "Completions at an offset of edited text",

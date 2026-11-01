@@ -7,6 +7,7 @@ import ide.engine.Result;
 import ide.engine.Trace;
 import ide.java.JavaProjection;
 import ide.knowledge.Knowledge;
+import ide.program.Element;
 import ide.projection.Diagnostic;
 import ide.projection.Location;
 import ide.refactoring.Library;
@@ -166,7 +167,7 @@ public final class Workspace {
         return navigation.model();
     }
 
-    public Optional<String> at(String path, int line, int column) {
+    public Optional<Element> at(String path, int line, int column) {
         return navigation.at(path, line, column);
     }
 
@@ -174,8 +175,8 @@ public final class Workspace {
         return navigation.where(element);
     }
 
-    public List<String> elements(Collection<String> kinds) {
-        return navigation.elements(kinds);
+    public List<String> elements(Collection<String> kinds, Optional<String> path) {
+        return navigation.elements(kinds, path);
     }
 
     public List<String> callers(String method) {

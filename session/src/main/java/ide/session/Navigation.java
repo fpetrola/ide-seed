@@ -1,6 +1,8 @@
 package ide.session;
 
 import ide.program.Element;
+import ide.program.Fact;
+import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Program;
 import ide.projection.Location;
@@ -52,8 +54,8 @@ public final class Navigation {
     }
 
     /** The element whose name is at a line and column of a file, declared or used there. */
-    public Optional<String> at(String path, int line, int column) {
-        return projection.elementAt(path, line, column).map(id -> projection.program().element(id).qualified());
+    public Optional<Element> at(String path, int line, int column) {
+        return projection.elementAt(path, line, column).map(id -> projection.program().element(id));
     }
 
     /** Where an element is declared; nowhere for what has no text. */
@@ -61,10 +63,15 @@ public final class Navigation {
         return projection.locate(element(projection.program(), element).id());
     }
 
-    /** The workspace's elements of these kinds (any kind, if none is given), sorted by address. */
-    public List<String> elements(Collection<String> kinds) {
-        return projection.program().elements().stream()
+    /**
+     * The workspace's elements of these kinds (any kind, if none is given), sorted by address; with a path, only those
+     * its file declares.
+     */
+    public List<String> elements(Collection<String> kinds, Optional<String> path) {
+        var program = projection.program();
+        return program.elements().stream()
                 .filter(e -> !e.inLibrary() && (kinds.isEmpty() || kinds.contains(e.kind().name())))
+                .filter(e -> path.isEmpty() || e.kind() != Kind.PACKAGE && path.get().equals(program.topLevel(e.id()).fact(Fact.FILE)))
                 .map(Element::qualified).sorted().toList();
     }
 

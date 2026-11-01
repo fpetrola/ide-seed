@@ -22,6 +22,7 @@
         <module>knowledge</module>
         <module>session</module>
         <module>cli</module>
+        <module>ui</module>
         <module>acceptance</module>
     </modules>
 
@@ -82,6 +83,11 @@
             <dependency>
                 <groupId>ide</groupId>
                 <artifactId>ide-cli</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-ui</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
