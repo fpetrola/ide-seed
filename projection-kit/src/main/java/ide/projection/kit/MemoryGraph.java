@@ -11,6 +11,7 @@ import ide.program.Program;
 import ide.program.Reference;
 import ide.program.Unresolved;
 import ide.projection.PrimitiveRejected;
+import ide.projection.Needs;
 import ide.projection.Projection;
 
 import java.util.ArrayList;
@@ -48,7 +49,12 @@ final class MemoryGraph {
     }
 
     /** A use from {@code site}; its {@code target} is null when its name binds nothing. */
-    record Use(ElementId site, ElementId target, String name, Mode mode) {
+    /** A use; one that binds nothing may say where it is looked up and what it needs. */
+    record Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs) {
+
+        Use(ElementId site, ElementId target, String name, Mode mode) {
+            this(site, target, name, mode, null, null);
+        }
     }
 
     record Saved(Identity.State ids, List<ElementId> order, Map<ElementId, Node> nodes, List<Use> uses)
@@ -74,10 +80,19 @@ final class MemoryGraph {
         var ordinals = new HashMap<ElementId, Integer>();
         for (var use : uses) {
             var id = use.site() + "@" + (ordinals.merge(use.site(), 1, Integer::sum) - 1);
-            if (use.target() == null) unresolved.add(new Unresolved(id, use.site(), use.name(), use.mode()));
+            if (use.target() == null) unresolved.add(new Unresolved(id, use.site(), use.name(), use.mode(), use.scope()));
             else references.add(new Reference(id, use.site(), use.target(), use.name(), use.mode()));
         }
         return new Program(elements, references, unresolved);
+    }
+
+    /** The use with an id as {@link #read()} gives it: its site and its place among the site's uses. */
+    java.util.Optional<Use> use(String id) {
+        var ordinals = new HashMap<ElementId, Integer>();
+        for (var use : uses) {
+            if (id.equals(use.site() + "@" + (ordinals.merge(use.site(), 1, Integer::sum) - 1))) return java.util.Optional.of(use);
+        }
+        return java.util.Optional.empty();
     }
 
     Saved save() {
@@ -119,7 +134,9 @@ final class MemoryGraph {
             order.add(id);
         }
         for (var r : program.references()) uses.add(new Use(mapped.get(r.site()), mapped.get(r.target()), r.name(), r.mode()));
-        for (var u : program.unresolved()) uses.add(new Use(mapped.get(u.site()), null, u.name(), u.mode()));
+        for (var u : program.unresolved()) {
+            uses.add(new Use(mapped.get(u.site()), null, u.name(), u.mode(), u.scope() == null ? null : mapped.get(u.scope()), null));
+        }
     }
 
     private static String remap(String key, Map<ElementId, ElementId> mapped) {

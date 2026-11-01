@@ -5,6 +5,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
+import com.github.javaparser.ast.expr.Expression;
 import ide.java.primitives.Context;
 import ide.java.primitives.JavaPrimitives;
 import ide.java.semantics.Completion;
@@ -12,6 +13,7 @@ import ide.java.semantics.JavacCheck;
 import ide.java.semantics.Keys;
 import ide.java.semantics.Positions;
 import ide.java.semantics.Reader;
+import ide.java.semantics.UseNeeds;
 import ide.java.semantics.WorkspaceTypeSolver;
 import ide.java.syntax.Decl;
 import ide.java.text.Sources;
@@ -26,6 +28,7 @@ import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
 import ide.projection.Location;
+import ide.projection.Needs;
 import ide.projection.Projection;
 
 import java.nio.file.Path;
@@ -216,6 +219,14 @@ public final class JavaProjection implements Projection {
     @Override
     public Optional<ElementId> elementAt(String path, int line, int column) {
         return Positions.at(reading(), sources, path, line, column);
+    }
+
+    /** What a field or a call that binds nothing needs; nothing is known of a written type's. */
+    @Override
+    public Optional<Needs> needs(String use) {
+        var reading = reading();
+        if (reading.program().unresolved(use).isEmpty() || !(reading.use(use) instanceof Expression value)) return Optional.empty();
+        return Optional.of(UseNeeds.of(value));
     }
 
     /**

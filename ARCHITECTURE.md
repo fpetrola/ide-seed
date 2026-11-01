@@ -172,8 +172,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     vínculo es una referencia porque la jerarquía y el verificador lo tratan igual que a un uso: hoy son strings
     duplicados en atributos y eso obliga a re-resolver nombres en todos lados.
   - `Unresolved`: un uso cuyo nombre no liga nada (site, nombre, modo, y `scope`: el tipo donde se busca un
-    miembro, el del receptor o el que lo escribe; nulo para un tipo; `expected`, el tipo que su lugar espera de su
-    valor; y, de una llamada, `arguments`: nombre y tipo de lo que pasa, escritos como los escribe su lenguaje). Su id está en el mismo espacio que el de
+    miembro, el del receptor o el que lo escribe; nulo para un tipo). Qué necesita de lo que lo ligaría no es parte
+    del programa: se le pregunta a la proyección (`needs`, decisión 27). Su id está en el mismo espacio que el de
     las referencias (`site@ordinal`), así un primitivo puede nombrarlo. Vive aparte de las referencias, que siempre
     ligan algo: nada de lo que lee referencias tiene que preguntar si tienen destino.
   - Elementos de biblioteca: los tipos de una biblioteca que el workspace nombra, con su paquete, marcados con el
@@ -258,6 +258,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `Optional<Location> locate(element)` y `Optional<ElementId> elementAt(path, line, column)`: dónde está declarado un
     elemento, y qué elemento declara o usa el nombre en una posición. Lo que un editor necesita para F3, un menú
     contextual o un diálogo precargado con lo seleccionado.
+  - `Optional<Needs> needs(use)`: qué necesita un uso sin resolver de lo que lo ligaría, como el lenguaje escribe los
+    tipos: el tipo que su lugar espera de su valor y, de una llamada, el nombre y el tipo de cada argumento. Se
+    pregunta por un uso, cuando un fix lo necesita; no se calcula al leer ni se guarda en el grafo.
   - `LanguageRules rules()`: accesibilidad, visibilidades posibles de un elemento, y cómo escribe el lenguaje el
     valor que tiene un campo que nadie asignó. Ya no ofrece candidatos de import: el programa tiene los tipos que un
     uso podría nombrar.
@@ -279,6 +282,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
      nombra, en ese orden. Sus parámetros son valores, no usos.
   9. Lo que una proyección ubica (`locate`: archivo, línea y columna del nombre de una declaración) se encuentra donde
      dice (`elementAt`). Una proyección sin texto no ubica nada.
+  10. Un uso de un miembro que no liga nada dice en qué tipo se busca, y la proyección dice, si se le pregunta, qué
+      necesita (`needs`); de cualquier otra cosa, nada.
 - **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
   el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
   mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo
@@ -449,8 +454,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   también los tipos de los parámetros de un método, y `can-access` le pregunta a las reglas si un sitio alcanza algo.
   Con los usos de miembros sin resolver, `unresolved-in` toma qué uso se busca (`type`, `value` o `call`), `site`
   y `scope` leen un uso sin resolver, `similar` da los miembros de un tipo cuyo nombre está a una o dos letras, y
-  se fue `is-type-name`. Para create-method, `expected` y `arguments` (pares nombre y tipo) leen lo que el uso
-  necesita, y `last` acompaña a `first`. El lenguaje de cuerpos ganó `return default`: lo que el tipo del método
+  se fue `is-type-name`. Para create-method, `expected` y `arguments` (pares nombre y tipo) le preguntan a la
+  proyección lo que el uso necesita (por eso las funciones tienen la proyección, no solo el programa y las reglas), y `last` acompaña a `first`. El lenguaje de cuerpos ganó `return default`: lo que el tipo del método
   vale al empezar, o nada si no responde nada.
 - **Abierto.** El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
   spec faltan annotate, delegate y delegates, generate-constructor, make-final, make-static, rename-with-delegate,
@@ -658,6 +663,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 24 | Adaptadores              | un módulo cada uno, que declara `session` y `core` y usa solo eso (`AdapterTest`); hablan con el IDE solo por capacidades, en JSON; lo que un adaptador necesita y no es capacidad entra a `session` como capacidad | tomada, 2026-11-01 (cedbd23, 763d4e6, 8b760b3) |
 | 25 | Classpath                | las bibliotecas de un proyecto se le preguntan a Maven, en un producto propio (`maven`), y se recuerdan mientras sus POMs no cambien; el driver las lee de los jars sin cargar clases, y javac compila siempre contra el classpath del proyecto, nunca contra el del IDE | tomada, 2026-11-01 (817a548, 854df27) |
 | 26 | Usos de miembros sin resolver | un campo o método que no liga nada es un uso del programa solo si el resolvedor lo asegura (para una llamada: ningún método con ese nombre donde se busca); en la duda no es nada, como un local. El uso dice en qué tipo se busca, y los fixes parten de él | tomada, 2026-11-01 |
+| 27 | Lo que necesita un uso   | qué tipo espera un uso sin resolver y qué pasa una llamada se le pregunta a la proyección por un uso (`needs`, obligación 10), no se guarda en el grafo: solo lo usa un fix, y así se prueba sin lenguaje | tomada, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -840,8 +846,9 @@ etapa 2, por valor.
      liga renombrando el uso, si el destino es lo que el uso pide. El símbolo de un diagnóstico sobre `v.size` es
      `size`.
 
-   - create-method: el uso dice qué tipo espera su lugar y, si es una llamada, qué pasa; el fix crea el método con
-     eso.
+   - create-method: la proyección dice qué necesita un uso (qué tipo espera su lugar y, si es una llamada, qué pasa;
+     obligación 10), y el fix crea el método con eso. Primero lo guardaba el grafo, calculado para cada uso en cada
+     lectura; pasó a ser una pregunta del contrato, y create-method se prueba sobre `MemoryProjection`, sin Java.
 
    Abierto: la completion y los fixes todavía no comparten una sola pregunta (qué puede ligar este uso desde su
    sitio); un nombre sin resolver antes de un punto no es uso; los tipos de lo que necesita un uso se escriben como

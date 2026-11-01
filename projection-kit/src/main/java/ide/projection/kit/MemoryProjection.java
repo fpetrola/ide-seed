@@ -12,6 +12,7 @@ import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
 import ide.projection.Location;
+import ide.projection.Needs;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 
@@ -147,6 +148,11 @@ public final class MemoryProjection implements Projection {
     }
 
     @Override
+    public Optional<Needs> needs(String use) {
+        return graph.use(use).filter(u -> u.target() == null).map(MemoryGraph.Use::needs);
+    }
+
+    @Override
     public Optional<ElementId> elementAt(String path, int line, int column) {
         return Optional.empty();
     }
@@ -161,9 +167,9 @@ public final class MemoryProjection implements Projection {
         program = null;
     }
 
-    /** A use from {@code site} written {@code name} that binds nothing. */
-    void unresolved(ElementId site, String name, Mode mode) {
-        graph.uses.add(new MemoryGraph.Use(site, null, name, mode));
+    /** A use from {@code site} written {@code name} that binds nothing, looked up in {@code scope}, needing {@code needs}. */
+    void unresolved(ElementId site, String name, Mode mode, ElementId scope, Needs needs) {
+        graph.uses.add(new MemoryGraph.Use(site, null, name, mode, scope, needs));
         program = null;
     }
 

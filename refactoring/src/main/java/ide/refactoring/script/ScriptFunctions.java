@@ -9,6 +9,8 @@ import ide.program.Program;
 import ide.program.Reference;
 import ide.program.Unresolved;
 import ide.projection.LanguageRules;
+import ide.projection.Needs;
+import ide.projection.Projection;
 import ide.refactoring.Value;
 
 import java.util.Collection;
@@ -25,9 +27,12 @@ final class ScriptFunctions {
     private final Program graph;
     private final LanguageRules rules;
 
-    ScriptFunctions(Program graph, LanguageRules rules) {
+    private final Projection projection;
+
+    ScriptFunctions(Program graph, LanguageRules rules, Projection projection) {
         this.graph = graph;
         this.rules = rules;
+        this.projection = projection;
     }
 
     Value call(String name, List<Value> args) {
@@ -62,8 +67,8 @@ final class ScriptFunctions {
                     .filter(use -> args.size() < 3 || used(use.mode()).equals(text(args, 2)))
                     .<Value>map(use -> new Value.Ref(use.id())).findFirst().orElse(null);
             case "scope" -> args.getFirst() == null ? null : elem(hole(args.getFirst()).scope());
-            case "expected" -> text(hole(args.getFirst()).expected());
-            case "arguments" -> new Value.Items(hole(args.getFirst()).arguments().stream() // each its name, then its type
+            case "expected" -> text(needs(args.getFirst()).expected());
+            case "arguments" -> new Value.Items(needs(args.getFirst()).arguments().stream() // each its name, then its type
                     .<Value>map(a -> texts(List.of(a.name(), a.type()))).toList());
             case "types-named" -> elems(graph.types().stream().filter(type -> type.name().equals(text(args, 0))).toList());
             case "similar" -> args.getFirst() == null ? elems(List.of()) : elems(similar(element(args, 0), text(args, 1), text(args, 2)));
@@ -178,6 +183,11 @@ final class ScriptFunctions {
     private String ref(Value value) {
         if (!(value instanceof Value.Ref ref)) throw new IllegalArgumentException("not a reference: " + Value.asText(value));
         return ref.id();
+    }
+
+    /** What a use that binds nothing needs, as the projection says. */
+    private Needs needs(Value value) {
+        return projection.needs(ref(value)).orElseThrow(() -> new IllegalArgumentException("nothing known of what " + Value.asText(value) + " needs"));
     }
 
     private Unresolved hole(Value value) {

@@ -21,7 +21,7 @@ import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.types.ResolvedType;
-import ide.program.Unresolved;
+import ide.projection.Needs;
 
 import javax.lang.model.SourceVersion;
 import java.util.ArrayList;
@@ -33,11 +33,11 @@ import java.util.stream.Collectors;
  * What a use that binds nothing is known to need, in Java and as its file writes types: the type its place expects
  * of its value, and what a call passes. What cannot be told is {@code Object}.
  */
-final class Needs {
+public final class UseNeeds {
 
     private static final String UNKNOWN = "Object";
 
-    private Needs() {
+    private UseNeeds() {
     }
 
     /** The type the place of {@code use} expects of its value; {@code void} for a call whose value nothing takes. */
@@ -66,10 +66,15 @@ final class Needs {
         };
     }
 
+    /** What a use needs: what its place expects, and what it passes if it is a call. */
+    public static Needs of(Expression use) {
+        return new Needs(expected(use), use instanceof MethodCallExpr call ? arguments(call) : List.of());
+    }
+
     /** What a call passes: each argument named as a parameter that takes it would be, once, with its type. */
-    static List<Unresolved.Argument> arguments(MethodCallExpr call) {
+    static List<Needs.Argument> arguments(MethodCallExpr call) {
         var unit = call.findCompilationUnit().orElseThrow();
-        var arguments = new ArrayList<Unresolved.Argument>();
+        var arguments = new ArrayList<Needs.Argument>();
         var taken = new HashSet<String>();
         for (var argument : call.getArguments()) {
             var type = typeOf(argument, unit);
@@ -77,7 +82,7 @@ final class Needs {
             if (SourceVersion.isKeyword(name)) name += "1";
             var unique = name;
             for (var n = 2; !taken.add(unique); n++) unique = name + n;
-            arguments.add(new Unresolved.Argument(unique, type));
+            arguments.add(new Needs.Argument(unique, type));
         }
         return arguments;
     }

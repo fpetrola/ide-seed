@@ -10,6 +10,7 @@ import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
 import ide.projection.Location;
 import ide.projection.PrimitiveRejected;
+import ide.projection.Needs;
 import ide.projection.Projection;
 
 import java.util.LinkedHashSet;
@@ -218,5 +219,10 @@ public final class Transaction implements Projection {
     @Override
     public Optional<ElementId> elementAt(String path, int line, int column) {
         return projection.elementAt(path, line, column);
+    }
+
+    @Override
+    public Optional<Needs> needs(String use) {
+        return projection.needs(use);
     }
 }

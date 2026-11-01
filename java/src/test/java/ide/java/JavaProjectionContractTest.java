@@ -56,7 +56,7 @@ class JavaProjectionContractTest extends ProjectionContract {
                         public Money price;
 
                         public int use(A other) {
-                            return other.hashCode();
+                            return other.weigh("kg");
                         }
 
                         public static class Note {

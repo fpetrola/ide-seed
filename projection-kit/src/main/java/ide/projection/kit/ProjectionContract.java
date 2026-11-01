@@ -11,6 +11,7 @@ import ide.program.Primitive;
 import ide.program.Program;
 import ide.program.Reference;
 import ide.program.Unresolved;
+import ide.projection.Needs;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 import org.junit.jupiter.api.Test;
@@ -34,11 +35,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   public class B extends A int n() calls m, then reads x
  *   public interface I
  * package b
- *   public class C           public A a; public String label; public Money price; public int use(A other)
- *                            public static class Note, which nothing uses
+ *   public class C           public A a; public String label; public Money price; public int use(A other) answers
+ *                            other.weigh("kg"); public static class Note, which nothing uses
  * </pre>
  * {@code String} is the library's: the program names it, and a projection never changes it. {@code Money} is nowhere:
- * the use binds nothing, until a retarget binds it.
+ * the use binds nothing, until a retarget binds it. Nor is {@code weigh}: a call looked up in {@code a.A}, passing a
+ * {@code String} where an {@code int} is expected.
  */
 public abstract class ProjectionContract {
 
@@ -54,6 +56,7 @@ public abstract class ProjectionContract {
             "a.B -> a.A (extends)",
             "a.B#n() -> a.A#m(int) (call)", "a.B#n() -> a.A#x (read)",
             "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)", "b.C#price -> ? Money (declared)",
+            "b.C#use(A) -> ? weigh (call)",
             "b.C#use(A)/other -> a.A (declared)");
 
     /** A projection holding the fixture. */
@@ -133,7 +136,7 @@ public abstract class ProjectionContract {
 
         var after = projection.program();
         assertThat(change.expectations()).containsExactly(new Change.Bound(use, id(p, "a.A")));
-        assertThat(after.unresolved()).isEmpty();
+        assertThat(after.unresolved()).extracting(Unresolved::name).containsExactly("weigh");
         assertThat(after.declaredType(price)).map(Element::qualified).contains("a.A");
     }
 
@@ -170,6 +173,22 @@ public abstract class ProjectionContract {
                     .as(element.qualified() + " at " + at).contains(element.id()));
         }
         assertThat(projection.locate(id(p, "java.lang.String"))).isEmpty();
+    }
+
+    /**
+     * Obligation 10: a use of a member that binds nothing says the type it is looked up in, and the projection says,
+     * when asked, what it needs of what would bind it, as the language writes types; of anything else, nothing.
+     */
+    @Test
+    void aUseThatBindsNothingSaysWhereItIsLookedUpAndWhatItNeeds() {
+        var projection = fixture();
+        var p = projection.program();
+        var weigh = p.unresolved().stream().filter(u -> u.name().equals("weigh")).findFirst().orElseThrow();
+
+        assertThat(weigh.mode()).isEqualTo(Mode.CALL);
+        assertThat(p.element(weigh.scope()).qualified()).isEqualTo("a.A");
+        assertThat(projection.needs(weigh.id())).contains(new Needs("int", List.of(new Needs.Argument("string", "String"))));
+        assertThat(projection.needs(reference(p, "a.B#n()", "a.A#m(int)"))).isEmpty();
     }
 
     /**

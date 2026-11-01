@@ -11,6 +11,7 @@ import ide.program.Mode;
 import ide.program.Primitive;
 import ide.program.Program;
 import ide.projection.Diagnostic;
+import ide.projection.Needs;
 import ide.projection.PrimitiveRejected;
 import ide.projection.kit.MemoryProjection;
 import ide.refactoring.Library;
@@ -153,6 +154,27 @@ class KnowledgeTest {
         assertThat(p.unresolved()).isEmpty();
         assertThat(p.referencesFrom(id(p, "a.U#names()"))).extracting(r -> p.element(r.target()).qualified())
                 .containsExactly("java.util.List");
+    }
+
+    @Test
+    void theCreateMethodFixMakesWhatTheCallNeedsWhereTheCallLooksForIt() {
+        var projection = MemoryProjection.builder()
+                .type("a.U").file("a.U", "a/U.java").method("a.U", "total", "long")
+                .unresolved("a.U#total()", "measure", Mode.CALL, "a.U",
+                        new Needs("long", List.of(new Needs.Argument("names", "List<String>"), new Needs.Argument("i", "int"))))
+                .build();
+        var diagnostic = new Diagnostic("javac.cant.resolve.location.args", "a/U.java", 5, "measure", "cannot find symbol");
+
+        var plans = Knowledge.standard(Library.standard()).plans(diagnostic, projection);
+        var create = plans.stream().filter(plan -> plan.title().equals("create method measure in U")).findFirst().orElseThrow();
+        create.apply(projection);
+
+        assertThat(create.asks()).extracting(Plan.Ask::defaultAnswer).containsExactly("long");
+        var p = projection.program();
+        var measure = p.find("a.U#measure(List<String>,int)").orElseThrow();
+        assertThat(measure.fact(Fact.TYPE)).isEqualTo("long");
+        assertThat(measure.fact(Fact.BODY)).isEqualTo("return default");
+        assertThat(p.children(measure.id())).extracting(e -> e.name() + " " + e.fact(Fact.TYPE)).containsExactly("names List<String>", "i int");
     }
 
     /** Sealing a field needs it visible: either it is already, or showing it comes first. */

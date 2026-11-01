@@ -90,7 +90,7 @@ class MemberHolesTest {
 
     @Test
     void aUseThatBindsNothingSaysWhatItsPlaceExpectsAndACallWhatItPasses() {
-        var program = JavaProjection.of(Map.of("a/B.java", """
+        var projection = JavaProjection.of(Map.of("a/B.java", """
                 package a;
 
                 import java.util.List;
@@ -104,10 +104,10 @@ class MemberHolesTest {
                         return measure(names.size());
                     }
                 }
-                """)).program();
+                """));
 
-        assertThat(program.unresolved()).extracting(u -> u.name() + " " + u.expected() + " "
-                        + u.arguments().stream().map(a -> a.name() + " " + a.type()).toList())
+        assertThat(projection.program().unresolved()).extracting(u -> u.name() + " " + projection.needs(u.id()).orElseThrow().expected()
+                        + " " + projection.needs(u.id()).orElseThrow().arguments().stream().map(a -> a.name() + " " + a.type()).toList())
                 .containsExactlyInAnyOrder(
                         "log void [names List<String>, limit int, string String, i int, date java.util.Date]",
                         "describe String [b B]",

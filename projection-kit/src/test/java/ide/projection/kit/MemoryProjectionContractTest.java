@@ -2,6 +2,9 @@ package ide.projection.kit;
 
 import ide.program.Kind;
 import ide.program.Mode;
+import ide.projection.Needs;
+
+import java.util.List;
 import ide.projection.Projection;
 
 /** The reference implementation honors its own contract. */
@@ -21,6 +24,7 @@ class MemoryProjectionContractTest extends ProjectionContract {
                 .use("a.A#total()", "a.A#x", Mode.READ).use("a.A#total()", "a.A#m(int)", Mode.CALL)
                 .use("a.B#n()", "a.A#m(int)", Mode.CALL).use("a.B#n()", "a.A#x", Mode.READ)
                 .unresolved("b.C#price", "Money", Mode.DECLARED)
+                .unresolved("b.C#use(A)", "weigh", Mode.CALL, "a.A", new Needs("int", List.of(new Needs.Argument("string", "String"))))
                 .build();
     }
 

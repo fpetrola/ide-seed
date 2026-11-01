@@ -171,7 +171,7 @@ public final class Script implements Refactoring {
     }
 
     private Value eval(Expr expr, Run run, Map<String, Value> env) {
-        var functions = new ScriptFunctions(run.program(), run.rules());
+        var functions = new ScriptFunctions(run.program(), run.rules(), run.projection());
         return switch (expr) {
             case Expr.Str s -> new Value.Text(s.value());
             case Expr.Var v -> {

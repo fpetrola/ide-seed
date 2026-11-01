@@ -5,6 +5,7 @@ import ide.program.ElementId;
 import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Mode;
+import ide.projection.Needs;
 import ide.program.Primitive;
 import ide.projection.LanguageRules;
 
@@ -55,7 +56,13 @@ public final class ProgramBuilder {
 
     /** A use from {@code site}, written {@code name}, that binds nothing. */
     public ProgramBuilder unresolved(String site, String name, Mode mode) {
-        projection.unresolved(id(site), name, mode);
+        projection.unresolved(id(site), name, mode, null, null);
+        return this;
+    }
+
+    /** A use of a member from {@code site} that binds nothing: looked up in {@code scope}, needing {@code needs}. */
+    public ProgramBuilder unresolved(String site, String name, Mode mode, String scope, Needs needs) {
+        projection.unresolved(id(site), name, mode, id(scope), needs);
         return this;
     }
 
