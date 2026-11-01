@@ -157,7 +157,8 @@ public final class Transaction implements Projection {
     private static String describe(Primitive primitive, Program before, Program after, Change change) {
         return switch (primitive) {
             case Primitive.Create c -> "create " + c.kind() + " " + after.element(change.produced()).qualified();
-            case Primitive.Delete d -> "delete " + before.element(d.element()).qualified();
+            case Primitive.Delete d -> "delete " + before.element(d.element()).qualified()
+                    + (d.into() == null ? "" : " into " + before.element(d.into()).qualified());
             case Primitive.Move m -> "move " + before.element(m.element()).qualified() + " -> " + after.element(m.parent()).qualified();
             case Primitive.Rename r -> "rename " + before.element(r.element()).qualified() + " -> " + r.name();
             case Primitive.Set s -> "set " + after.element(s.element()).qualified() + " " + s.attribute() + " = " + s.value();

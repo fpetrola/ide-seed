@@ -9,7 +9,6 @@ import ide.java.syntax.Members;
 import ide.java.text.EditSet;
 import ide.program.Change;
 import ide.program.Element;
-import ide.program.ElementId;
 import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Primitive;
@@ -22,7 +21,8 @@ import java.util.List;
 /**
  * Deletes an element nothing references: a member's lines (its comment included), a parameter the body does not use
  * (and its argument in every call), or a type, with the imports that name it: a top-level type's file, a nested
- * type's lines.
+ * type's lines. A member deleted into another leaves its uses to it: they name it, if it has another name, in the
+ * same edit that removes the member, so they never bind something in between.
  */
 final class DeleteElement {
 
@@ -30,26 +30,33 @@ final class DeleteElement {
     }
 
     static Change apply(Primitive.Delete delete, Context c, Program before) {
+        PrimitiveRejected.unlessMergeable(before, delete);
         var element = before.element(delete.element());
         if (element.kind() == Kind.PARAM) deleteParam(c, element);
         else if (element.kind().isType()) deleteType(c, before, element);
-        else deleteMember(c, before, element);
+        else deleteMember(c, before, element, delete.into() == null ? null : before.element(delete.into()));
         return delete.intent(before, null);
     }
 
-    private static void deleteMember(Context c, Program before, Element element) {
-        var uses = before.referencesTo(element.id()).stream().map(r -> before.element(r.site()).qualified()).distinct().toList();
-        if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", element.qualified() + " is used by " + uses);
+    private static void deleteMember(Context c, Program before, Element element, Element into) {
+        var uses = before.referencesTo(element.id()).stream().filter(r -> !before.within(r.site(), element.id())).toList();
+        if (into == null && !uses.isEmpty()) {
+            throw new PrimitiveRejected("delete.referenced", element.qualified() + " is used by "
+                    + uses.stream().map(r -> before.element(r.site()).qualified()).distinct().toList());
+        }
         var declaration = c.declaration(element);
         if (declaration.node() instanceof FieldDeclaration field && field.getVariables().size() > 1) {
             throw new IllegalArgumentException("deleting one of several variables is not supported: " + element);
         }
-        c.sources().apply(Shared.edits(e -> Members.remove(e, declaration.unit(), declaration.node())));
+        var edits = new EditSet();
+        for (var use : uses) if (!use.name().equals(into.name())) Shared.renameUse(c, edits, c.use(use.id()), into.name());
+        Members.remove(edits, declaration.unit(), declaration.node());
+        c.sources().apply(edits);
         c.ids().forget(element.id());
     }
 
     private static void deleteType(Context c, Program before, Element type) {
-        var uses = before.referencesTo(type.id()).stream().filter(r -> !inside(before, r.site(), type.id()))
+        var uses = before.referencesTo(type.id()).stream().filter(r -> !before.within(r.site(), type.id()))
                 .map(r -> before.element(r.site()).qualified()).distinct().toList();
         if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", type.qualified() + " is used by " + uses);
         var edits = new EditSet();
@@ -94,10 +101,4 @@ final class DeleteElement {
         Lists.rewrite(edits, unit, items, texts);
     }
 
-    private static boolean inside(Program program, ElementId id, ElementId container) {
-        for (var e = program.element(id); ; e = program.element(e.parent())) {
-            if (e.id().equals(container)) return true;
-            if (e.parent() == null) return false;
-        }
-    }
 }

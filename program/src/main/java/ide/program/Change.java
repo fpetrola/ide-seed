@@ -61,6 +61,13 @@ public record Change(ElementId produced, List<Expectation> expectations, List<Pi
     public record UsesGone(ElementId element) implements Expectation {
     }
 
+    /**
+     * {@code element} is gone into {@code into}: its uses bind {@code into}, the uses made from inside it are gone, and
+     * what overrode it overrides what {@code into} is.
+     */
+    public record Merged(ElementId element, ElementId into) implements Expectation {
+    }
+
     /** An aspect of an element that the change set on purpose. */
     public record Pin(ElementId element, Aspect aspect) {
     }

@@ -230,6 +230,20 @@ class ProgramTest {
     }
 
     @Test
+    void anElementDeletedIntoAnotherIsMergedIntoIt() {
+        var p = program();
+
+        var change = new Primitive.Delete(B_NAME, A_NAME).intent(p, null);
+        var expected = p.expecting(change);
+
+        assertThat(change.expectations()).containsExactly(new Change.Merged(B_NAME, A_NAME));
+        assertThat(expected.contains(B_NAME)).isFalse(); // so nothing overrides through it: B's name() was A's
+        assertThat(expected.referencesFrom(B_NAME)).isEmpty();
+        assertThat(p.expecting(new Change.Merged(A_NAME, I_NAME)).referencesFrom(B_NAME)).extracting(Reference::target)
+                .containsExactly(B_X, I_NAME);
+    }
+
+    @Test
     void aLinkExpectsTheDeclarationToBindItsNewTarget() {
         var p = program();
 

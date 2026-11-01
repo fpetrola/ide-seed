@@ -220,8 +220,7 @@ refactoring merge-duplicate "Keeps one of two methods with the same body: uses o
   param keep : element(METHOD) "the method to keep"
   param duplicate : element(METHOD) "the method to drop"
   require eq(body(keep), body(duplicate)) "${qualified(keep)} and ${qualified(duplicate)} have different bodies"
-  redirect-uses ${duplicate} ${keep}
-  delete ${duplicate}
+  delete ${duplicate} into=${keep}
   return ${keep}
 end
 

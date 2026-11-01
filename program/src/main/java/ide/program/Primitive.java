@@ -42,7 +42,7 @@ public sealed interface Primitive {
                 var change = Change.produced(produced).pin(produced, Change.Aspect.PARENT, Change.Aspect.NAME);
                 yield c.facts().containsKey(Fact.VISIBILITY) ? change.pin(produced, Change.Aspect.VISIBILITY) : change;
             }
-            case Delete d -> Change.NONE.expect(new Change.UsesGone(d.element()));
+            case Delete d -> Change.NONE.expect(d.into() == null ? new Change.UsesGone(d.element()) : new Change.Merged(d.element(), d.into()));
             case Move m -> Change.NONE.pin(m.element(), Change.Aspect.PARENT);
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
             case Set s -> {
@@ -113,8 +113,16 @@ public sealed interface Primitive {
         }
     }
 
-    @Summary("Deletes an element nothing references")
-    record Delete(ElementId element) implements Primitive {
+    /**
+     * Deletes an element nothing references; or, given {@code into}, one whose uses bind {@code into} from then on: a
+     * field goes into a field, a method into a method, and the two are one.
+     */
+    @Summary("Deletes an element nothing references, or one whose uses go to another")
+    record Delete(ElementId element, @Optional ElementId into) implements Primitive {
+
+        public Delete(ElementId element) {
+            this(element, null);
+        }
     }
 
     /**

@@ -46,6 +46,54 @@ class MergeDuplicateTest {
         assertThat(ws.diagnostics()).isEmpty();
     }
 
+    /** Its calls already read like calls of the kept method: the duplicate goes, and they bind the method it overrode. */
+    @Test
+    void anOverrideThatRepeatsWhatItOverridesMergesIntoIt() {
+        var ws = Workspace.of(Map.of(
+                "a/Animal.java", """
+                        package a;
+
+                        public class Animal {
+                            public String sound() {
+                                return "...";
+                            }
+                        }
+                        """,
+                "a/Fish.java", """
+                        package a;
+
+                        public class Fish extends Animal {
+                            @Override
+                            public String sound() {
+                                return "...";
+                            }
+                        }
+                        """,
+                "b/Tank.java", """
+                        package b;
+
+                        import a.Fish;
+
+                        class Tank {
+                            String hear(Fish fish) {
+                                return fish.sound();
+                            }
+                        }
+                        """));
+
+        var result = ws.invoke("merge-duplicate", Map.of("keep", "a.Animal#sound()", "duplicate", "a.Fish#sound()"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Fish.java")).isEqualTo("""
+                package a;
+
+                public class Fish extends Animal {
+                }
+                """);
+        assertThat(ws.source("b/Tank.java")).contains("return fish.sound();");
+        assertThat(ws.diagnostics()).isEmpty();
+    }
+
     @Test
     void methodsWithDifferentBodiesAreNotDuplicates() {
         var ws = Workspace.of(Map.of("a/P.java", """

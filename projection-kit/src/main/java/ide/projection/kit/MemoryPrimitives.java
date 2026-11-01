@@ -37,7 +37,8 @@ final class MemoryPrimitives {
                 yield c.intent(before, created);
             }
             case Primitive.Delete d -> {
-                delete(graph, d.element());
+                PrimitiveRejected.unlessMergeable(before, d);
+                delete(graph, d.element(), d.into());
                 yield d.intent(before, null);
             }
             case Primitive.Move m -> {
@@ -89,8 +90,14 @@ final class MemoryPrimitives {
         return id;
     }
 
-    private static void delete(MemoryGraph graph, ElementId element) {
+    /** An element nothing uses goes; one deleted {@code into} another leaves its uses to it first. */
+    private static void delete(MemoryGraph graph, ElementId element, ElementId into) {
         var doomed = graph.subtree(element);
+        if (into != null) {
+            var name = graph.nodes.get(into).name();
+            graph.uses.replaceAll(use -> element.equals(use.target()) && !doomed.contains(use.site())
+                    ? new MemoryGraph.Use(use.site(), into, name, use.mode()) : use);
+        }
         var users = new LinkedHashSet<String>();
         for (var use : graph.uses) if (doomed.contains(use.target()) && !doomed.contains(use.site())) users.add(graph.render(use.site()));
         if (!users.isEmpty()) throw new PrimitiveRejected("delete.referenced", graph.render(element) + " is used by " + users);

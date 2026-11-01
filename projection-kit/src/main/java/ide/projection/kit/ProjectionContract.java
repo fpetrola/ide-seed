@@ -83,6 +83,7 @@ public abstract class ProjectionContract {
                 new Scenario("retarget a parameter's type", p -> new Primitive.Retarget(reference(p, "b.C#use(A)/other", "a.A"), id(p, "a.B"))),
                 new Scenario("delete an unused method", p -> new Primitive.Delete(id(p, "a.A#k(int)"))),
                 new Scenario("delete a nested type", p -> new Primitive.Delete(id(p, "b.C.Note"))),
+                new Scenario("delete a method into another", p -> new Primitive.Delete(id(p, "a.A#m(int)"), id(p, "a.A#k(int)"))),
                 new Scenario("create a method", p -> new Primitive.Create(Kind.METHOD, id(p, "a.B"), "fresh")),
                 new Scenario("add a parameter", p -> new Primitive.Create(Kind.PARAM, id(p, "a.A#m(int)"), "q",
                         Map.of(Fact.TYPE, "long"), "0")),
@@ -278,6 +279,7 @@ public abstract class ProjectionContract {
         assertRejected(projection, new Primitive.Create(Kind.FIELD, id(before, "a.A"), "x"), "projection.duplicate");
         assertRejected(projection, new Primitive.Rename(id(before, "a.A"), "B"), "projection.duplicate");
         assertRejected(projection, new Primitive.Create(Kind.PARAM, id(before, "a.A#m(int)"), "q"), "create.argument");
+        assertRejected(projection, new Primitive.Delete(id(before, "a.A#x"), id(before, "a.A#k(int)")), "delete.into");
 
         assertThat(projection.program().elements()).containsExactlyElementsOf(before.elements());
         assertThat(projection.program().references()).containsExactlyElementsOf(before.references());

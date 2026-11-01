@@ -343,6 +343,7 @@ public final class Program {
             case Change.Added a -> with(new Reference(a.site() + "@+" + references.size(), a.site(), a.target(), a.name(), a.mode()));
             case Change.Bound b -> bound(b.use(), b.to());
             case Change.UsesGone g -> withoutUsesFrom(g.element());
+            case Change.Merged m -> merged(m.element(), m.into());
         };
     }
 
@@ -400,14 +401,26 @@ public final class Program {
         return new Program(elements.values(), copy, unresolved);
     }
 
+    /** A copy without {@code element} and what it holds: its uses from outside bind {@code into}, its own are gone. */
+    private Program merged(ElementId element, ElementId into) {
+        var kept = elements.values().stream().filter(e -> !within(e.id(), element)).toList();
+        var uses = new ArrayList<Reference>();
+        for (var r : references) {
+            if (within(r.site(), element)) continue;
+            uses.add(r.target().equals(element) ? new Reference(r.id(), r.site(), into, r.name(), r.mode()) : r);
+        }
+        return new Program(kept, uses, unresolved.stream().filter(u -> !within(u.site(), element)).toList());
+    }
+
     /** A copy without the references made from inside {@code element} (it is going away with them). */
     private Program withoutUsesFrom(ElementId element) {
-        var kept = references.stream().filter(r -> !inside(r.site(), element)).toList();
+        var kept = references.stream().filter(r -> !within(r.site(), element)).toList();
         return new Program(elements.values(), kept, unresolved);
     }
 
-    private boolean inside(ElementId id, ElementId container) {
-        for (var e = elements.get(id); e != null; e = e.parent() == null ? null : elements.get(e.parent())) {
+    /** Whether {@code element} is {@code container} or is inside it. */
+    public boolean within(ElementId element, ElementId container) {
+        for (var e = elements.get(element); e != null; e = e.parent() == null ? null : elements.get(e.parent())) {
             if (e.id().equals(container)) return true;
         }
         return false;
