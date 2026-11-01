@@ -121,6 +121,9 @@ final class SwingDialogs implements Dialogs {
         var dialog = new JDialog(owner, title, true);
         var fields = new JPanel(new GridBagLayout());
         var readers = new LinkedHashMap<String, Supplier<Object>>();
+        var again = new javax.swing.Timer(500, null); // a change previews again, a moment after it stops
+        again.setRepeats(false);
+        var inputs = new java.util.ArrayList<JComponent>();
         var row = 0;
         for (var field : form.fields()) {
             var param = field.param();
@@ -178,6 +181,7 @@ final class SwingDialogs implements Dialogs {
             input.setToolTipText(param.description());
             fields.add(label, at(0, row));
             fields.add(input, at(1, row++));
+            inputs.add(input);
             if (!param.description().isEmpty()) {
                 var hint = new JLabel(param.description());
                 hint.setForeground(new Color(0x808080));
@@ -195,6 +199,8 @@ final class SwingDialogs implements Dialogs {
             readers.forEach((name, reader) -> read.put(name, reader.get()));
             return read;
         };
+        again.addActionListener(event -> diff.show(preview.apply(values.get())));
+        inputs.forEach(input -> watch(input, again::restart));
         var show = new JButton("Preview");
         show.addActionListener(event -> diff.show(preview.apply(values.get())));
         var refactor = new JButton("Refactor");
@@ -219,8 +225,46 @@ final class SwingDialogs implements Dialogs {
         dialog.getRootPane().getActionMap().put("close", action(dialog::dispose));
         dialog.pack();
         dialog.setLocationRelativeTo(owner);
+        var complete = form.fields().stream().filter(f -> f.param().required() && !f.param().type().equals("elements") && !f.param().type().equals("bool"))
+                .allMatch(f -> f.value() != null && !String.valueOf(f.value()).isBlank());
+        if (complete) { // what it would change is shown at once, when the form came filled (the caret's element, a suggested name)
+            dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowOpened(java.awt.event.WindowEvent event) {
+                    diff.show(preview.apply(values.get()));
+                }
+            });
+        }
         dialog.setVisible(true);
         return Optional.ofNullable(result[0]);
+    }
+
+    /** Calls {@code changed} whenever what a field holds changes: a box ticked, a text typed, an option chosen. */
+    private static void watch(java.awt.Component input, Runnable changed) {
+        switch (input) {
+            case JCheckBox box -> box.addItemListener(event -> changed.run());
+            case javax.swing.text.JTextComponent text -> text.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                @Override
+                public void insertUpdate(javax.swing.event.DocumentEvent event) {
+                    changed.run();
+                }
+
+                @Override
+                public void removeUpdate(javax.swing.event.DocumentEvent event) {
+                    changed.run();
+                }
+
+                @Override
+                public void changedUpdate(javax.swing.event.DocumentEvent event) {
+                }
+            });
+            case JComboBox<?> combo -> combo.addActionListener(event -> changed.run());
+            case java.awt.Container container -> {
+                for (var inner : container.getComponents()) watch(inner, changed);
+            }
+            default -> {
+            }
+        }
     }
 
     /** A window with no frame that waits, as a menu does, until it answers or goes away. */
