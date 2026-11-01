@@ -70,7 +70,7 @@ final class MemoryPrimitives {
     private static ElementId create(MemoryGraph graph, Kind kind, ElementId parent, String name, String argument) {
         var ids = graph.ids;
         requireName(name, kind == Kind.PACKAGE);
-        if (kind == Kind.PARAM && argument == null && graph.uses.stream().anyMatch(u -> u.target().equals(parent) && u.mode() == Mode.CALL)) {
+        if (kind == Kind.PARAM && argument == null && graph.uses.stream().anyMatch(u -> parent.equals(u.target()) && u.mode() == Mode.CALL)) {
             throw new PrimitiveRejected("create.argument", "the calls of " + graph.render(parent) + " need an argument for " + name);
         }
         Address address = switch (kind) {
@@ -144,19 +144,19 @@ final class MemoryPrimitives {
             }
         }
         graph.nodes.put(element, graph.nodes.get(element).named(name));
-        graph.uses.replaceAll(use -> use.target().equals(element) ? new MemoryGraph.Use(use.site(), use.target(), name, use.mode()) : use);
+        graph.uses.replaceAll(use -> element.equals(use.target()) ? new MemoryGraph.Use(use.site(), use.target(), name, use.mode()) : use);
     }
 
     /** A renamed type: its constructors are named after it, and the types written by its users name it anew. */
     private static void renameMentionsOf(MemoryGraph graph, ElementId type, String old, String name) {
         var word = Pattern.compile("\\b" + Pattern.quote(old) + "\\b");
         var users = new LinkedHashSet<ElementId>();
-        for (var use : graph.uses) if (use.target().equals(type)) users.add(use.site());
+        for (var use : graph.uses) if (type.equals(use.target())) users.add(use.site());
         for (var id : graph.order) {
             var node = graph.nodes.get(id);
             if (node.kind() == Kind.CONSTRUCTOR && type.equals(node.parent())) {
                 graph.nodes.put(id, node.named(name));
-                graph.uses.replaceAll(use -> use.target().equals(id) ? new MemoryGraph.Use(use.site(), id, name, use.mode()) : use);
+                graph.uses.replaceAll(use -> id.equals(use.target()) ? new MemoryGraph.Use(use.site(), id, name, use.mode()) : use);
             }
             if (!users.contains(id)) continue;
             for (var fact : List.of(Fact.TYPE, Fact.SUPERCLASS)) {
@@ -189,9 +189,32 @@ final class MemoryPrimitives {
         }
     }
 
+    /** A use that bound nothing binds {@code target}: a type use a type, a call a method, a read or write a field. */
+    private static void bind(MemoryGraph graph, int index, MemoryGraph.Use use, ElementId target) {
+        var kind = graph.nodes.get(target).kind();
+        var fits = use.mode().isTypeUse() ? kind.isType() : use.mode() == Mode.CALL ? kind == Kind.METHOD
+                : use.mode() == Mode.NEW ? kind.isType() : kind == Kind.FIELD;
+        if (!fits) {
+            throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind a " + use.mode().label() + " of "
+                    + use.name() + " to " + graph.render(target));
+        }
+        var name = graph.nodes.get(target).name();
+        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, name, use.mode()));
+        var site = graph.nodes.get(use.site());
+        if (use.mode() == Mode.DECLARED) {
+            graph.nodes.put(use.site(), site.with(Fact.TYPE, name));
+            if (site.kind() == Kind.PARAM) graph.resign(site.parent());
+        }
+        if (use.mode() == Mode.EXTENDS) graph.nodes.put(use.site(), site.with(Fact.SUPERCLASS, name));
+    }
+
     private static void retarget(MemoryGraph graph, String reference, ElementId target) {
         var index = graph.indexOf(reference);
         var use = graph.uses.get(index);
+        if (use.target() == null) {
+            bind(graph, index, use, target);
+            return;
+        }
         var from = graph.nodes.get(use.target()).kind();
         var to = graph.nodes.get(target).kind();
         Mode mode;
@@ -228,7 +251,7 @@ final class MemoryPrimitives {
         for (var k = first; k <= last; k++) {
             var use = graph.uses.get(positions.get(k));
             graph.uses.set(positions.get(k), new MemoryGraph.Use(created, use.target(), use.name(), use.mode()));
-            change = change.expect(new Change.Resited(use.target(), extract.method(), created));
+            if (use.target() != null) change = change.expect(new Change.Resited(use.target(), extract.method(), created));
         }
         graph.uses.add(positions.get(first), new MemoryGraph.Use(extract.method(), created, extract.name(), Mode.CALL));
         return change;
@@ -237,11 +260,11 @@ final class MemoryPrimitives {
     private static void inline(MemoryGraph graph, String reference) {
         var index = graph.indexOf(reference);
         var call = graph.uses.get(index);
-        if (call.mode() != Mode.CALL || graph.nodes.get(call.target()).kind() != Kind.METHOD) {
+        if (call.target() == null || call.mode() != Mode.CALL || graph.nodes.get(call.target()).kind() != Kind.METHOD) {
             throw new PrimitiveRejected("inline.not-a-call", reference + " is not a call");
         }
         var body = graph.uses.stream().filter(use -> use.site().equals(call.target()) && !use.mode().isLink()).toList();
-        if (body.stream().anyMatch(use -> use.target().equals(call.target()))) {
+        if (body.stream().anyMatch(use -> call.target().equals(use.target()))) {
             throw new PrimitiveRejected("inline.recursive", graph.render(call.target()) + " calls itself");
         }
         graph.uses.remove(index);

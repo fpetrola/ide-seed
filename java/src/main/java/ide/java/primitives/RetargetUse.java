@@ -12,6 +12,7 @@ import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Primitive;
 import ide.program.Program;
+import ide.program.Unresolved;
 import ide.projection.PrimitiveRejected;
 
 /**
@@ -26,6 +27,8 @@ final class RetargetUse {
     }
 
     static Change apply(Primitive.Retarget retarget, Context c, Program before) {
+        var unresolved = before.unresolved(retarget.reference());
+        if (unresolved.isPresent()) return bind(unresolved.get(), retarget, c, before);
         var ref = before.reference(retarget.reference());
         var target = before.element(retarget.target());
         var node = c.use(ref.id());
@@ -63,6 +66,20 @@ final class RetargetUse {
                         "cannot express " + expression.getParentNode().orElseThrow() + " with " + target.qualified());
             }
         }
+        c.sources().apply(edits);
+        return retarget.intent(before, null);
+    }
+
+    /** A written type that bound nothing names {@code target}: by its simple name, imported if it is not nameable yet. */
+    private static Change bind(Unresolved use, Primitive.Retarget retarget, Context c, Program before) {
+        var target = before.element(retarget.target());
+        if (!(c.use(use.id()) instanceof ClassOrInterfaceType node) || !target.kind().isType()) {
+            throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind " + use.name() + " to " + target.qualified());
+        }
+        var unit = c.sources().unitOf(node);
+        var edits = new EditSet();
+        var name = Imports.nameable(edits, unit, target.qualified());
+        if (!node.getNameAsString().equals(name)) edits.replace(unit, node.getName(), name);
         c.sources().apply(edits);
         return retarget.intent(before, null);
     }

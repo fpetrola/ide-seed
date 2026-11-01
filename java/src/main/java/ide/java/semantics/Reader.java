@@ -32,6 +32,7 @@ import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Program;
 import ide.program.Reference;
+import ide.program.Unresolved;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -136,6 +137,7 @@ public final class Reader {
         var uses = new HashMap<String, Node>();
         var ordinals = new HashMap<ElementId, Integer>();
         var library = new LinkedHashMap<String, Element>(); // the libraries' packages and types the workspace names
+        var unresolved = new ArrayList<Unresolved>();
         for (var unit : units) {
             var cu = unit.tree();
             var nodes = new ArrayList<Node>();
@@ -147,19 +149,24 @@ public final class Reader {
             nodes.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
             for (var use : nodes) {
                 var typeName = false;
+                var bindsNothing = false;
                 ElementId target;
                 switch (use) {
                     case MethodCallExpr call -> target = resolveMethod(call);
                     case ObjectCreationExpr creation -> target = callable(resolveConstructor(creation));
                     case MethodReferenceExpr reference -> target = callable(resolveMethodReference(reference));
-                    case ClassOrInterfaceType type -> target = named(resolveDeclaration(type), library);
+                    case ClassOrInterfaceType type -> {
+                        var declaration = resolveDeclaration(type);
+                        target = named(declaration, library);
+                        bindsNothing = declaration == null && bindsNothing(type);
+                    }
                     default -> {
                         var field = resolveField((Expression) use);
                         typeName = field == null && use instanceof NameExpr;
                         target = field != null ? field(field) : typeName ? named(resolveTypeDeclaration((NameExpr) use), library) : null;
                     }
                 }
-                if (target == null) continue; // members of libraries, and unresolved uses, are not tracked yet
+                if (target == null && !bindsNothing) continue; // members of libraries are not tracked yet
                 var site = siteOf(use);
                 var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1); // the site, and the use's place in it
                 uses.put(id, use);
@@ -167,11 +174,12 @@ public final class Reader {
                         : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                         : ((NodeWithSimpleName<?>) use).getNameAsString();
                 var mode = typeName ? Mode.TYPE : modeOf(use);
-                references.add(new Reference(id, site, target, name, mode));
+                if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode));
+                else references.add(new Reference(id, site, target, name, mode));
             }
         }
         elements.addAll(library.values());
-        return new Reading(new Program(elements, references), uses, declarations);
+        return new Reading(new Program(elements, references, unresolved), uses, declarations);
     }
 
     /** The element of a resolved type: the workspace's, or a library's, which joins the program the first time. */

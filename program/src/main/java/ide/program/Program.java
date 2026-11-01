@@ -13,7 +13,8 @@ import java.util.Optional;
 
 /**
  * Immutable view of the program: elements with stable identity and the references between them, uses and links
- * alike. Indexed by parent, by site, by target and by address, so that every query is local.
+ * alike, and the uses whose names bind nothing. Indexed by parent, by site, by target and by address, so that every
+ * query is local.
  */
 public final class Program {
 
@@ -23,6 +24,8 @@ public final class Program {
 
     private final Map<ElementId, Element> elements = new LinkedHashMap<>();
     private final List<Reference> references;
+    private final List<Unresolved> unresolved;
+    private final Map<String, Unresolved> byUnresolvedId = new HashMap<>();
     private final Map<ElementId, List<Element>> children = new HashMap<>();
     private final Map<ElementId, List<Reference>> from = new HashMap<>();
     private final Map<ElementId, List<Reference>> to = new HashMap<>();
@@ -33,6 +36,10 @@ public final class Program {
     private Map<ElementId, List<Element>> overriders;
 
     public Program(Collection<Element> elements, List<Reference> references) {
+        this(elements, references, List.of());
+    }
+
+    public Program(Collection<Element> elements, List<Reference> references, List<Unresolved> unresolved) {
         for (var e : elements) {
             this.elements.put(e.id(), e);
             byQualified.putIfAbsent(e.qualified(), e);
@@ -46,6 +53,8 @@ public final class Program {
             to.computeIfAbsent(r.target(), k -> new ArrayList<>()).add(r);
             byReferenceId.putIfAbsent(r.id(), r);
         }
+        this.unresolved = List.copyOf(unresolved);
+        for (var u : this.unresolved) byUnresolvedId.putIfAbsent(u.id(), u);
     }
 
     // ---- elements
@@ -122,6 +131,15 @@ public final class Program {
         var reference = byReferenceId.get(id);
         if (reference == null) throw new IllegalArgumentException("no reference " + id);
         return reference;
+    }
+
+    /** The uses whose names bind nothing. */
+    public List<Unresolved> unresolved() {
+        return unresolved;
+    }
+
+    public Optional<Unresolved> unresolved(String id) {
+        return Optional.ofNullable(byUnresolvedId.get(id));
     }
 
     public List<Reference> referencesTo(ElementId target) {
@@ -298,6 +316,7 @@ public final class Program {
         for (var r : references) {
             lines.add(element(r.site()).qualified() + " -> " + element(r.target()).qualified() + " (" + r.mode().label() + ")");
         }
+        for (var u : unresolved) lines.add(element(u.site()).qualified() + " -> ? " + u.name() + " (" + u.mode().label() + ")");
         lines.sort(null);
         return lines;
     }
@@ -321,6 +340,7 @@ public final class Program {
             case Change.Retargeted r -> retargeted(r.site(), r.from(), r.to());
             case Change.Resited r -> resited(r.from(), r.target(), r.to());
             case Change.Dropped d -> without(d.site(), d.target());
+            case Change.Bound b -> bound(b.use(), b.to());
             case Change.UsesGone g -> withoutUsesFrom(g.element());
         };
     }
@@ -335,7 +355,16 @@ public final class Program {
                 break;
             }
         }
-        return new Program(elements.values(), copy);
+        return new Program(elements.values(), copy, unresolved);
+    }
+
+    /** A copy where the unresolved use {@code use} is a reference to {@code to}. */
+    private Program bound(String use, ElementId to) {
+        var hole = byUnresolvedId.get(use);
+        if (hole == null) return this;
+        var copy = new ArrayList<>(references);
+        copy.add(new Reference(hole.id(), hole.site(), to, hole.name(), hole.mode()));
+        return new Program(elements.values(), copy, unresolved.stream().filter(u -> u != hole).toList());
     }
 
     /** A copy where one reference from {@code site} to {@code target} is made from {@code newSite} instead. */
@@ -348,7 +377,7 @@ public final class Program {
                 break;
             }
         }
-        return new Program(elements.values(), copy);
+        return new Program(elements.values(), copy, unresolved);
     }
 
     /** A copy without one reference from {@code site} to {@code target}. */
@@ -360,13 +389,13 @@ public final class Program {
                 break;
             }
         }
-        return new Program(elements.values(), copy);
+        return new Program(elements.values(), copy, unresolved);
     }
 
     /** A copy without the references made from inside {@code element} (it is going away with them). */
     private Program withoutUsesFrom(ElementId element) {
         var kept = references.stream().filter(r -> !inside(r.site(), element)).toList();
-        return new Program(elements.values(), kept);
+        return new Program(elements.values(), kept, unresolved);
     }
 
     private boolean inside(ElementId id, ElementId container) {

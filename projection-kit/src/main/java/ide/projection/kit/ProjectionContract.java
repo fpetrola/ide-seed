@@ -1,5 +1,6 @@
 package ide.projection.kit;
 
+import ide.program.Change;
 import ide.program.Element;
 import ide.program.ElementId;
 import ide.program.Fact;
@@ -8,6 +9,7 @@ import ide.program.Mode;
 import ide.program.Primitive;
 import ide.program.Program;
 import ide.program.Reference;
+import ide.program.Unresolved;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 import org.junit.jupiter.api.Test;
@@ -31,16 +33,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   public class B extends A int n() calls m, then reads x
  *   public interface I
  * package b
- *   public class C           public A a; public String label; public int use(A other)
+ *   public class C           public A a; public String label; public Money price; public int use(A other)
  * </pre>
- * {@code String} is the library's: the program names it, and a projection never changes it.
+ * {@code String} is the library's: the program names it, and a projection never changes it. {@code Money} is nowhere:
+ * the use binds nothing, until a retarget binds it.
  */
 public abstract class ProjectionContract {
 
     /** The fixture's outline. */
     public static final List<String> FIXTURE = List.of(
             "CLASS a.A", "CLASS a.B", "CLASS b.C", "CLASS java.lang.String (library)",
-            "FIELD a.A#x", "FIELD b.C#a", "FIELD b.C#label",
+            "FIELD a.A#x", "FIELD b.C#a", "FIELD b.C#label", "FIELD b.C#price",
             "INTERFACE a.I",
             "METHOD a.A#k(int)", "METHOD a.A#m(int)", "METHOD a.A#total()", "METHOD a.B#n()", "METHOD b.C#use(A)",
             "PARAM a.A#k(int)/p", "PARAM a.A#m(int)/p", "PARAM b.C#use(A)/other",
@@ -48,7 +51,7 @@ public abstract class ProjectionContract {
             "a.A#total() -> a.A#m(int) (call)", "a.A#total() -> a.A#x (read)",
             "a.B -> a.A (extends)",
             "a.B#n() -> a.A#m(int) (call)", "a.B#n() -> a.A#x (read)",
-            "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)",
+            "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)", "b.C#price -> ? Money (declared)",
             "b.C#use(A)/other -> a.A (declared)");
 
     /** A projection holding the fixture. */
@@ -82,7 +85,8 @@ public abstract class ProjectionContract {
                 new Scenario("inline a call", p -> new Primitive.Inline(reference(p, "a.B#n()", "a.A#m(int)"))),
                 new Scenario("extract a statement", p -> new Primitive.Extract(id(p, "a.A#total()"), fragmentOfTotalCallingM(), "add")),
                 new Scenario("rename a type", p -> new Primitive.Rename(id(p, "a.A"), "Base")),
-                new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)));
+                new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)),
+                new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))));
     }
 
     @Test
@@ -106,6 +110,22 @@ public abstract class ProjectionContract {
         assertThat(projection.program().outline()).containsExactlyElementsOf(FIXTURE);
         assertThat(p.element(string).inLibrary()).isTrue();
         assertThat(p.referencesTo(string)).extracting(r -> p.element(r.site()).qualified()).containsExactly("b.C#label");
+    }
+
+    /** Obligation 7: retargeting a use that binds nothing binds it: it is a reference from then on. */
+    @Test
+    void retargetingAnUnresolvedUseBindsIt() {
+        var projection = fixture();
+        var p = projection.program();
+        var price = id(p, "b.C#price");
+        var use = unresolved(p, "b.C#price");
+
+        var change = projection.apply(new Primitive.Retarget(use, id(p, "a.A")));
+
+        var after = projection.program();
+        assertThat(change.expectations()).containsExactly(new Change.Bound(use, id(p, "a.A")));
+        assertThat(after.unresolved()).isEmpty();
+        assertThat(after.declaredType(price)).map(Element::qualified).contains("a.A");
     }
 
     /** Obligation 1: an element keeps its id through rename, move, set and link. */
@@ -211,6 +231,7 @@ public abstract class ProjectionContract {
 
         assertThat(projection.program().elements()).containsExactlyElementsOf(before.elements());
         assertThat(projection.program().references()).containsExactlyElementsOf(before.references());
+        assertThat(projection.program().unresolved()).containsExactlyElementsOf(before.unresolved());
     }
 
     /** Obligation 5: a primitive that cannot be applied safely is refused and changes nothing. */
@@ -236,6 +257,13 @@ public abstract class ProjectionContract {
 
     protected static ElementId id(Program program, String address) {
         return program.find(address).map(Element::id).orElseThrow(() -> new AssertionError("no element " + address));
+    }
+
+    /** The id of the first use from {@code site} that binds nothing. */
+    protected static String unresolved(Program program, String site) {
+        var from = id(program, site);
+        return program.unresolved().stream().filter(u -> u.site().equals(from)).map(Unresolved::id).findFirst()
+                .orElseThrow(() -> new AssertionError("no unresolved use from " + site));
     }
 
     /** The id of the first reference from {@code site} to {@code target}. */

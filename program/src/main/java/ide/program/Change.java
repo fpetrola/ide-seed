@@ -49,6 +49,10 @@ public record Change(ElementId produced, List<Expectation> expectations, List<Pi
     public record Dropped(ElementId site, ElementId target) implements Expectation {
     }
 
+    /** The use {@code use}, which bound nothing, binds {@code to} now. */
+    public record Bound(String use, ElementId to) implements Expectation {
+    }
+
     /** Every use made from inside {@code element} is gone with it. */
     public record UsesGone(ElementId element) implements Expectation {
     }

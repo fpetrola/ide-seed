@@ -53,6 +53,7 @@ class JavaProjectionContractTest extends ProjectionContract {
                     public class C {
                         public A a;
                         public String label;
+                        public Money price;
 
                         public int use(A other) {
                             return other.hashCode();

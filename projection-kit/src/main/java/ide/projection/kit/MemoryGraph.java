@@ -9,6 +9,7 @@ import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Program;
 import ide.program.Reference;
+import ide.program.Unresolved;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 
@@ -46,6 +47,7 @@ final class MemoryGraph {
         }
     }
 
+    /** A use from {@code site}; its {@code target} is null when its name binds nothing. */
     record Use(ElementId site, ElementId target, String name, Mode mode) {
     }
 
@@ -68,12 +70,14 @@ final class MemoryGraph {
             elements.add(new Element(id, node.kind(), node.name(), node.parent(), address, ids.render(address), node.facts()));
         }
         var references = new ArrayList<Reference>();
+        var unresolved = new ArrayList<Unresolved>();
         var ordinals = new HashMap<ElementId, Integer>();
         for (var use : uses) {
-            var ordinal = ordinals.merge(use.site(), 1, Integer::sum) - 1;
-            references.add(new Reference(use.site() + "@" + ordinal, use.site(), use.target(), use.name(), use.mode()));
+            var id = use.site() + "@" + (ordinals.merge(use.site(), 1, Integer::sum) - 1);
+            if (use.target() == null) unresolved.add(new Unresolved(id, use.site(), use.name(), use.mode()));
+            else references.add(new Reference(id, use.site(), use.target(), use.name(), use.mode()));
         }
-        return new Program(elements, references);
+        return new Program(elements, references, unresolved);
     }
 
     Saved save() {
@@ -115,6 +119,7 @@ final class MemoryGraph {
             order.add(id);
         }
         for (var r : program.references()) uses.add(new Use(mapped.get(r.site()), mapped.get(r.target()), r.name(), r.mode()));
+        for (var u : program.unresolved()) uses.add(new Use(mapped.get(u.site()), null, u.name(), u.mode()));
     }
 
     private static String remap(String key, Map<ElementId, ElementId> mapped) {

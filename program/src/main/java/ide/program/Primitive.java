@@ -54,6 +54,7 @@ public sealed interface Primitive {
                         .orElse(Change.NONE);
             }
             case Retarget r -> {
+                if (before.unresolved(r.reference()).isPresent()) yield Change.NONE.expect(new Change.Bound(r.reference(), r.target()));
                 var reference = before.reference(r.reference());
                 yield Change.NONE.expect(new Change.Retargeted(reference.site(), reference.target(), r.target()));
             }

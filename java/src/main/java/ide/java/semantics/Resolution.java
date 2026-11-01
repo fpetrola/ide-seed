@@ -21,6 +21,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
@@ -66,6 +67,24 @@ public final class Resolution {
             return type.resolve().asReferenceType().getTypeDeclaration().orElse(null);
         } catch (RuntimeException unresolved) {
             return null;
+        }
+    }
+
+    /**
+     * Whether a written type binds nothing: no type of the workspace or of a library, no type variable. The package
+     * written before a qualified type name ({@code java.util} in {@code java.util.List}) is no type use at all.
+     */
+    public static boolean bindsNothing(ClassOrInterfaceType type) {
+        var scopeOfAnother = type.getParentNode().filter(parent -> parent instanceof ClassOrInterfaceType outer
+                && outer.getScope().filter(scope -> scope == type).isPresent()).isPresent();
+        if (scopeOfAnother) return false;
+        try {
+            type.resolve();
+            return false;
+        } catch (UnsolvedSymbolException unresolved) {
+            return true;
+        } catch (RuntimeException unknown) { // what the solver cannot model is not known to bind nothing
+            return false;
         }
     }
 

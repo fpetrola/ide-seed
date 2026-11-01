@@ -141,6 +141,12 @@ public final class MemoryProjection implements Projection {
         this.rules = rules;
     }
 
+    /** A use from {@code site} written {@code name} that binds nothing. */
+    void unresolved(ElementId site, String name, Mode mode) {
+        graph.uses.add(new MemoryGraph.Use(site, null, name, mode));
+        program = null;
+    }
+
     /** A type of a library, with its package: the program names it, and no primitive may change it. */
     void library(String qualified, Kind kind) {
         var dot = qualified.lastIndexOf('.');

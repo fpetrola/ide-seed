@@ -47,6 +47,12 @@ public final class ProgramBuilder {
         return this;
     }
 
+    /** A use from {@code site}, written {@code name}, that binds nothing. */
+    public ProgramBuilder unresolved(String site, String name, Mode mode) {
+        projection.unresolved(id(site), name, mode);
+        return this;
+    }
+
     public ProgramBuilder field(String owner, String name, String type) {
         declare(projection.apply(new Primitive.Create(Kind.FIELD, id(owner), name)).produced(), type);
         return this;

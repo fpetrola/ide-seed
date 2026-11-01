@@ -126,6 +126,23 @@ class ProgramTest {
     }
 
     @Test
+    void anUnresolvedUseIsPartOfTheProgramUntilARetargetBindsIt() {
+        var hole = new Unresolved("field:7@1", B_X, "Money", Mode.TYPE);
+        var p = new Program(program().elements(), program().references(), List.of(hole));
+
+        assertThat(p.unresolved()).containsExactly(hole);
+        assertThat(p.unresolved("field:7@1")).contains(hole);
+        assertThat(p.outline()).contains("a.B#x -> ? Money (type)");
+
+        var change = new Primitive.Retarget("field:7@1", A).intent(p, null);
+
+        assertThat(change.expectations()).containsExactly(new Change.Bound("field:7@1", A));
+        var expected = p.expecting(change);
+        assertThat(expected.unresolved()).isEmpty();
+        assertThat(expected.referencesFrom(B_X)).extracting(Reference::target).containsExactly(A, A);
+    }
+
+    @Test
     void referencesAreIndexedBothWays() {
         var p = program();
 
