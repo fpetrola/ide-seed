@@ -13,6 +13,7 @@ import ide.projection.Projection;
 import ide.refactoring.Library;
 import ide.refactoring.Run;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -22,6 +23,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
@@ -127,6 +129,19 @@ public final class Session {
     /** Net diff of every unsaved change. */
     public String diff() {
         return diff(saved, project.sources());
+    }
+
+    /** The Java sources under {@code root}, by path from it: what {@link #save} writes back. */
+    public static Map<String, String> sourcesIn(Path root) {
+        var sources = new TreeMap<String, String>();
+        try (var files = Files.walk(root)) {
+            for (var file : files.filter(f -> f.toString().endsWith(".java") && Files.isRegularFile(f)).toList()) {
+                sources.put(root.relativize(file).toString().replace(File.separatorChar, '/'), Files.readString(file));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return sources;
     }
 
     /** Writes the changed files under {@code root}; nothing reaches disk before. */

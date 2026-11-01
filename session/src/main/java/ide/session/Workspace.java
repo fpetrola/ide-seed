@@ -26,20 +26,29 @@ public final class Workspace {
     private final Fixes fixes;
     private final Navigation navigation;
     private final Completion completion;
+    private final Path root;
 
-    private Workspace(JavaProjection project, Library library, Knowledge knowledge) {
+    private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root) {
         this.project = project;
         this.library = library;
+        this.root = root;
         this.session = new Session(project, library, new Repairer(List.of(knowledge)));
         this.fixes = new Fixes(project, knowledge);
         this.navigation = new Navigation(project);
         this.completion = new Completion(project);
     }
 
-    /** A workspace over these sources, with the standard library and knowledge. */
+    /** A workspace over these sources, with the standard library and knowledge; it has nowhere to save. */
     public static Workspace of(Map<String, String> sources) {
         var library = Library.standard();
-        return new Workspace(JavaProjection.of(sources), library, Knowledge.standard(library));
+        return new Workspace(JavaProjection.of(sources), library, Knowledge.standard(library), null);
+    }
+
+    /** A workspace over the Java sources under {@code root}: it logs to {@code .ide/events.jsonl} there, and saves there. */
+    public static Workspace open(Path root) {
+        var library = Library.standard();
+        var workspace = new Workspace(JavaProjection.of(Session.sourcesIn(root)), library, Knowledge.standard(library), root);
+        return workspace.logTo(root.resolve(".ide/events.jsonl"));
     }
 
     // ---- the project
@@ -99,6 +108,12 @@ public final class Workspace {
     }
 
     public void save(Path root) {
+        session.save(root);
+    }
+
+    /** Writes the changed files where the workspace was opened from. */
+    public void save() {
+        if (root == null) throw new IllegalStateException("this workspace was not opened from a folder: nowhere to save");
         session.save(root);
     }
 

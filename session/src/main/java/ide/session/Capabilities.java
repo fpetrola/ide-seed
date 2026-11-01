@@ -36,6 +36,10 @@ final class Capabilities {
                     workspace.undo();
                     return "ok";
                 }))
+                .register(Capability.of("save", "Writes the changed files where the project was opened from", List.of(), args -> {
+                    workspace.save();
+                    return "ok";
+                }))
                 .register(Capability.of("library", "Refactorings by level", List.of(), args -> workspace.library()))
                 .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
                         args -> workspace.define(text(args, "text"))))

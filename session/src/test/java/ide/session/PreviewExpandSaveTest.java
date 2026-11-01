@@ -71,4 +71,31 @@ class PreviewExpandSaveTest {
         assertThat(Files.readString(root.resolve("a/P.java"))).contains("public int y;");
         assertThat(ws.diff()).isEmpty();
     }
+
+    /** A project opened from its folder is read from there, logs there, and is saved back there, only when asked. */
+    @Test
+    void aProjectOpenedFromAFolderIsSavedBackThere(@TempDir Path root) throws Exception {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/P.java"), P);
+        Files.writeString(root.resolve("notes.txt"), "not a source");
+
+        var ws = Workspace.open(root);
+        var capabilities = ws.capabilities();
+        capabilities.invoke("rename", Map.of("element", "a.P#x", "name", "y"));
+
+        assertThat(ws.files()).containsExactly("a/P.java");
+        assertThat(Files.readString(root.resolve("a/P.java"))).isEqualTo(P);
+
+        assertThat(capabilities.invoke("save", Map.of())).isEqualTo("\"ok\"");
+
+        assertThat(Files.readString(root.resolve("a/P.java"))).contains("public int y;");
+        assertThat(Files.readAllLines(root.resolve(".ide/events.jsonl"))).anyMatch(line -> line.contains("\"event\":\"save\""));
+    }
+
+    @Test
+    void aWorkspaceInMemoryHasNowhereToSave() {
+        var ws = Workspace.of(Map.of("a/P.java", P));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(ws::save).hasMessageContaining("nowhere to save");
+    }
 }
