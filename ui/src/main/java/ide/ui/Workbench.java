@@ -77,6 +77,8 @@ final class Workbench extends JPanel {
     private final Deque<String> back = new ArrayDeque<>();
     /** The bulb is shown again a moment after the caret stops, not at every step. */
     private final javax.swing.Timer bulbs = new javax.swing.Timer(250, event -> bulb());
+    /** What is typed is compiled a moment after typing stops, as Eclipse's reconciler does, without applying it. */
+    private final javax.swing.Timer checks = new javax.swing.Timer(500, event -> check());
     /** The selections an extended selection came from, to shrink back to. */
     private final Deque<int[]> widened = new ArrayDeque<>();
     private final Deque<String> forward = new ArrayDeque<>();
@@ -112,6 +114,11 @@ final class Workbench extends JPanel {
             }
 
             @Override
+            public void typed(String path) {
+                checks.restart();
+            }
+
+            @Override
             public void bulb() {
                 act("context-actions");
             }
@@ -122,6 +129,7 @@ final class Workbench extends JPanel {
             }
         });
         bulbs.setRepeats(false);
+        checks.setRepeats(false);
         var center = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editors, views);
         center.setResizeWeight(0.72);
         center.setBorder(BorderFactory.createEmptyBorder());
@@ -302,6 +310,34 @@ final class Workbench extends JPanel {
         editors.problems(problems);
         views.problems(problems);
         views.changes(ide.text("diff", Map.of()));
+    }
+
+    /** The problems of what the current editor says and the program does not yet: shown, not applied. */
+    void check() {
+        var path = editors.current();
+        if (path.isEmpty() || !editors.unapplied().containsKey(path.get())) return;
+        try {
+            problems = ide.records("check", Map.of("path", path.get(), "text", editors.text(path.get())));
+        } catch (RuntimeException unchecked) {
+            return;
+        }
+        editors.problems(problems);
+        views.problems(problems);
+        marks(problems);
+        bulb();
+    }
+
+    /** The tree's marks again, for these problems. */
+    private void marks(List<Map<String, Object>> found) {
+        var all = ((DefaultMutableTreeNode) tree.getRoot()).depthFirstEnumeration();
+        while (all.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) all.nextElement();
+            if (!(node.getUserObject() instanceof Node shown)) continue;
+            var severity = worst(found.stream().filter(p -> shown.file() ? shown.path().equals(p.get("path"))
+                    : String.valueOf(p.get("path")).startsWith(shown.path() + "/")));
+            node.setUserObject(new Node(shown.path(), shown.name(), shown.file(), severity));
+            tree.nodeChanged(node);
+        }
     }
 
     /** The menus, laid out as IntelliJ's: each action with its key, each refactoring of the library in its place. */

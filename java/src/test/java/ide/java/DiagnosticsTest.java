@@ -19,4 +19,16 @@ class DiagnosticsTest {
         assertThat(projection.diagnostics().stream().filter(Diagnostic::isError)).extracting(Diagnostic::path, Diagnostic::line).containsExactlyInAnyOrder(
                 org.assertj.core.groups.Tuple.tuple("a/Broken.java", 5), org.assertj.core.groups.Tuple.tuple("a/Unset.java", 4));
     }
+
+    @Test
+    void whatAnEditorSaysIsCheckedWithoutTouchingTheProgram() {
+        var projection = JavaProjection.of(Map.of("a/A.java", "package a;\n\nclass A {\n    int x;\n}\n"));
+        var program = projection.program();
+
+        var typed = projection.diagnostics("a/A.java", "package a;\n\nclass A {\n    int x = y\n}\n");
+
+        assertThat(typed).extracting(d -> d.code() + " " + d.line()).contains("ecj.ParsingErrorInsertToComplete 4");
+        assertThat(projection.program()).isSameAs(program);
+        assertThat(projection.diagnostics()).isEmpty();
+    }
 }

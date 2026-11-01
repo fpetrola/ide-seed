@@ -229,6 +229,18 @@ public final class JavaProjection implements Projection {
         return diagnostics;
     }
 
+    /**
+     * The problems the sources would have if a file said {@code text}, as Eclipse's reconciler finds them while one
+     * types: compiled as the rest is, the program untouched; syntax errors too.
+     */
+    public List<Diagnostic> diagnostics(String path, String text) {
+        var texts = new java.util.HashMap<>(sources.texts());
+        texts.put(path, text);
+        var found = compiler.check(texts);
+        diagnostics = null; // the compiler remembers the edited text now: the program's is compiled again when asked
+        return found;
+    }
+
     @Override
     public Optional<CompletionContext> completionContext(String path, String text, int offset) {
         program(); // the identities of the saved version, which the edited text is matched against

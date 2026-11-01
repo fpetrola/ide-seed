@@ -240,4 +240,18 @@ class WorkbenchTest {
         for (var i = 0; i < refactor.getItemCount(); i++) if (refactor.getItem(i) != null) items.add(refactor.getItem(i).getText());
         assertThat(items).startsWith("Refactor This...", "Rename...", "Change Signature...").contains("Extract Method...", "More Refactorings");
     }
+
+    @Test
+    void whatIsTypedIsCheckedAsItIsTypedWithoutApplyingIt() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/B.java", 5, 16);
+        workbench.type("a/B.java", B.replace("return a.m(1);", "return total;"));
+
+        workbench.check();
+
+        assertThat(workbench.views().problems()).singleElement().asString().startsWith("a/B.java:5: total cannot be resolved");
+        assertThat(workbench.marks()).containsEntry("a/B.java", "ERROR");
+        assertThat(workbench.text("a/B.java")).contains("return total;");
+        assertThat(workbench.views().changes()).isEmpty();
+    }
 }

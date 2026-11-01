@@ -59,6 +59,9 @@ final class Editors extends JTabbedPane {
 
         void moved();
 
+        /** Something was typed in a file. */
+        void typed(String path);
+
         /** The light bulb in the margin was clicked: the context actions of its line. */
         void bulb();
 
@@ -169,6 +172,21 @@ final class Editors extends JTabbedPane {
             area.setLinkScanningMask(InputEvent.CTRL_DOWN_MASK);
             area.setLinkGenerator((textArea, offset) -> link(path, textArea, offset));
             area.addCaretListener(event -> help.moved());
+            area.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                @Override
+                public void insertUpdate(javax.swing.event.DocumentEvent event) {
+                    help.typed(path);
+                }
+
+                @Override
+                public void removeUpdate(javax.swing.event.DocumentEvent event) {
+                    help.typed(path);
+                }
+
+                @Override
+                public void changedUpdate(javax.swing.event.DocumentEvent event) {
+                }
+            });
             area.setPopupMenu(help.menu());
             area.addMouseListener(new java.awt.event.MouseAdapter() { // a right click puts the caret where it is, as IDEs do
                 @Override

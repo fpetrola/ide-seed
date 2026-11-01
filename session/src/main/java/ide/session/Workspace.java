@@ -92,6 +92,11 @@ public final class Workspace {
         return project.diagnostics();
     }
 
+    /** The problems the project would have if a file said {@code text}, without applying it. */
+    public List<Diagnostic> check(String path, String text) {
+        return project.diagnostics(path, text);
+    }
+
     /** The compiler's errors: its diagnostics but the warnings. */
     public List<Diagnostic> errors() {
         return project.diagnostics().stream().filter(Diagnostic::isError).toList();
