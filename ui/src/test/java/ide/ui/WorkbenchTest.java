@@ -102,6 +102,30 @@ class WorkbenchTest {
     }
 
     @Test
+    void theInlineKeyOnALocalPutsItsValueWhereItIsRead() throws IOException {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/C.java"), """
+                package a;
+
+                class C {
+                    int twice(int n) {
+                        int sum = n + n;
+                        return sum * 2;
+                    }
+                }
+                """);
+        var workbench = workbench();
+        workbench.open("a/C.java", 6, 16); // return sum * 2: on sum
+        dialogs.fill(Map.of());
+
+        workbench.act("inline");
+
+        assertThat(dialogs.filled.getFirst().fields()).extracting(f -> f.param().name() + "=" + f.value())
+                .containsExactly("local=a.C#twice(int)/sum");
+        assertThat(workbench.text("a/C.java")).contains("        return (n + n) * 2;\n").doesNotContain("sum");
+    }
+
+    @Test
     void anAppliedEditShowsItsProblemsAndAQuickFixTakesThemAway() throws IOException {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 16);

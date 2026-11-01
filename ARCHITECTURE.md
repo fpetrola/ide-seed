@@ -216,7 +216,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
       `set superclass`, `set implements` y `set type` con tipo del workspace.
     - `Retarget(reference, target)`.
     - `Extract(method, fragment, name)` e `Inline(reference)`: el fragmento es una dirección opaca que entiende la
-      proyección (hoy `primera-última` en líneas).
+      proyección (hoy `primera-última` en líneas). `Inline` reemplaza una llamada por el cuerpo del método, o la
+      lectura de un local por el valor que se le da.
   - `Body`: lo que hace un método, en ningún lenguaje. Sentencias (`return`, asignar un campo) sobre expresiones (el
     valor de un campo o de un parámetro, un objeto nuevo), con cada elemento nombrado por id como `#{id}`. Es el
     cuerpo de un método: sus parámetros son valores del cuerpo, no usos entre elementos. `uses()` dice qué usos hace
@@ -390,6 +391,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   identidad, y los que quedan se numeran de nuevo. El flujo de extract distingue dos locales del mismo nombre por lo
   que liga cada uso: antes, extraer un `for` se rechazaba si un `for` siguiente reusaba su `i`. Un local se renombra
   con sus usos, y puede tomar el nombre de uno de un bloque hermano: los locales del método se numeran de nuevo.
+  `Inline` de la lectura de un local la reemplaza por su valor (`InlineLocal`), entre paréntesis si hace falta, y
+  dice que los usos del valor se hacen ahí. Rechaza lo que cambiaría lo que hace el programa sin cambiar a qué liga un
+  nombre, que el verificador no ve: un local al que se le da otro valor después, un valor con efectos o de otro tipo
+  que el local, uno que se leería después de que cambie lo que lee (una escritura en el medio, una llamada si lee un
+  campo, la vuelta siguiente de un ciclo), y una lectura que pasa más tarde, en una lambda o una clase. Un local que
+  nada lee se borra con sus líneas, si su valor no tiene efectos.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
@@ -1252,6 +1259,21 @@ que esto no escala solo:
      los números de los dos nombres. `Identity.placeLocals` ubica todos los locales de un método a la vez, y extract
      usa lo mismo.
    - En la proyección en memoria no hay bloques: un local que toma el nombre de otro de su método es un duplicado.
+
+   **Ciclo 3 hecho el 2026-11-01, y con él la fase 1**: Inline Variable (`inline-variable`, el mismo script que
+   inline-method: cada lectura, después el local), también desde la tecla de Inline de la UI cuando el cursor está
+   en un local.
+   - Lo que el verificador ve lo sigue viendo él. Inline dice que los usos del valor se hacen donde estaba la lectura,
+     y un nombre que ahí liga otra cosa (un local del ciclo que tapa un campo) es un `binding.rebound`.
+   - Lo que no ve lo rechaza el driver: que un valor cambie sin que cambie ningún vínculo. Es lo mismo que ya hacía el
+     flujo de extract.
+   - Un id de referencia es `site@ordinal`, así que inlinear una lectura renumera las que siguen en su método. El
+     script va de la última a la primera (`reversed`). inline-method tenía el mismo bug escondido: con dos llamadas en
+     un método y un cuerpo que usa dos cosas, la segunda se rechazaba como "no es una llamada".
+   - La proyección en memoria no tiene el valor de un local: `Inline` de un local es solo de Java, y no hay obligación
+     del contrato para él.
+   - Queda para la fase 2: que el `site` de los usos del valor de un local sea el local, como el de un campo, o la
+     sentencia (pregunta abierta 2); que los usos de un parámetro sean referencias.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
    sentencias, y `Extract` por lista de sentencias. Lo que gana: el fragmento de extract-method deja de ser opaco.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.

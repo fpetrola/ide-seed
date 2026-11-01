@@ -209,7 +209,8 @@ final class Workbench extends JPanel {
                 case "complete" -> editors.complete();
                 case "rename" -> rename();
                 case "change-signature", "move", "extract-method", "introduce-constant", "introduce-field", "safe-delete" -> refactor(action);
-                case "inline" -> refactor("inline-method");
+                case "inline" -> refactor(selection().filter(s -> takes(ide.capability("inline-variable"), s)).isPresent()
+                        ? "inline-variable" : "inline-method"); // one key, as in IntelliJ: a local under the caret, or a method
                 case "refactor" -> {
                     var offered = refactorings(candidates()).stream()
                             .map(id -> new Dialogs.Option(label(id), "REFACTORING", ide.capability(id).description())).toList();

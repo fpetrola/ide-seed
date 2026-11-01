@@ -6,6 +6,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import ide.java.semantics.Bodies;
 import ide.program.Change;
+import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
 import ide.projection.PrimitiveRejected;
@@ -16,7 +17,8 @@ import static ide.java.semantics.Resolution.resolveField;
  * Replaces a call to a method whose body is a single {@code return expr;} by that expression: each parameter becomes
  * its argument (parenthesized where precedence needs it), and so does the whole expression at the call site.
  * Refuses recursion, a body using implicit {@code this} members called on another receiver, and a non-trivial
- * argument whose parameter is not used exactly once (it would be evaluated another number of times).
+ * argument whose parameter is not used exactly once (it would be evaluated another number of times). A read of a local
+ * is inlined by {@link InlineLocal}.
  */
 final class InlineCall {
 
@@ -25,6 +27,7 @@ final class InlineCall {
 
     static Change apply(Primitive.Inline inline, Context c, Program before) {
         var ref = before.reference(inline.reference());
+        if (before.element(ref.target()).kind() == Kind.LOCAL) return InlineLocal.apply(inline, c, before, ref);
         if (!(c.use(ref.id()) instanceof MethodCallExpr call)) {
             throw new PrimitiveRejected("inline.not-a-call", ref.id() + " is not a call");
         }

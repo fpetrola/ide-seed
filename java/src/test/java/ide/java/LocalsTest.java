@@ -71,4 +71,42 @@ class LocalsTest {
         assertThat(after.referencesTo(second)).hasSize(3).allMatch(r -> r.site().equals(change.produced()));
         assertThat(before.expecting(change).diff(after).lost()).isEmpty();
     }
+
+    @Test
+    void aReadBecomesTheValueAndALocalNothingReadsGoesWhileThoseAfterCloseRanks() {
+        var projection = JavaProjection.of(Map.of("a/A.java", """
+                package a;
+
+                class A {
+                    int x;
+
+                    int twice() {
+                        int j = 0;
+                        {
+                            int i = x + 1;
+                            j += i;
+                        }
+                        for (int i = 0; i < 2; i++) j += i;
+                        return j;
+                    }
+                }
+                """));
+        var before = projection.program();
+        var first = before.find("a.A#twice()/i").orElseThrow().id();
+        var second = before.find("a.A#twice()/i'2").orElseThrow().id();
+        var read = before.referencesTo(first).getFirst();
+
+        var inlined = projection.apply(new Primitive.Inline(read.id()));
+        var middle = projection.program();
+        var deleted = projection.apply(new Primitive.Delete(first));
+
+        assertThat(projection.source("a/A.java")).contains("""
+                        {
+                            j += x + 1;
+                        }
+                """).doesNotContain("int i = x + 1;");
+        assertThat(before.expecting(inlined).diff(middle).lost()).isEmpty();
+        assertThat(middle.expecting(deleted).diff(projection.program()).lost()).isEmpty();
+        assertThat(projection.program().element(second).qualified()).isEqualTo("a.A#twice()/i");
+    }
 }

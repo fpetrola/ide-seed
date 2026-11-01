@@ -66,7 +66,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   a class inside it) are its elements and their uses references from it; JavaRules reaches a local only from inside
   its method. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the
   others are gone (they are the new method's parameters, or its own local). A renamed local may take the name of one
-  in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. An edit by hand reconciles identity (types, members,
+  in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline
+  replaces a read of a local by its value (InlineLocal) and refuses what would change behavior without changing a
+  binding (another value later, effects, another type, what it reads changed between, a read in a lambda); a local
+  nothing reads is deleted with its lines. An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through

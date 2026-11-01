@@ -1,14 +1,20 @@
 package ide.java.primitives;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
+import ide.java.semantics.Bodies;
 import ide.java.syntax.Imports;
 import ide.java.syntax.Lists;
 import ide.java.syntax.Members;
 import ide.java.text.EditSet;
 import ide.program.Change;
 import ide.program.Element;
+import ide.program.ElementId;
 import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Primitive;
@@ -16,12 +22,13 @@ import ide.program.Program;
 import ide.projection.PrimitiveRejected;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
  * Deletes an element nothing references: a member's lines (its comment included), a parameter the body does not use
- * (and its argument in every call), or a type, with the imports that name it: a top-level type's file, a nested
- * type's lines. A member deleted into another leaves its uses to it: they name it, if it has another name, in the
+ * (and its argument in every call), a local declared alone on its lines whose value has no effects, or a type, with
+ * the imports that name it: a top-level type's file, a nested type's lines. A member deleted into another leaves its uses to it: they name it, if it has another name, in the
  * same edit that removes the member, so they never bind something in between.
  */
 final class DeleteElement {
@@ -32,10 +39,45 @@ final class DeleteElement {
     static Change apply(Primitive.Delete delete, Context c, Program before) {
         PrimitiveRejected.unlessMergeable(before, delete);
         var element = before.element(delete.element());
-        if (element.kind() == Kind.PARAM) deleteParam(c, element);
+        var change = delete.intent(before, null);
+        if (element.kind() == Kind.LOCAL) for (var gone : deleteLocal(c, before, element)) change = change.expect(gone);
+        else if (element.kind() == Kind.PARAM) deleteParam(c, element);
         else if (element.kind().isType()) deleteType(c, before, element);
         else deleteMember(c, before, element, delete.into() == null ? null : before.element(delete.into()));
-        return delete.intent(before, null);
+        return change;
+    }
+
+    /**
+     * A local nothing reads, declared alone on its lines, whose value has no effects (they would no longer happen).
+     * The uses its declaration makes are gone, and the method's other locals of its name close ranks.
+     */
+    private static List<Change.Dropped> deleteLocal(Context c, Program before, Element local) {
+        var uses = before.referencesTo(local.id());
+        if (!uses.isEmpty()) throw new PrimitiveRejected("delete.referenced", local.qualified() + " is read " + uses.size() + " times");
+        var declaration = c.declaration(local);
+        var variable = declaration.as(VariableDeclarator.class);
+        var statement = variable.getParentNode().filter(d -> ((VariableDeclarationExpr) d).getVariables().size() == 1)
+                .flatMap(Node::getParentNode).filter(ExpressionStmt.class::isInstance).orElse(null);
+        var unit = declaration.unit();
+        if (statement == null || !unit.lines(statement.getBegin().orElseThrow().line, statement.getEnd().orElseThrow().line).strip()
+                .equals(unit.textOf(statement).strip())) {
+            throw new PrimitiveRejected("delete.unsupported", local.qualified() + " is not declared alone on its lines");
+        }
+        var effect = variable.getInitializer().map(Bodies::effect).orElse(null);
+        if (effect != null) throw new PrimitiveRejected("delete.effects", "'" + effect + "' would no longer run");
+        var range = statement.getRange().orElseThrow();
+        var gone = before.referencesFrom(local.parent()).stream().filter(r -> c.use(r.id()).getRange().filter(range::contains).isPresent())
+                .map(r -> new Change.Dropped(r.site(), r.target())).toList();
+        var others = new LinkedHashMap<ElementId, String>();
+        for (var other : Bodies.locals(variable.findAncestor(CallableDeclaration.class).orElseThrow())) {
+            if (other != variable) others.put(c.reader().local(other), other.getNameAsString());
+        }
+        var edits = new EditSet();
+        Members.remove(edits, unit, statement);
+        c.sources().apply(edits);
+        c.ids().forget(local.id());
+        c.ids().placeLocals(local.parent(), others);
+        return gone;
     }
 
     private static void deleteMember(Context c, Program before, Element element, Element into) {

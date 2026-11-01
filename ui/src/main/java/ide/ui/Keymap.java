@@ -37,7 +37,7 @@ final class Keymap {
             key("extract-method", "Extract Method...", "Extract the selected statements into a method", "ctrl alt M", "alt shift M"),
             key("introduce-constant", "Introduce Constant...", "Move the selected expression into a constant", "ctrl alt C"),
             key("introduce-field", "Introduce Field...", "Move the selected expression into a field", "ctrl alt F"),
-            key("inline", "Inline...", "Inline the method under the caret", "ctrl alt N", "alt shift I"),
+            key("inline", "Inline...", "Inline the method or the local under the caret", "ctrl alt N", "alt shift I"),
             key("safe-delete", "Safe Delete...", "Delete the element under the caret, if nothing uses it", "alt DELETE"),
             key("open-declaration", "Declaration", "Go to where the element under the caret is declared", "ctrl B", "F3"),
             key("hierarchy", "Type Hierarchy", "Supertypes and subtypes of the type under the caret", "ctrl H", "F4"),

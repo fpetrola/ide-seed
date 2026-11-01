@@ -178,6 +178,15 @@ refactoring inline-method "Replaces every call of a method by its body, then del
   delete ${method}
 end
 
+refactoring inline-variable "Replaces every read of a local by the value it is given, then deletes it"
+  param local : element(LOCAL) "a local given its value where it is declared, and never again"
+  # the last first: inlining a use renumbers the uses after it in its method
+  for r in reversed(refs(local))
+    inline ${r}
+  end
+  delete ${local}
+end
+
 refactoring extract-method "Moves a run of statements into a new private method and calls it"
   param method : element(METHOD) "the method the statements are in"
   param lines : lines "first-last line of the statements"

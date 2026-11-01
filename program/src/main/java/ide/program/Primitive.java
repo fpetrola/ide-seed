@@ -183,7 +183,8 @@ public sealed interface Primitive {
     record Extract(ElementId method, String fragment, String name) implements Primitive {
     }
 
-    @Summary("Replaces a call by the body of the called method")
+    /** Replaces a use by what it names: a call by the body of the called method, a read of a local by its value. */
+    @Summary("Replaces a call by the body of the called method, or a read of a local by its value")
     record Inline(String reference) implements Primitive {
     }
 }

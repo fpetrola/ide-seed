@@ -20,7 +20,13 @@ import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
+import com.github.javaparser.ast.expr.ArrayCreationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -53,6 +59,62 @@ public final class Bodies {
         return callable.findAll(VariableDeclarator.class, v -> v.getParentNode().filter(VariableDeclarationExpr.class::isInstance).isPresent()
                 && v.findAncestor(CallableDeclaration.class).orElse(null) == callable
                 && v.findAncestor(LambdaExpr.class).map(lambda -> lambda.findAncestor(CallableDeclaration.class).orElse(null) != callable).orElse(true));
+    }
+
+    /**
+     * What in an expression does more than give a value, or null: a call, a new object (a lambda or a method reference
+     * too, whose type also comes from where it is written), an assignment, an increment.
+     */
+    public static Node effect(Expression e) {
+        return e.findFirst(Node.class, n -> n instanceof MethodCallExpr || n instanceof ObjectCreationExpr
+                || n instanceof ArrayCreationExpr || n instanceof ArrayInitializerExpr || n instanceof LambdaExpr
+                || n instanceof MethodReferenceExpr || n instanceof AssignExpr
+                || n instanceof UnaryExpr u && u.getOperator().name().endsWith("CREMENT")).orElse(null);
+    }
+
+    /**
+     * What may change what {@code value} reads between where it is given, at the end of {@code declaration}, and where
+     * {@code use} reads it, or null: a write of a name it reads, or, if it reads a field or an array, a call or a new
+     * object. A use in a loop that the declaration is not in is read again in the turns that follow: the rest of the
+     * loop counts too.
+     */
+    public static Node changedBetween(Node declaration, Expression value, Node use) {
+        var start = declaration.getEnd().orElseThrow();
+        var end = use.getBegin().orElseThrow();
+        for (var n = use.getParentNode().orElse(null); n != null && !n.isAncestorOf(declaration); n = n.getParentNode().orElse(null)) {
+            if (n instanceof ForStmt || n instanceof ForEachStmt || n instanceof WhileStmt || n instanceof DoStmt) end = n.getEnd().orElseThrow();
+        }
+        var read = new java.util.HashSet<String>();
+        value.findAll(NameExpr.class).forEach(n -> read.add(n.getNameAsString()));
+        value.findAll(FieldAccessExpr.class).forEach(f -> read.add(f.getNameAsString()));
+        var heap = !value.findAll(FieldAccessExpr.class).isEmpty() || !value.findAll(ArrayAccessExpr.class).isEmpty()
+                || value.findAll(NameExpr.class).stream().anyMatch(n -> Resolution.resolveField(n) != null);
+        var stop = end;
+        var callable = use.findAncestor(CallableDeclaration.class).orElseThrow();
+        return callable.findFirst(Node.class, n -> n.getBegin().filter(b -> b.isAfter(start) && b.isBefore(stop)).isPresent()
+                && (n instanceof AssignExpr a && read.contains(written(a.getTarget()))
+                || n instanceof UnaryExpr u && u.getOperator().name().endsWith("CREMENT") && read.contains(written(u.getExpression()))
+                || heap && (n instanceof MethodCallExpr || n instanceof ObjectCreationExpr))).orElse(null);
+    }
+
+    /** The name a write changes: the variable, the field, or the array whose element it is. */
+    private static String written(Expression target) {
+        return switch (target) {
+            case NameExpr n -> n.getNameAsString();
+            case FieldAccessExpr f -> f.getNameAsString();
+            case ArrayAccessExpr a -> written(a.getName());
+            case EnclosedExpr e -> written(e.getInner());
+            default -> "";
+        };
+    }
+
+    /** What reads {@code use} later than where it is written, or null: a lambda or a class inside the declaration's method. */
+    public static Node deferred(Node declaration, Node use) {
+        for (var n = use.getParentNode().orElse(null); n != null && !n.isAncestorOf(declaration); n = n.getParentNode().orElse(null)) {
+            if (n instanceof LambdaExpr || n instanceof ClassOrInterfaceDeclaration
+                    || n instanceof ObjectCreationExpr creation && creation.getAnonymousClassBody().isPresent()) return n;
+        }
+        return null;
     }
 
     /** Which of its name a local is among {@code locals}, 0 the first; -1 if it is not one of them. */
