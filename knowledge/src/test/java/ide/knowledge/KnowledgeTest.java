@@ -186,6 +186,34 @@ class KnowledgeTest {
                 .extracting(e -> e.name()).containsExactlyInAnyOrder("check", "gross", "factor");
     }
 
+    /**
+     * A promise is broken only on purpose: as the change a fix is about, which then changes meaning (offered, never
+     * a repair) and costs more. A method writing a final field of its type: the field stops being final.
+     */
+    @Test
+    void aPromiseIsBrokenOnlyOnPurposeAndThenThePlanChangesMeaning() {
+        var projection = MemoryProjection.builder().rules(MemoryProjection.PRIVATE_TO_TOP_LEVEL)
+                .type("a.A").field("a.A", "count", "int").fact("a.A#count", Fact.FINAL, "true")
+                .method("a.A", "reset", "void").use("a.A#reset()", "a.A#count", Mode.WRITE)
+                .build();
+        var p = projection.program();
+        var knowledge = Knowledge.parse("""
+                def may-assign(s, f) when kind(s, "constructor") and parent(s, t) and parent(f, t)
+                rule final-where "a final field is given its value only by its own type's constructors"
+                  for s, f where writes(s, f) and final(f)
+                  must may-assign(s, f)
+                end
+                promise final of field "the value never changes once the object is made"
+                problem test.final is final-where(site, target)
+                say not final for final-where "make ${called} not final"
+                """, Library.standard());
+
+        var search = knowledge.search("test.final", Map.of("site", id(p, "a.A#reset()"), "target", id(p, "a.A#count")), projection);
+
+        assertThat(search.plans()).extracting(Plan::title).containsExactly("make count not final");
+        assertThat(search.plans()).allMatch(Plan::changesMeaning);
+    }
+
     @Test
     void plansAreDeducedFromTheEffectsThatMakeTheGoalCheapestFirst() {
         var projection = program();

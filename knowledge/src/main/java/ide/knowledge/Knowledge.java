@@ -373,7 +373,8 @@ public final class Knowledge implements Remedy, QuickFix {
             var on = change.added() != null;
             var value = on && change.added().size() > 1 ? change.added().get(1) : null;
             Primitive primitive = switch (change.relation()) {
-                case "static" -> new Primitive.Set(new ElementId(key), "static", String.valueOf(on));
+                case "static", "final", "abstract" -> new Primitive.Set(new ElementId(key), change.relation(), String.valueOf(on));
+                case "type" -> new Primitive.Set(new ElementId(key), "type", value);
                 case "visibility" -> new Primitive.Set(new ElementId(key), "visibility", value);
                 case "parent" -> new Primitive.Move(new ElementId(key), new ElementId(value), changes.stream()
                         .filter(c -> c.relation().equals("before") && c.element().equals(key))
@@ -394,7 +395,8 @@ public final class Knowledge implements Remedy, QuickFix {
             var said = (on ? "" : "not ") + change.relation() + " for " + change.forWhat();
             var template = says.getOrDefault(said, (on ? "" : "not ") + change.relation() + " ${element} ${was} -> ${value}");
             var title = Script.render(template, Run.on(projection, library), variables);
-            steps.add(new Step(title, List.of(), 1, true, (target, answers) -> target.apply(primitive)));
+            var promised = change.promise() != null; // broken on purpose: it changes meaning, and costs more
+            steps.add(new Step(title, List.of(), promised ? 2 : 1, !promised, (target, answers) -> target.apply(primitive)));
         }
         return steps;
     }

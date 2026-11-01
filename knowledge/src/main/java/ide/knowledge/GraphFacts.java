@@ -28,6 +28,9 @@ import java.util.stream.Stream;
  * unresolved(u, path, name, kind)     (kind: type, value, call or new)
  * site(u, s)        target(u, t)      known(name, value)
  * self-use(s, m)    type-use(s, m)    (a use from s of m, made on the object itself, or through a type)
+ * writes(s, f)      new-use(s, k)     final(e)          abstract(e)         type(e, t)        (as written)
+ * unimplemented(t, m)                 (an abstract method t inherits and nothing it has or inherits implements)
+ * argument(i, v)    (what the problem names, by place: 0, 1...)
  * </pre>
  */
 final class GraphFacts implements Facts {
@@ -51,6 +54,17 @@ final class GraphFacts implements Facts {
                     .map(e -> List.of(id(e), e.fact(Fact.VISIBILITY)));
             case "top-level" -> elements(first).filter(this::topLevel).map(e -> List.of(id(e)));
             case "static" -> elements(first).filter(e -> "true".equals(e.fact(Fact.STATIC))).map(e -> List.of(id(e)));
+            case "final" -> elements(first).filter(e -> "true".equals(e.fact(Fact.FINAL))).map(e -> List.of(id(e)));
+            case "abstract" -> elements(first).filter(e -> "true".equals(e.fact(Fact.ABSTRACT))).map(e -> List.of(id(e)));
+            case "type" -> elements(first).filter(e -> e.fact(Fact.TYPE) != null).map(e -> List.of(id(e), e.fact(Fact.TYPE)));
+            case "writes" -> references(first).filter(r -> r.mode() == Mode.WRITE || r.mode() == Mode.UPDATE)
+                    .map(r -> List.of(r.site().value(), r.target().value()));
+            case "new-use" -> references(first).filter(r -> r.mode() == Mode.NEW).map(r -> List.of(r.site().value(), r.target().value()));
+            case "unimplemented" -> types(first).flatMap(t -> program.unimplemented(t).stream().map(m -> List.of(id(t), id(m))));
+            case "argument" -> {
+                var arguments = Value.items(known.get("arguments"));
+                yield java.util.stream.IntStream.range(0, arguments.size()).mapToObj(i -> List.of(String.valueOf(i), Value.asText(arguments.get(i))));
+            }
             case "self-use" -> uses(first, Reference.Receiver.SELF);
             case "type-use" -> uses(first, Reference.Receiver.TYPE);
             case "top" -> inTypes(first).map(e -> List.of(id(e), id(program.topLevel(e.id()))));
@@ -84,10 +98,14 @@ final class GraphFacts implements Facts {
 
     /** The uses made from {@code site} (or from anywhere) on {@code receiver}: site and target. */
     private Stream<List<String>> uses(String site, Reference.Receiver receiver) {
-        var references = site == null ? program.references().stream()
-                : program.contains(new ElementId(site)) ? program.referencesFrom(new ElementId(site)).stream() : Stream.<Reference>empty();
-        return references.filter(r -> r.receiver() == receiver && !r.mode().isLink())
+        return references(site).filter(r -> r.receiver() == receiver && !r.mode().isLink())
                 .map(r -> List.of(r.site().value(), r.target().value()));
+    }
+
+    /** The references made from {@code site}, or from anywhere. */
+    private Stream<Reference> references(String site) {
+        return site == null ? program.references().stream()
+                : program.contains(new ElementId(site)) ? program.referencesFrom(new ElementId(site)).stream() : Stream.<Reference>empty();
     }
 
     /** The element named, if any is; every element, if none is. */

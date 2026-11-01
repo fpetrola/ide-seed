@@ -28,26 +28,39 @@ import java.util.Set;
  * taken away: a fact it needs removed, or one it needs absent added.
  * <p>
  * Either way, every rule is asked again around what changed: what the changes break is mended in the same plan, never
- * by undoing one of its own changes, nor by breaking a promise. A plan is at most {@link #MOST_CHANGES} changes.
+ * by undoing one of its own changes. A promise is broken only on purpose: as the first change of a plan, the one the
+ * plan is about, which then changes meaning; never as a consequence. A plan is at most {@link #MOST_CHANGES} changes.
  */
 final class Abduction {
 
     static final int MOST_CHANGES = 4;
     private static final String UNDO = "it would undo ";
 
-    /** Relations a primitive sets, keyed by their first argument: a visibility, a parent, what a use binds, a place. */
-    static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before");
-    /** Relations a primitive turns on or off: {@code static(e)}. */
-    static final Set<String> TOGGLED = Set.of("static");
+    /** Relations a primitive sets, keyed by their first argument: a visibility, a parent, what a use binds, a place, a type. */
+    static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before", "type");
+    /** Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)}. */
+    static final Set<String> TOGGLED = Set.of("static", "final", "abstract");
     /** Relations whose first argument a primitive creates: a constructor nobody has. */
     static final Set<String> CREATED = Set.of("constructor");
 
-    /** A tuple made to hold, and the one it takes the place of; or one taken away; for what it was done. */
-    record Change(String relation, List<String> added, List<String> removed, String forWhat) {
+    /** A tuple made to hold, and the one it takes the place of; or one taken away; for what; the promise it breaks. */
+    record Change(String relation, List<String> added, List<String> removed, String forWhat, String promise) {
+
+        Change(String relation, List<String> added, List<String> removed, String forWhat) {
+            this(relation, added, removed, forWhat, null);
+        }
 
         String element() {
             return (added != null ? added : removed).getFirst();
         }
+
+        Change breaking(String promise) {
+            return new Change(relation, added, removed, forWhat, promise);
+        }
+    }
+
+    /** Whether a change may be made: {@code promise} is what it breaks, made on purpose; {@code why} why it may not. */
+    private record Verdict(boolean ok, String promise, String why) {
     }
 
     /** A predicate to make hold (or, if not {@code holds}, not hold) first, by its own definitions and effects. */
@@ -133,7 +146,9 @@ final class Abduction {
                     explore(forWhat, rest, binding, changes, plus(needs, new Need(atom, true)), state, found, stuck);
                 } else if (known && (CHANGED.contains(atom.relation()) || TOGGLED.contains(atom.relation()))) {
                     var change = set(atom, state, forWhat);
-                    if (allowed(change, changes) == null) {
+                    var verdict = allowed(change, changes);
+                    if (verdict.ok()) {
+                        change = change.breaking(verdict.promise());
                         explore(forWhat, rest, binding, plus(changes, change), needs, suppose(state, change), found, stuck);
                     } else {
                         stuck(stuck, new Literal.Positive(atom));
@@ -167,7 +182,9 @@ final class Abduction {
                     explore(forWhat, rest, binding, changes, needs, state, found, stuck);
                 } else if (ground(atom) && TOGGLED.contains(atom.relation())) {
                     var change = new Change(atom.relation(), null, values(atom), forWhat);
-                    if (allowed(change, changes) == null) {
+                    var verdict = allowed(change, changes);
+                    if (verdict.ok()) {
+                        change = change.breaking(verdict.promise());
                         explore(forWhat, rest, binding, plus(changes, change), needs, suppose(state, change), found, stuck);
                     } else {
                         stuck(stuck, new Literal.Negative(atom));
@@ -224,14 +241,16 @@ final class Abduction {
                     // a comparison cannot be changed
                 }
             }
-            for (var change : options) {
-                var all = plus(done, change);
+            for (var option : options) {
+                var all = plus(done, option);
                 if (all.size() > MOST_CHANGES) continue;
-                var refused = allowed(change, done);
-                if (refused != null) {
-                    if (!refused.startsWith(UNDO)) dead.add(new Dead(all, refused));
+                var verdict = allowed(option, done);
+                if (!verdict.ok()) {
+                    if (!verdict.why().startsWith(UNDO)) dead.add(new Dead(all, verdict.why()));
                     continue;
                 }
+                var change = option.breaking(verdict.promise());
+                all = plus(done, change);
                 for (var more : unsupport(atom, all, suppose(state, change), dead)) {
                     var way = new ArrayList<>(List.of(change));
                     way.addAll(more);
@@ -327,20 +346,25 @@ final class Abduction {
 
     // ---- changes
 
-    /** Why {@code change} may not be made after {@code done}: it undoes one of them, or breaks a promise; null if it may. */
-    private String allowed(Change change, List<Change> done) {
+    /**
+     * Whether {@code change} may be made after {@code done}: not if it undoes one of them; one that breaks a promise
+     * only as the first change, on purpose; any other may.
+     */
+    private Verdict allowed(Change change, List<Change> done) {
         for (var earlier : done) {
             if (!earlier.relation().equals(change.relation())) continue;
             if (change.removed() != null && change.removed().equals(earlier.added())
                     || change.added() != null && change.added().equals(earlier.removed())) {
-                return UNDO + earlier.relation() + " of " + shown.of(change.element());
+                return new Verdict(false, null, UNDO + earlier.relation() + " of " + shown.of(change.element()));
             }
         }
         for (var kind : base.answers(Atom.of("kind", Term.constant(change.element()), Term.variable("K")))) {
             var why = promises.get(change.relation() + " of " + kind.get("K"));
-            if (why != null) return "promise " + change.relation() + " of " + shown.of(change.element()) + ": " + why;
+            if (why == null) continue;
+            var promise = "promise " + change.relation() + " of " + shown.of(change.element()) + ": " + why;
+            return done.isEmpty() ? new Verdict(true, promise, null) : new Verdict(false, null, promise);
         }
-        return null;
+        return new Verdict(true, null, null);
     }
 
     /** The change that makes a tuple of a set or toggled relation hold: it takes the place of the key's former value. */

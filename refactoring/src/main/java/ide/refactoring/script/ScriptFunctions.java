@@ -65,7 +65,7 @@ final class ScriptFunctions {
                     .map(ScriptFunctions::elem).orElse(null);
             case "element-at" -> projection.elementAt(text(args, 0), Integer.parseInt(text(args, 1)), Integer.parseInt(text(args, 2)))
                     .map(ScriptFunctions::elem).orElse(null);
-            case "unimplemented" -> args.getFirst() == null ? elems(List.of()) : elems(unimplemented(element(args, 0)));
+            case "unimplemented" -> args.getFirst() == null ? elems(List.of()) : elems(graph.unimplemented(element(args, 0)));
             // language
             case "default-value" -> text(rules.defaultValue(text(args, 0)));
             case "wider" -> { // than it is; or, given another element, at least as wide as that one too
@@ -181,27 +181,6 @@ final class ScriptFunctions {
      * The methods a type's supertypes leave abstract and nothing in it or above it implements: once each, as the
      * nearest supertype declares it.
      */
-    private List<Element> unimplemented(Element type) {
-        var above = graph.ancestors(type);
-        var concrete = new java.util.ArrayList<Element>(graph.members(type.id()));
-        above.forEach(a -> concrete.addAll(graph.members(a.id())));
-        concrete.removeIf(m -> "true".equals(m.fact(Fact.ABSTRACT)) || !m.kind().name().equals("METHOD"));
-        var missing = new java.util.ArrayList<Element>();
-        for (var ancestor : above) {
-            for (var method : graph.members(ancestor.id())) {
-                if (!method.kind().name().equals("METHOD") || !"true".equals(method.fact(Fact.ABSTRACT))) continue;
-                if (concrete.stream().anyMatch(c -> sameSignature(c, method)) || missing.stream().anyMatch(m -> sameSignature(m, method))) continue;
-                missing.add(method);
-            }
-        }
-        return missing;
-    }
-
-    private static boolean sameSignature(Element a, Element b) {
-        return a.name().equals(b.name()) && a.address() instanceof Address.Callable ca && b.address() instanceof Address.Callable cb
-                && ca.keys().equals(cb.keys());
-    }
-
     /** What a use that binds nothing is: a {@code type}, a {@code call}, a {@code new} object, or a {@code value} read or written. */
     private static String used(Mode mode) {
         return mode == Mode.CALL ? "call" : mode == Mode.NEW ? "new" : mode.isTypeUse() ? "type" : "value";

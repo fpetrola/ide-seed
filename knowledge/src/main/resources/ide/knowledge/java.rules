@@ -83,3 +83,20 @@ say static for no-object "make ${called} static"
 say not static for no-object "make ${called} not static"
 say static for through-type "make ${called} static"
 say not static for through-type "make ${called} not static"
+
+# Who gives a final field its value (JLS 8.3.1.2, 16): its own type's constructors and initializers, an initializer
+# being read as the type itself.
+def may-assign(s, f) when kind(s, "constructor") and parent(s, t) and parent(f, t)
+def may-assign(s, f) when parent(f, s) and kind(f, "field")
+
+rule final-where "a final field is given its value only by its own type's constructors and initializers"
+  for s, f where writes(s, f) and final(f)
+  must may-assign(s, f)
+end
+
+# A final field's value never changes once the object is made.
+promise final of field "the value never changes once the object is made"
+
+problem ecj.FinalFieldAssignment is final-where(inside(path, line, column), element-at(path, line, column))
+
+say not final for final-where "make ${called} not final"

@@ -220,6 +220,31 @@ public final class Program {
         return false;
     }
 
+    /**
+     * The abstract methods {@code type} inherits and nothing it has or inherits implements: what a class that is not
+     * abstract must still declare. Each once, nearest supertype first.
+     */
+    public List<Element> unimplemented(Element type) {
+        var above = ancestors(type);
+        var concrete = new ArrayList<Element>(members(type.id()));
+        above.forEach(a -> concrete.addAll(members(a.id())));
+        concrete.removeIf(m -> "true".equals(m.fact(Fact.ABSTRACT)) || m.kind() != Kind.METHOD);
+        var missing = new ArrayList<Element>();
+        for (var ancestor : above) {
+            for (var method : members(ancestor.id())) {
+                if (method.kind() != Kind.METHOD || !"true".equals(method.fact(Fact.ABSTRACT))) continue;
+                if (concrete.stream().anyMatch(c -> sameSignature(c, method)) || missing.stream().anyMatch(m -> sameSignature(m, method))) continue;
+                missing.add(method);
+            }
+        }
+        return missing;
+    }
+
+    private static boolean sameSignature(Element a, Element b) {
+        return a.name().equals(b.name()) && a.address() instanceof Address.Callable ca && b.address() instanceof Address.Callable cb
+                && ca.keys().equals(cb.keys());
+    }
+
     // ---- overriding
 
     /** The method that {@code method} overrides first: nearest supertype first, superclass before interfaces. */

@@ -575,7 +575,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   estático), con el `static` de un campo como promesa, reemplazaron a `make-static`. De un método estático que llama a
   uno de instancia salen, deducidos: hacerlo no estático, o hacer estático lo llamado y lo que eso llame; el camino
   que termina en un campo se corta en la promesa, y el que deja sin estático a algo llamado a través del tipo se
-  descarta solo. Y que un tipo escrito en un archivo nombra un tipo
+  descarta solo.
+  Una promesa se rompe solo a propósito: como el primer cambio de un plan, el cambio del que el fix trata; ese plan
+  cambia el sentido (se ofrece, ninguna reparación lo toma) y cuesta más. Como consecuencia dentro de una cadena,
+  nunca: ahí corta el camino. Así "make count not final" sale de quién puede darle valor a un `final` (JLS 8.3.1.2)
+  con `final` de un campo como promesa, y `unfinal` se fue. `unimplemented` pasó a ser una consulta de `Program`. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).
