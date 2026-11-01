@@ -1,9 +1,10 @@
 # What must hold for each violation or diagnostic to go away, when a predicate holds, and what makes it hold.
 # No remedy is written in Java: repairs and quick fixes are deduced from here, and the verifier judges them.
 # What an effect needs holds already or is made first, deduced backward the same way.
-# An effect is a quick fix people choose. Only one that "keeps meaning" (the code does what it did: something opened,
-# moved where it is used, imported, declared as the language would) may also repair a refactoring by itself: a name
-# changed to a similar one, a value made up, a final dropped are never done behind anybody's back.
+# How Java is lives in java.rules: what its definitions ask for (something opened, moved where it is used, imported,
+# declared as the language would) is deduced, and keeps meaning. An effect here is a quick fix people choose; only one
+# that "keeps meaning" may also repair a refactoring by itself: a name changed to a similar one, a value made up, a
+# final dropped are never done behind anybody's back.
 
 goal access.insufficient needs accessible(site, target)
 goal binding.unresolved needs in-scope(site, target)

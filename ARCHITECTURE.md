@@ -1131,6 +1131,37 @@ que esto no escala solo:
    reglas de acceso, alcance y construcción, junto con el motor que deduce las acciones de lo que se rompe. El
    criterio: los mismos tests de aceptación pasan con planes deducidos y sin efectos escritos. Si no sale ahí, donde
    el problema es más fácil, no va a salir con sentencias.
+
+   **Hecha el 2026-11-01, en seis ciclos** (d12602f..335ba3d). Salió:
+   - Los cinco efectos se fueron. `knowledge.ref` pasó de 25 efectos a 20, y `java.rules` tiene 16 definiciones de
+     Java y ningún fix: quién puede usar qué (JLS 6.6), dónde se usa un miembro sin decir de quién es (8.2), el orden
+     de los inicializadores (8.3.3), la visibilidad de un override (8.4.8.3), qué nombra un tipo escrito (6.5.5) y
+     el constructor que da el lenguaje (8.8.9). `ScriptFunctions` perdió `can-access` y `subclass-of`.
+   - Los 146 tests de aceptación pasan, con los mismos títulos y el mismo rastro. Cambiaron dos expectativas, y las
+     dos para mejor: un move de tipo ya no prueba `protected` donde no alcanza (antes lo probaba a ciegas y el
+     verificador lo rechazaba), y una definición que no aplica queda en el `why` con el literal donde se trabó.
+   - Lo fijo, sin lenguaje: `rules` (Datalog) y, en `knowledge`, `GraphFacts` (el grafo como relaciones) y
+     `Abduction` (qué primitivo cambia qué relación: visibilidad, padre, lugar, a qué liga un uso, y un constructor
+     que nadie tiene se crea).
+
+   Lo que enseñó, para las fases que siguen:
+   - La abducción lee una definición de izquierda a derecha, como Prolog: lo que se pregunta con argumentos sin
+     valor se consulta, y lo que se cambia tiene que ir después de lo que le da valor. La evaluación (si algo vale)
+     es Datalog puro y no depende del orden; la búsqueda de cambios sí. Una mejora posible es postergar un hecho
+     cambiable hasta que otro le dé valor, y probar los dos lados de una comparación.
+   - Datalog exige que cada variable tenga de dónde salir: `accessible(site, m) when visibility(m, "public")` no es
+     válido, y hace falta decir qué es `site` (`kind(site, _)`). Es más preciso, y obliga a escribir lo que antes
+     quedaba implícito.
+   - Detectar sigue siendo de las vistas y del compilador. `AccessView` usa `JavaRules.accessible` (código Java en
+     el driver), que dice lo mismo que `java.rules`: está dos veces. Lo siguiente es que el conocimiento aporte una
+     vista que evalúe sus reglas, y que el driver deje de saber de acceso.
+   - Que lo deducido conserve el sentido se supone para estos cinco cambios (abrir, subir, importar, declarar lo que
+     el lenguaje ya daba). Todavía no hay promesas: hacen falta antes de deducir cambios que sí podrían romperlo.
+   - Lo que una definición necesita de otra se supone hecho al leer lo que sigue, sin volver a evaluarlo.
+
+   Antes de las sentencias quedan efectos que tampoco las necesitan y que la misma máquina puede reemplazar:
+   `make-static` (la cadena de estáticos del apéndice), `make-abstract`, `unfinal`, `drop-final`, los cambios de tipo.
+   Necesitan abducir hechos que se quitan (`not static(m)`), además de los que se agregan.
 1. *Locales.* `LOCAL` y sus usos en el grafo, con obligación del contrato. Lo que gana: rename de locales verificado
    (y el rename en el lugar de la UI), Inline Variable.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
