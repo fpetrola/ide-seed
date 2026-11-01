@@ -40,7 +40,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
   is declared and what the name at a line and column means, `needs`: what a use that binds nothing needs, asked for
-  one use), LanguageRules (access, visibilities, how
+  one use, `said`: a body in no language when all of it can be said so), LanguageRules (access, visibilities, how
   the language writes a field's default value), Diagnostic,
   CompletionContext, PrimitiveRejected (and the rules every driver applies: nothing changes a library element; a
   field merges only into a field, a method into a method).

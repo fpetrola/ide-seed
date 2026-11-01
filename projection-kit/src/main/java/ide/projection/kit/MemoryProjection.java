@@ -157,6 +157,13 @@ public final class MemoryProjection implements Projection {
         return graph.use(use).filter(u -> u.target() == null).map(MemoryGraph.Use::needs);
     }
 
+    /** A body here is its text in no language: one that was set, as it was set. */
+    @Override
+    public Optional<String> said(ElementId callable) {
+        var program = program();
+        return program.contains(callable) ? Optional.ofNullable(program.element(callable).fact(Fact.BODY)) : Optional.empty();
+    }
+
     @Override
     public Optional<ElementId> elementAt(String path, int line, int column) {
         return Optional.empty();

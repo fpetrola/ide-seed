@@ -298,6 +298,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7. El ítem 4 suma
   la obligación 8 y dos escenarios para las obligaciones 2 y 3: escribir un cuerpo, y reemplazar uno que tenía usos.
   La obligación 8 pide también el cuerpo que empieza con `...`: conserva lo que el método hace y agrega lo que sigue.
+  La obligación 11 (`said`): la proyección dice el cuerpo de un método o constructor en el lenguaje de cuerpos cuando
+  todo él se puede decir así (asignar un campo, responder un valor, hacer el objeto con otro constructor primero, sobre
+  campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
   La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.

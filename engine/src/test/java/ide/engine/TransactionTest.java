@@ -197,6 +197,11 @@ class TransactionTest {
             public Optional<ide.projection.Needs> needs(String use) {
                 return Optional.empty();
             }
+
+            @Override
+            public Optional<String> said(ide.program.ElementId callable) {
+                return Optional.empty();
+            }
         };
     }
 }

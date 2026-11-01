@@ -241,6 +241,30 @@ public abstract class ProjectionContract {
     }
 
     /**
+     * Obligation 11: the projection says a method's or a constructor's body in no language ({@link Body}) when all of
+     * it can be said so; nothing when something in it cannot (here, a local variable).
+     */
+    @Test
+    void aBodyIsSaidInNoLanguageWhenAllOfItCanBe() {
+        var projection = fixture();
+        var p = projection.program();
+        var k = id(p, "a.A#k(int)");
+        var x = Body.name(id(p, "a.A#x"));
+        var written = x + " = " + Body.name(id(p, "a.A#k(int)/p")) + "\nreturn " + x;
+        projection.apply(new Primitive.Set(k, "body", written));
+        var base = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.A"), "A")).produced();
+        var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.B"), "B")).produced();
+        projection.apply(new Primitive.Set(made, "body", Body.name(base) + "()"));
+        var after = projection.program();
+
+        assertThat(projection.said(k).map(said -> Body.parse(said, after, k).statements()))
+                .contains(Body.parse(written, after, k).statements());
+        assertThat(projection.said(made).map(said -> Body.parse(said, after, made).statements()))
+                .contains(List.of(new Body.Construct(base, List.of())));
+        assertThat(projection.said(id(after, "a.A#total()"))).isEmpty();
+    }
+
+    /**
      * Obligation 1: an element keeps its id through rename, move, set, link and retarget, also when what it does
      * changes its address: a method whose parameter is declared with another type is the same method.
      */

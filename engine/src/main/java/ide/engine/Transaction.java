@@ -229,4 +229,9 @@ public final class Transaction implements Projection {
     public Optional<Needs> needs(String use) {
         return projection.needs(use);
     }
+
+    @Override
+    public Optional<String> said(ElementId callable) {
+        return projection.said(callable);
+    }
 }

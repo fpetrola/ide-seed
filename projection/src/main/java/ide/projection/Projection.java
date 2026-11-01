@@ -60,6 +60,12 @@ public interface Projection {
      */
     Optional<Needs> needs(String use);
 
+    /**
+     * A method's or a constructor's body said in no language ({@link ide.program.Body}), when all of it can be said so;
+     * nothing when something in it cannot, or for another element.
+     */
+    Optional<String> said(ElementId callable);
+
     /** A projection's saved state; only the projection that took it can restore it. */
     interface Snapshot {
     }

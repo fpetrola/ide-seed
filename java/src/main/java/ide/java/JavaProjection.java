@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.Expression;
 import ide.java.primitives.Context;
 import ide.java.primitives.JavaPrimitives;
 import ide.java.semantics.Completion;
+import ide.java.semantics.SaidBody;
 import ide.java.semantics.EcjCheck;
 import ide.java.semantics.Keys;
 import ide.java.semantics.Positions;
@@ -268,6 +269,11 @@ public final class JavaProjection implements Projection {
         var reading = reading();
         if (reading.program().unresolved(use).isEmpty() || !(reading.use(use) instanceof Expression value)) return Optional.empty();
         return Optional.of(UseNeeds.of(value));
+    }
+
+    @Override
+    public Optional<String> said(ElementId callable) {
+        return SaidBody.of(reading(), callable);
     }
 
     /**
