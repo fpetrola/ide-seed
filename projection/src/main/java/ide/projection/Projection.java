@@ -51,6 +51,9 @@ public interface Projection {
     /** The element whose name is at a line and column of a file: the one declared there, or the one a use there binds. */
     Optional<ElementId> elementAt(String path, int line, int column);
 
+    /** The innermost element whose declaration a line and column of a file is inside; nothing in a projection with no text. */
+    Optional<ElementId> inside(String path, int line, int column);
+
     /**
      * What a use that binds nothing ({@link ide.program.Unresolved}, by id) needs of what would bind it: the type its
      * place expects and what it passes, as the language writes them. Nothing for another id.

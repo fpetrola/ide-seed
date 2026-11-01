@@ -175,3 +175,23 @@ goal ecj.NotVisibleMethod needs accessible(top-in(path), element-at(path, line, 
 goal ecj.NotVisibleField needs accessible(top-in(path), element-at(path, line, column))
 goal ecj.NotVisibleConstructor needs accessible(top-in(path), element-at(path, line, column))
 goal ecj.NotVisibleType needs accessible(top-in(path), element-at(path, line, column))
+
+# A value of another type than its place takes: the place takes the value's type (the first type the compiler names).
+goal ecj.ReturnTypeMismatch needs takes(symbol)
+goal ecj.TypeMismatch needs takes(symbol)
+
+effect change-return-type "change return type of ${name(m)}() to ${first(arguments)}"
+  makes takes(symbol)
+  for m in inside(path, line, column) | of-kind "METHOD"
+  do
+    set ${m} type ${first(arguments)}
+  end
+end
+
+effect change-field-type "change type of ${name(f)} to ${first(arguments)}"
+  makes takes(symbol)
+  for f in inside(path, line, column) | of-kind "FIELD"
+  do
+    set ${f} type ${first(arguments)}
+  end
+end

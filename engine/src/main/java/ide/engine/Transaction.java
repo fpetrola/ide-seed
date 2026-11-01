@@ -222,6 +222,11 @@ public final class Transaction implements Projection {
     }
 
     @Override
+    public Optional<ElementId> inside(String path, int line, int column) {
+        return projection.inside(path, line, column);
+    }
+
+    @Override
     public Optional<Needs> needs(String use) {
         return projection.needs(use);
     }

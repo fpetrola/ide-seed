@@ -502,7 +502,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   los métodos que los supertipos dejan abstractos (`unimplemented`, sin lenguaje) o hacer la clase abstracta; hacer
   estático un método usado desde un lugar estático; quitar un miembro privado sin uso (un warning); y abrir lo que
   un archivo no ve. Para eso último, los argumentos de una meta son expresiones sobre los hechos
-  (`accessible(top-in(path), element-at(path, line, column))`), y un diagnóstico da también su columna.
+  (`accessible(top-in(path), element-at(path, line, column))`), y un diagnóstico da también su columna. Un diagnóstico
+  trae lo que el compilador nombra en él (`arguments`, escritos como el archivo los escribe), y el contrato responde
+  en qué elemento cae una posición (`inside`, en la obligación 9): con eso, cambiar el tipo de retorno de un método o
+  el tipo de un campo al del valor que recibe.
 - **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 

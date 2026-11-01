@@ -113,10 +113,14 @@ public final class Knowledge implements Remedy, QuickFix {
         return search(violation.code(), facts, projection);
     }
 
-    /** The search for a diagnostic, with what it says: its symbol, and where it is (path, line and column). */
+    /**
+     * The search for a diagnostic, with what it says: its symbol, where it is (path, line and column), and what the
+     * compiler names in it (arguments).
+     */
     public Search search(Diagnostic diagnostic, Projection projection) {
         return search(diagnostic.code(), Map.of("symbol", diagnostic.symbol(), "path", diagnostic.path(),
-                "line", String.valueOf(diagnostic.line()), "column", String.valueOf(diagnostic.column())), projection);
+                "line", String.valueOf(diagnostic.line()), "column", String.valueOf(diagnostic.column()),
+                "arguments", diagnostic.arguments()), projection);
     }
 
     /**

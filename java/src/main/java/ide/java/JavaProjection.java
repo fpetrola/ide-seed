@@ -257,7 +257,7 @@ public final class JavaProjection implements Projection {
         return Positions.at(reading(), sources, path, line, column);
     }
 
-    /** The innermost element whose declaration a place of a file is inside, as an editor asks what the caret is in. */
+    @Override
     public Optional<ElementId> inside(String path, int line, int column) {
         return Positions.inside(reading(), path, line, column);
     }

@@ -79,7 +79,7 @@ final class KnowledgeParser {
                     }
                 }
                 if (makes == null) throw new IllegalArgumentException("knowledge: effect " + name + " makes nothing");
-                var variables = new LinkedHashSet<>(List.of("site", "target", "symbol", "path", "line"));
+                var variables = new LinkedHashSet<>(List.of("site", "target", "symbol", "path", "line", "column", "arguments"));
                 variables.addAll(makes.args());
                 if (forVariable != null) variables.add(forVariable);
                 asks.forEach(ask -> variables.add(ask.name()));

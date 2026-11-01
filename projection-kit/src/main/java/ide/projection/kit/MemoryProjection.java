@@ -148,6 +148,11 @@ public final class MemoryProjection implements Projection {
     }
 
     @Override
+    public Optional<ElementId> inside(String path, int line, int column) {
+        return Optional.empty();
+    }
+
+    @Override
     public Optional<Needs> needs(String use) {
         return graph.use(use).filter(u -> u.target() == null).map(MemoryGraph.Use::needs);
     }

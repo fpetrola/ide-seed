@@ -132,7 +132,13 @@ public final class EcjCheck {
         var symbol = start >= 0 && end >= start && end < text.length() ? symbol(text.substring(start, end + 1)) : "";
         var name = NAMES.getOrDefault(problem.getID(), String.valueOf(problem.getID() & IProblem.IgnoreCategoriesMask));
         return new Diagnostic("ecj." + name, path, line, symbol, problem.getMessage(),
-                problem.isError() ? Diagnostic.Severity.ERROR : Diagnostic.Severity.WARNING, column, length);
+                problem.isError() ? Diagnostic.Severity.ERROR : Diagnostic.Severity.WARNING, column, length,
+                problem.getArguments() == null ? List.of() : Arrays.stream(problem.getArguments()).map(EcjCheck::written).toList());
+    }
+
+    /** A type the compiler names, as a file writes it: {@code java.lang}'s by their simple names. */
+    private static String written(String type) {
+        return type.replaceAll("\\bjava\\.lang\\.([A-Z]\\w*)", "$1");
     }
 
     /** What a problem's text is about: its last name, the one a member access or an import ends with. */

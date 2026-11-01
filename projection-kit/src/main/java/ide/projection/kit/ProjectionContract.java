@@ -160,8 +160,8 @@ public abstract class ProjectionContract {
     }
 
     /**
-     * Obligation 9: where a projection says an element is declared, the element there is that one. A projection with
-     * no text says nothing is anywhere.
+     * Obligation 9: where a projection says an element is declared, the element there is that one, and the one its
+     * name is inside. A projection with no text says nothing is anywhere.
      */
     @Test
     void whereAnElementIsDeclaredIsWhereItIsFound() {
@@ -169,8 +169,10 @@ public abstract class ProjectionContract {
         var p = projection.program();
 
         for (var element : p.elements()) {
-            projection.locate(element.id()).ifPresent(at -> assertThat(projection.elementAt(at.path(), at.line(), at.column()))
-                    .as(element.qualified() + " at " + at).contains(element.id()));
+            projection.locate(element.id()).ifPresent(at -> {
+                assertThat(projection.elementAt(at.path(), at.line(), at.column())).as(element.qualified() + " at " + at).contains(element.id());
+                assertThat(projection.inside(at.path(), at.line(), at.column())).as("inside " + element.qualified()).contains(element.id());
+            });
         }
         assertThat(projection.locate(id(p, "java.lang.String"))).isEmpty();
     }

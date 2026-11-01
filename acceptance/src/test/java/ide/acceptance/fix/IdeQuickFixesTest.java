@@ -124,4 +124,28 @@ class IdeQuickFixesTest {
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/A.java")).contains("    int secret() {");
     }
+
+    @Test
+    void aValueOfAnotherTypeChangesTheTypeOfItsPlace() {
+        var ws = Workspace.of(Map.of("a/U.java", """
+                package a;
+
+                class U {
+                    long label = "none";
+
+                    long title() {
+                        return "untitled";
+                    }
+                }
+                """));
+
+        assertThat(ws.fixes("a/U.java", 4)).contains("change type of label to String");
+        assertThat(ws.fixes("a/U.java", 7)).contains("change return type of title() to String");
+
+        ws.fix("a/U.java", 4, "change type of label to String");
+        ws.fix("a/U.java", 7, "change return type of title() to String");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/U.java")).contains("String label = \"none\";", "String title() {");
+    }
 }

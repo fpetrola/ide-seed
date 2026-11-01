@@ -221,6 +221,11 @@ class ViewsTest {
             }
 
             @Override
+            public Optional<ide.program.ElementId> inside(String path, int line, int column) {
+                return Optional.empty();
+            }
+
+            @Override
             public Optional<ide.projection.Needs> needs(String use) {
                 return Optional.empty();
             }
