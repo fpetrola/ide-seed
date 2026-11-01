@@ -353,7 +353,7 @@ public final class Program {
         for (var i = 0; i < copy.size(); i++) {
             var r = copy.get(i);
             if (r.site().equals(site) && r.target().equals(from)) {
-                copy.set(i, new Reference(r.id(), r.site(), to, r.name(), r.mode()));
+                copy.set(i, new Reference(r.id(), r.site(), to, r.name(), r.mode(), r.receiver()));
                 break;
             }
         }
@@ -375,7 +375,7 @@ public final class Program {
         for (var i = 0; i < copy.size(); i++) {
             var r = copy.get(i);
             if (r.site().equals(site) && r.target().equals(target)) {
-                copy.set(i, new Reference(r.id(), newSite, target, r.name(), r.mode()));
+                copy.set(i, new Reference(r.id(), newSite, target, r.name(), r.mode(), r.receiver()));
                 break;
             }
         }
@@ -407,7 +407,7 @@ public final class Program {
         var uses = new ArrayList<Reference>();
         for (var r : references) {
             if (within(r.site(), element)) continue;
-            uses.add(r.target().equals(element) ? new Reference(r.id(), r.site(), into, r.name(), r.mode()) : r);
+            uses.add(r.target().equals(element) ? new Reference(r.id(), r.site(), into, r.name(), r.mode(), r.receiver()) : r);
         }
         return new Program(kept, uses, unresolved.stream().filter(u -> !within(u.site(), element)).toList());
     }

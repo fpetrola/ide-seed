@@ -28,7 +28,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
   Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
   no doubt), Reference (id `site@ordinal`, Mode:
-  uses read|write|update|call|new|type and links extends|implements|declared), Program (indexed queries, diff,
+  uses read|write|update|call|new|type and links extends|implements|declared; Receiver: what a use is made on, the
+  object itself, a type or another object, none for links, types and news), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
   parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states

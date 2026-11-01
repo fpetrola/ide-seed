@@ -98,9 +98,15 @@ public final class ProgramBuilder {
         return this;
     }
 
-    /** A use made from inside {@code site}: what a body would say. */
+    /** A use made from inside {@code site}: what a body would say; a use of a member is made on the object itself. */
     public ProgramBuilder use(String site, String target, Mode mode) {
         projection.addUse(id(site), id(target), mode);
+        return this;
+    }
+
+    /** A use made from inside {@code site} on {@code receiver}: through a type, or through another object. */
+    public ProgramBuilder use(String site, String target, Mode mode, ide.program.Reference.Receiver receiver) {
+        projection.addUse(id(site), id(target), mode, receiver);
         return this;
     }
 

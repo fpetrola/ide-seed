@@ -170,7 +170,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Dominio.**
   - `Element`: `id`, `kind`, `name`, `parent`, `facts`. `Kind`: PACKAGE, CLASS, INTERFACE, ENUM, FIELD,
     CONSTRUCTOR, METHOD, PARAM.
-  - `Reference`: `site`, `target`, `mode`, `name` (cómo se escribió). Modos de uso: READ, WRITE, UPDATE, CALL, NEW,
+  - `Reference`: `site`, `target`, `mode`, `name` (cómo se escribió) y `receiver`: sobre qué se hace el uso, el
+    objeto mismo (escrito solo, o con `this` o `super`), un tipo, u otro objeto; un vínculo, un tipo usado o un
+    objeto nuevo, sobre nada. Lo agregó la regla de estáticos: un método estático usa lo que necesita un objeto solo a
+    través de uno, y eso depende de cómo está escrito el uso (obligación 12 del contrato). Modos de uso: READ, WRITE, UPDATE, CALL, NEW,
     TYPE. Modos de vínculo: EXTENDS, IMPLEMENTS, DECLARED (el tipo declarado de un campo, parámetro o retorno). Un
     vínculo es una referencia porque la jerarquía y el verificador lo tratan igual que a un uso: hoy son strings
     duplicados en atributos y eso obliga a re-resolver nombres en todos lados.

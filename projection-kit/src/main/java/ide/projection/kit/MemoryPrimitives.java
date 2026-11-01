@@ -8,6 +8,7 @@ import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Primitive;
+import ide.program.Reference;
 import ide.program.Program;
 import ide.projection.PrimitiveRejected;
 
@@ -96,7 +97,7 @@ final class MemoryPrimitives {
         if (into != null) {
             var name = graph.nodes.get(into).name();
             graph.uses.replaceAll(use -> element.equals(use.target()) && !doomed.contains(use.site())
-                    ? new MemoryGraph.Use(use.site(), into, name, use.mode()) : use);
+                    ? use.moved(use.site(), into, name) : use);
         }
         var users = new LinkedHashSet<String>();
         for (var use : graph.uses) if (doomed.contains(use.target()) && !doomed.contains(use.site())) users.add(graph.render(use.site()));
@@ -152,7 +153,7 @@ final class MemoryPrimitives {
             }
         }
         graph.nodes.put(element, graph.nodes.get(element).named(name));
-        graph.uses.replaceAll(use -> element.equals(use.target()) ? new MemoryGraph.Use(use.site(), use.target(), name, use.mode()) : use);
+        graph.uses.replaceAll(use -> element.equals(use.target()) ? use.moved(use.site(), use.target(), name) : use);
     }
 
     /** A renamed type: its constructors are named after it, and the types written by its users name it anew. */
@@ -164,7 +165,7 @@ final class MemoryPrimitives {
             var node = graph.nodes.get(id);
             if (node.kind() == Kind.CONSTRUCTOR && type.equals(node.parent())) {
                 graph.nodes.put(id, node.named(name));
-                graph.uses.replaceAll(use -> id.equals(use.target()) ? new MemoryGraph.Use(use.site(), id, name, use.mode()) : use);
+                graph.uses.replaceAll(use -> id.equals(use.target()) ? use.moved(use.site(), id, name) : use);
             }
             if (!users.contains(id)) continue;
             for (var fact : List.of(Fact.TYPE, Fact.SUPERCLASS)) {
@@ -183,7 +184,7 @@ final class MemoryPrimitives {
             var start = Body.value(value, graph.read(), element);
             graph.uses.removeIf(use -> use.site().equals(element) && !use.mode().isLink());
             for (var use : Body.uses(start)) {
-                graph.uses.add(new MemoryGraph.Use(element, use.element(), graph.nodes.get(use.element()).name(), use.mode()));
+                graph.uses.add(new MemoryGraph.Use(element, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()));
             }
             return;
         }
@@ -206,7 +207,7 @@ final class MemoryPrimitives {
         var body = Body.parse(text, graph.read(), method);
         if (!body.keeps()) graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
         for (var use : body.uses()) {
-            graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode()));
+            graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()));
         }
         var old = graph.nodes.get(method).facts().get(Fact.BODY);
         var said = body.keeps() && old != null ? old + "\n" + text.strip().substring(3).replaceFirst("^[;\\s]+", "") : text;
@@ -233,7 +234,7 @@ final class MemoryPrimitives {
             throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind a " + use.mode().label() + " of "
                     + use.name() + " to " + graph.render(target));
         }
-        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), use.mode()));
+        graph.uses.set(index, use.moved(use.site(), target, graph.nodes.get(target).name()));
         declare(graph, use.site(), use.mode(), target);
     }
 
@@ -263,7 +264,8 @@ final class MemoryPrimitives {
         else if (to == Kind.FIELD && use.mode() == Mode.CALL) mode = Mode.READ; // a call of nothing but a value: the value
         else throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot express a " + use.mode().label()
                     + " of " + graph.render(use.target()) + " with " + graph.render(target));
-        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), mode));
+        var receiver = use.receiver() == Reference.Receiver.NONE ? Reference.Receiver.of(mode) : use.receiver();
+        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), mode, receiver));
         declare(graph, use.site(), mode, target);
     }
 
@@ -292,7 +294,7 @@ final class MemoryPrimitives {
         var change = extract.intent(before, created);
         for (var k = first; k <= last; k++) {
             var use = graph.uses.get(positions.get(k));
-            graph.uses.set(positions.get(k), new MemoryGraph.Use(created, use.target(), use.name(), use.mode()));
+            graph.uses.set(positions.get(k), use.moved(created, use.target(), use.name()));
             if (use.target() != null) change = change.expect(new Change.Resited(use.target(), extract.method(), created));
         }
         graph.uses.add(positions.get(first), new MemoryGraph.Use(extract.method(), created, extract.name(), Mode.CALL));
@@ -310,6 +312,6 @@ final class MemoryPrimitives {
             throw new PrimitiveRejected("inline.recursive", graph.render(call.target()) + " calls itself");
         }
         graph.uses.remove(index);
-        graph.uses.addAll(index, body.stream().map(use -> new MemoryGraph.Use(call.site(), use.target(), use.name(), use.mode())).toList());
+        graph.uses.addAll(index, body.stream().map(use -> use.moved(call.site(), use.target(), use.name())).toList());
     }
 }

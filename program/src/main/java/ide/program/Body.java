@@ -78,8 +78,12 @@ public record Body(List<Statement> statements) {
         }
     }
 
-    /** What a body does with an element outside its method. */
-    public record Use(ElementId element, Mode mode) {
+    /** What a body does with an element outside its method, and on what: a call on a value is made on another object. */
+    public record Use(ElementId element, Mode mode, Reference.Receiver receiver) {
+
+        public Use(ElementId element, Mode mode) {
+            this(element, mode, Reference.Receiver.of(mode));
+        }
     }
 
     /** How a body names an element. */
@@ -193,7 +197,7 @@ public record Body(List<Statement> statements) {
             }
             case Call call -> {
                 if (call.receiver() != null) uses(call.receiver(), uses);
-                uses.add(new Use(call.method(), Mode.CALL));
+                uses.add(new Use(call.method(), Mode.CALL, call.receiver() == null ? Reference.Receiver.SELF : Reference.Receiver.OTHER));
                 call.arguments().forEach(argument -> uses(argument, uses));
             }
             case New n -> {

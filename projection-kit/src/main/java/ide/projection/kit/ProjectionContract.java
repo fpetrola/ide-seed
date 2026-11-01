@@ -241,6 +241,21 @@ public abstract class ProjectionContract {
     }
 
     /**
+     * Obligation 12: a use says what it is made on. The fixture's uses are all on the object itself (written alone);
+     * a link or a type used is made on nothing.
+     */
+    @Test
+    void aUseSaysWhatItIsMadeOn() {
+        var p = fixture().program();
+
+        assertThat(p.referencesFrom(id(p, "a.B#n()"))).extracting(r -> r.name() + " " + r.receiver())
+                .containsExactly("m SELF", "x SELF");
+        assertThat(p.referencesFrom(id(p, "a.A#total()"))).extracting(Reference::receiver).containsOnly(Reference.Receiver.SELF);
+        assertThat(p.referencesFrom(id(p, "a.B"))).extracting(Reference::receiver).containsOnly(Reference.Receiver.NONE);
+        assertThat(p.referencesFrom(id(p, "b.C#a"))).extracting(Reference::receiver).containsOnly(Reference.Receiver.NONE);
+    }
+
+    /**
      * Obligation 11: the projection says a method's or a constructor's body in no language ({@link Body}) when all of
      * it can be said so; nothing when something in it cannot (here, a local variable).
      */

@@ -199,4 +199,9 @@ public final class MemoryProjection implements Projection {
         graph.addUse(site, target, mode);
         program = null;
     }
+
+    void addUse(ElementId site, ElementId target, Mode mode, ide.program.Reference.Receiver receiver) {
+        graph.addUse(site, target, mode, receiver);
+        program = null;
+    }
 }

@@ -50,10 +50,23 @@ final class MemoryGraph {
 
     /** A use from {@code site}; its {@code target} is null when its name binds nothing. */
     /** A use; one that binds nothing may say where it is looked up and what it needs. */
-    record Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs) {
+    record Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs, Reference.Receiver receiver) {
 
         Use(ElementId site, ElementId target, String name, Mode mode) {
-            this(site, target, name, mode, null, null);
+            this(site, target, name, mode, null, null, Reference.Receiver.of(mode));
+        }
+
+        Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs) {
+            this(site, target, name, mode, scope, needs, Reference.Receiver.of(mode));
+        }
+
+        Use(ElementId site, ElementId target, String name, Mode mode, Reference.Receiver receiver) {
+            this(site, target, name, mode, null, null, receiver);
+        }
+
+        /** The same use, made from {@code site}, binding {@code target} by {@code name}: on what it was made on. */
+        Use moved(ElementId site, ElementId target, String name) {
+            return new Use(site, target, name, mode, scope, needs, receiver);
         }
     }
 
@@ -81,7 +94,7 @@ final class MemoryGraph {
         for (var use : uses) {
             var id = use.site() + "@" + (ordinals.merge(use.site(), 1, Integer::sum) - 1);
             if (use.target() == null) unresolved.add(new Unresolved(id, use.site(), use.name(), use.mode(), use.scope()));
-            else references.add(new Reference(id, use.site(), use.target(), use.name(), use.mode()));
+            else references.add(new Reference(id, use.site(), use.target(), use.name(), use.mode(), use.receiver()));
         }
         return new Program(elements, references, unresolved);
     }
@@ -133,7 +146,7 @@ final class MemoryGraph {
             nodes.put(id, new Node(e.kind(), e.name(), e.parent() == null ? null : mapped.get(e.parent()), e.facts()));
             order.add(id);
         }
-        for (var r : program.references()) uses.add(new Use(mapped.get(r.site()), mapped.get(r.target()), r.name(), r.mode()));
+        for (var r : program.references()) uses.add(new Use(mapped.get(r.site()), mapped.get(r.target()), r.name(), r.mode(), r.receiver()));
         for (var u : program.unresolved()) {
             uses.add(new Use(mapped.get(u.site()), null, u.name(), u.mode(), u.scope() == null ? null : mapped.get(u.scope()), null));
         }
@@ -163,6 +176,10 @@ final class MemoryGraph {
 
     void addUse(ElementId site, ElementId target, Mode mode) {
         uses.add(new Use(site, target, nodes.get(target).name(), mode));
+    }
+
+    void addUse(ElementId site, ElementId target, Mode mode, Reference.Receiver receiver) {
+        uses.add(new Use(site, target, nodes.get(target).name(), mode, receiver));
     }
 
     /** The element and everything inside it. */

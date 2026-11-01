@@ -14,6 +14,9 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.expr.ThisExpr;
+import com.github.javaparser.ast.expr.TypeExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -344,7 +347,7 @@ public final class Reader {
             nodes.put(id, use);
             var mode = typeName ? Mode.TYPE : modeOf(use);
             if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use)));
-            else references.add(new Reference(id, site, target, name, mode));
+            else references.add(new Reference(id, site, target, name, mode, receiver(use, mode)));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
     }
@@ -354,6 +357,39 @@ public final class Reader {
         var type = invocation.findAncestor(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration.class);
         if (invocation.isThis() || type.isEmpty()) return type.map(t -> t.getNameAsString()).orElse("this");
         return type.get().getExtendedTypes().getFirst().map(t -> t.getNameAsString()).orElse("Object");
+    }
+
+    /**
+     * What a use is made on, as it is written: alone or through {@code this} or {@code super}, the object itself;
+     * through a name that is a type and no value, the type; through anything else, another object.
+     */
+    private Reference.Receiver receiver(Node use, Mode mode) {
+        if (mode.isTypeUse() || mode == Mode.NEW) return Reference.Receiver.NONE;
+        Expression scope = switch (use) {
+            case MethodCallExpr call -> call.getScope().orElse(null);
+            case FieldAccessExpr access -> access.getScope();
+            case MethodReferenceExpr reference -> reference.getScope();
+            default -> null; // a name written alone
+        };
+        if (scope == null || scope instanceof ThisExpr || scope instanceof SuperExpr) return Reference.Receiver.SELF;
+        if (scope instanceof TypeExpr) return Reference.Receiver.TYPE;
+        if (scope instanceof NameExpr name) {
+            try {
+                name.resolve();
+                return Reference.Receiver.OTHER;
+            } catch (RuntimeException notAValue) {
+                return resolveTypeDeclaration(name) != null ? Reference.Receiver.TYPE : Reference.Receiver.OTHER;
+            }
+        }
+        if (scope instanceof FieldAccessExpr qualified) {
+            try {
+                qualified.calculateResolvedType();
+                return Reference.Receiver.OTHER;
+            } catch (RuntimeException notAValue) { // a qualified name of a type
+                return Reference.Receiver.TYPE;
+            }
+        }
+        return Reference.Receiver.OTHER;
     }
 
     /** Whether a qualified name is a type of the workspace. */

@@ -66,7 +66,7 @@ class BodyTest {
                 new Body.Return(new Body.Call(null, OTHER, List.of(new Body.Parameter(VALUE)))),
                 new Body.Return(new Body.Call(new Body.Field(X), OTHER, List.of(new Body.Field(X)))));
         assertThat(body.uses()).containsExactly(new Body.Use(OTHER, Mode.CALL), new Body.Use(X, Mode.READ),
-                new Body.Use(OTHER, Mode.CALL), new Body.Use(X, Mode.READ));
+                new Body.Use(OTHER, Mode.CALL, Reference.Receiver.OTHER), new Body.Use(X, Mode.READ));
     }
 
     @Test
