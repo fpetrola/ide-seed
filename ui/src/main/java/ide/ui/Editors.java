@@ -386,6 +386,25 @@ final class Editors extends JTabbedPane {
         }).orElse(0);
     }
 
+    /** Marks every occurrence of a whole word in the current editor, as IntelliJ shows what a rename changes; none for null. */
+    void markAll(String word) {
+        current().ifPresent(path -> {
+            var area = editor(path).area;
+            var context = new org.fife.ui.rtextarea.SearchContext(word == null ? "" : word);
+            context.setWholeWord(true);
+            context.setMatchCase(true);
+            context.setMarkAll(word != null);
+            marked = word == null ? 0 : org.fife.ui.rtextarea.SearchEngine.markAll(area, context).getMarkedCount();
+        });
+    }
+
+    private int marked;
+
+    /** How many occurrences the current editor marks. */
+    int marked() {
+        return marked;
+    }
+
     /** Opens completion at the caret of the current editor. */
     void complete() {
         current().ifPresent(path -> editor(path).completion.doCompletion());

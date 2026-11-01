@@ -70,6 +70,7 @@ class WorkbenchTest {
         workbench.act("rename");
 
         assertThat(dialogs.asked).containsExactly("Rename a.A#x [x]");
+        assertThat(workbench.renaming).isEqualTo(2); // the field and its read, marked while the name was asked
         assertThat(workbench.text("a/A.java")).contains("public int count;", "return count + p;");
         assertThat(workbench.views().steps()).contains("' rename a.A#x -> count");
         assertThat(workbench.views().changes()).contains("+    public int count;");

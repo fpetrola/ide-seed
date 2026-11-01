@@ -81,6 +81,8 @@ final class Workbench extends JPanel {
     private final javax.swing.Timer checks = new javax.swing.Timer(500, event -> check());
     /** The selections an extended selection came from, to shrink back to. */
     private final Deque<int[]> widened = new ArrayDeque<>();
+    /** How many occurrences the last rename marked, for the tests to see. */
+    int renaming;
     private final Deque<String> forward = new ArrayDeque<>();
     private List<String> files = List.of();
     private List<Map<String, Object>> problems = List.of();
@@ -658,8 +660,14 @@ final class Workbench extends JPanel {
             say("rename: the caret is on no element");
             return;
         }
-        dialogs.line("Rename " + selection.get().element(), editors.name(), editors.caretOnScreen())
-                .ifPresent(name -> change("rename", Map.of("element", selection.get().element(), "name", name)));
+        editors.markAll(editors.name()); // what the rename changes in this file, marked while the new name is asked
+        renaming = editors.marked();
+        try {
+            dialogs.line("Rename " + selection.get().element(), editors.name(), editors.caretOnScreen())
+                    .ifPresent(name -> change("rename", Map.of("element", selection.get().element(), "name", name)));
+        } finally {
+            editors.markAll(null);
+        }
     }
 
     /** Runs a change after applying what the editors say, and shows what it did. */
