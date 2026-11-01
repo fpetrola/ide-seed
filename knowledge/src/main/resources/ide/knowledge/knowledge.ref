@@ -285,17 +285,8 @@ effect unfinal "make ${name(f)} not final"
   end
 end
 
-# An override that hides what it overrides: it is as visible again, or more.
-goal ecj.MethodReducesVisibility needs visible-as-overridden(symbol)
-
-effect widen-override "make ${name(inside(path, line, column))}() ${v}"
-  keeps meaning
-  makes visible-as-overridden(symbol)
-  for v in wider(inside(path, line, column), overridden(inside(path, line, column)))
-  do
-    set ${inside(path, line, column)} visibility ${v}
-  end
-end
+# An override that hides what it overrides: it is as visible again, or more (java.rules says how).
+goal ecj.MethodReducesVisibility needs visible-as-overridden(inside(path, line, column))
 
 # A type nothing declares: the file's package gets it, a class or an interface.
 effect create-class "create class ${symbol} in ${qualified(owner(top-in(path)))}"

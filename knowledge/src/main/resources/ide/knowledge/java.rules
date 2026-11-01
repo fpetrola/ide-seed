@@ -40,3 +40,9 @@ def in-scope(site, m) when kind(site, "field") and parent(site, t) and parent(m,
 def clash(m, u) when parent(x, u) and alike(x, m) and x != m
 
 say parent for in-scope "pull-up-dependency ${qualified(element)} -> ${qualified(value)}"
+
+# An override is at least as visible as what it overrides (JLS 8.4.8.3).
+def visible-as-overridden(m) when overrides(m, n) and visibility(n, vn)
+  and visibility-at-least(v, vn) and may-be(m, v) and visibility(m, v)
+
+say visibility for visible-as-overridden "make ${name(element)}() ${value}"
