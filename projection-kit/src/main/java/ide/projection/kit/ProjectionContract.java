@@ -159,6 +159,22 @@ public abstract class ProjectionContract {
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
+    /** Obligation 8 too: a constructor's body may have its object made first by its superclass's constructor. */
+    @Test
+    void aConstructorsBodyMayHaveItsObjectMadeByTheSuperclasssConstructor() {
+        var projection = fixture();
+        var base = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.A"), "A")).produced();
+        var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.B"), "B")).produced();
+
+        var change = projection.apply(new Primitive.Set(made, "body", Body.name(base) + "()"));
+
+        var after = projection.program();
+        assertThat(change.expectations()).containsExactly(new Change.Added(made, base, "A", Mode.CALL));
+        assertThat(after.referencesFrom(made)).extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactly("a.A#new() call");
+        assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+    }
+
     /** Obligation 8 too: a body that starts with {@code ...} keeps what the method does, and adds what follows at its end. */
     @Test
     void aBodyThatKeepsWhatTheMethodDoesAddsToIt() {

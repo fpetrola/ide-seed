@@ -15,6 +15,8 @@ import java.util.List;
  * return #{field:2}.#{method:4}(#{param:7})      answers what a call answers: on what a field or a parameter holds,
  * return #{method:4}(#{param:7})                 or on the object itself; a method that answers nothing just calls
  * ...                                            what the method does now, as it is: first, and what follows is added
+ * #{constructor:3}(#{param:7})                   a constructor's object made first by another constructor, of its
+ *                                                type or of its superclass: first
  * </pre>
  * A body is the body of one method: its parameters are values the body has, not uses between elements. Like
  * {@link Fact}, it grows only when a template needs to say something it cannot.
@@ -30,6 +32,13 @@ public record Body(List<Statement> statements) {
 
     /** What the method does now, kept as it is written: what the body says after it is added at its end. */
     public record Kept() implements Statement {
+    }
+
+    /** The object is made first by {@code constructor}, given {@code arguments}: only a constructor's body says it, first. */
+    public record Construct(ElementId constructor, List<Expression> arguments) implements Statement {
+        public Construct {
+            arguments = List.copyOf(arguments);
+        }
     }
 
     /** Answers {@code value}. */
@@ -90,7 +99,11 @@ public record Body(List<Statement> statements) {
                 if (!statements.isEmpty()) throw new IllegalArgumentException("body: '...' comes first, in: " + text);
                 statements.add(new Kept());
             } else {
-                statements.add(new Parser(line, program, method).statement());
+                var statement = new Parser(line, program, method).statement();
+                if (statement instanceof Construct && !statements.isEmpty()) {
+                    throw new IllegalArgumentException("body: a constructor called comes first, in: " + text);
+                }
+                statements.add(statement);
             }
         }
         return new Body(statements);
@@ -129,6 +142,10 @@ public record Body(List<Statement> statements) {
             switch (statement) {
                 case Kept k -> {
                     // the uses the method already makes
+                }
+                case Construct c -> {
+                    uses.add(new Use(c.constructor(), Mode.CALL));
+                    c.arguments().forEach(argument -> uses(argument, uses));
                 }
                 case Return r -> uses(r.value(), uses);
                 case Assign a -> {
@@ -180,9 +197,16 @@ public record Body(List<Statement> statements) {
             if (keyword("return")) {
                 statement = new Return(expression());
             } else {
-                var field = element(Kind.FIELD);
-                expect('=');
-                statement = new Assign(field, expression());
+                var element = element(Kind.FIELD, Kind.CONSTRUCTOR);
+                if (program.element(element).kind() == Kind.CONSTRUCTOR) {
+                    if (program.element(method).kind() != Kind.CONSTRUCTOR) {
+                        throw new IllegalArgumentException("body: only a constructor has its object made by " + element + ", in: " + text);
+                    }
+                    statement = new Construct(element, ((Call) call(null, element)).arguments());
+                } else {
+                    expect('=');
+                    statement = new Assign(element, expression());
+                }
             }
             spaces();
             if (at < text.length()) throw error("the end");

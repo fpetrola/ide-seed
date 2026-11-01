@@ -100,6 +100,22 @@ class BodyTest {
     }
 
     @Test
+    void aConstructorMayFirstHaveTheObjectMadeByAnotherConstructor() {
+        var program = new Program(java.util.stream.Stream.concat(program().elements().stream(), java.util.stream.Stream.of(
+                element(new ElementId("constructor:8"), Kind.CONSTRUCTOR, "P", P, new Address.Callable(P, "new", List.of("int"))),
+                element(new ElementId("param:9"), Kind.PARAM, "x", new ElementId("constructor:8"),
+                        new Address.Param(new ElementId("constructor:8"), "x")))).toList(), List.of());
+        var made = new ElementId("constructor:8");
+
+        var body = Body.parse("#{constructor:3}(); #{field:2} = #{param:9}", program, made);
+
+        assertThat(body.statements()).containsExactly(new Body.Construct(NEW, List.of()), new Body.Assign(X, new Body.Parameter(new ElementId("param:9"))));
+        assertThat(body.uses()).containsExactly(new Body.Use(NEW, Mode.CALL), new Body.Use(X, Mode.WRITE));
+        assertThatThrownBy(() -> Body.parse("#{field:2} = #{param:9}; #{constructor:3}()", program, made)).hasMessageContaining("comes first");
+        assertThatThrownBy(() -> Body.parse("#{constructor:3}()", program, SET)).hasMessageContaining("only a constructor");
+    }
+
+    @Test
     void anythingElseIsNotABody() {
         var program = program();
 

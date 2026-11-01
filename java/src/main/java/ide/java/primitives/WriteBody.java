@@ -30,13 +30,15 @@ final class WriteBody {
     private final Unit unit;
     private final Map<String, String> named = new HashMap<>();
     private final String type;
+    private final ElementId owner;
 
-    private WriteBody(Program program, List<String> parameters, EditSet edits, Unit unit, String type) {
+    private WriteBody(Program program, List<String> parameters, EditSet edits, Unit unit, String type, ElementId owner) {
         this.program = program;
         this.parameters = parameters;
         this.edits = edits;
         this.unit = unit;
         this.type = type;
+        this.owner = owner;
     }
 
     static void apply(Context c, ElementId method, String text) {
@@ -47,7 +49,7 @@ final class WriteBody {
         var unit = declaration.unit();
         var edits = new EditSet();
         var type = callable instanceof MethodDeclaration m ? m.getType().asString() : "void";
-        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, type);
+        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, type, program.element(method).parent());
         var statements = body.statements().stream().map(writer::statement).filter(s -> !s.isEmpty()).collect(Collectors.joining("\n"));
         var indent = unit.indentation(callable.getBegin().orElseThrow().line);
         var block = callable instanceof MethodDeclaration m ? m.getBody().orElseThrow()
@@ -63,7 +65,7 @@ final class WriteBody {
 
     /** A value said in no language, as the file of {@code site} writes it: a field's start. */
     static String value(Context c, ElementId site, EditSet edits, Unit unit, String text) {
-        return new WriteBody(c.program(), List.of(), edits, unit, "void").value(Body.value(text, c.program(), site));
+        return new WriteBody(c.program(), List.of(), edits, unit, "void", c.program().element(site).parent()).value(Body.value(text, c.program(), site));
     }
 
     private String statement(Body.Statement statement) {
@@ -73,6 +75,8 @@ final class WriteBody {
             case Body.Return r -> Render.returning(value(r.value()));
             case Body.Assign a -> Render.assignment(field(a.field()), value(a.value()));
             case Body.Kept k -> "";
+            case Body.Construct made -> (program.element(made.constructor()).parent().equals(owner) ? "this" : "super")
+                    + "(" + String.join(", ", made.arguments().stream().map(this::value).toList()) + ");";
         };
     }
 
