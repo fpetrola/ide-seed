@@ -731,7 +731,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     archivo y el paquete que tienen errores o warnings. Se prueba sin pantalla: los diálogos son
     una interfaz (`Dialogs`) que los tests guionan. Sin carpeta abre un proyecto de ejemplo (una tienda, copiada a
     `~/.ideseed/example`) cuyos archivos dicen qué probar en cada uno; `ExampleTest` verifica que cada refactoring y
-    quick fix propuesto funciona. `target/ide-ui.jar`.
+    quick fix propuesto funciona. Una terminal como la de IntelliJ es una vista más (Alt+F12): JediTerm la dibuja y
+    pty4j le da una terminal real, para que un programa que la necesita, como Claude Code, funcione adentro. Corre el
+    shell del usuario en la carpeta del proyecto y arranca la primera vez que se muestra; mientras tiene el foco, las
+    teclas son suyas. Es solo una vista: no sabe nada del IDE. JediTerm se publica en el repositorio de JetBrains, no
+    en Maven Central. `target/ide-ui.jar`.
   - `mcp`: JSON-RPC 2.0 por stdio, una línea por mensaje: `initialize`, `ping`, `tools/list` (cada capacidad una
     herramienta, su esquema un JSON Schema) y `tools/call` (lo que responde la capacidad, o un resultado de error).
     Si una llamada cambia las herramientas, como `define`, avisa con `notifications/tools/list_changed`.

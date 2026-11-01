@@ -244,6 +244,11 @@ public final class Workspace {
     // ---- adapters
 
     /** Everything this workspace can do, as capabilities; built on each call, so it reflects the current library. */
+    /** The folder the workspace was opened from, if it was. */
+    public java.util.Optional<Path> root() {
+        return java.util.Optional.ofNullable(root);
+    }
+
     public CapabilityRegistry capabilities() {
         return Capabilities.of(this, library.all());
     }

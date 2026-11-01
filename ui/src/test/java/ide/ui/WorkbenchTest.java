@@ -277,6 +277,19 @@ class WorkbenchTest {
         }
     }
 
+    /** Alt+F12 shows the terminal among the views; its shell starts only once it is on a screen. */
+    @Test
+    void theTerminalIsAViewThatStartsWhenShown() throws IOException {
+        var workbench = workbench();
+
+        workbench.act("terminal");
+
+        var terminal = workbench.terminalView().orElseThrow();
+        assertThat(workbench.views().getSelectedComponent()).isSameAs(terminal);
+        assertThat(workbench.views().getTitleAt(workbench.views().getSelectedIndex())).isEqualTo("Terminal");
+        assertThat(terminal.running()).isFalse();
+    }
+
     /** In a window the size of the one Main opens, the editors take most of the height; the views below, the rest. */
     @Test
     void theEditorsTakeMostOfTheHeight() throws IOException {

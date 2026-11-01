@@ -71,6 +71,8 @@ final class Workbench extends JPanel {
     private final JTree project = new JTree(tree);
     private final Editors editors;
     private final Views views = new Views(this::openProblem, this::openResult);
+    /** The terminal, in the project's folder; none if the IDE was not opened on a folder. */
+    private final Terminal terminal;
     private final JLabel status = new JLabel(" ");
     private final JLabel position = new JLabel(" ");
     private final JLabel libraries = new JLabel(" ");
@@ -91,6 +93,8 @@ final class Workbench extends JPanel {
         super(new BorderLayout());
         this.ide = ide;
         this.dialogs = dialogs;
+        this.terminal = ide.folder().map(Terminal::new).orElse(null);
+        if (terminal != null) views.addTab("Terminal", Icons.of("TERMINAL"), terminal);
         this.editors = new Editors(Keymap.strokes(), new Editors.Help() {
             @Override
             public List<Map<String, Object>> completions(String path, String text, int offset) {
@@ -253,6 +257,7 @@ final class Workbench extends JPanel {
                 case "previous-problem" -> problem(-1);
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
+                case "terminal" -> terminal();
                 case "zoom-in" -> zoom(1);
                 case "zoom-out" -> zoom(-1);
                 case "zoom-reset" -> zoom(0);
@@ -276,7 +281,23 @@ final class Workbench extends JPanel {
         com.formdev.flatlaf.FlatLaf.updateUI();
         editors.zoomed();
         views.zoomed();
+        if (terminal != null) terminal.zoomed();
         say("zoom " + Math.round(Zoom.of(100)) + "%");
+    }
+
+    /** Shows the terminal and gives it the keys; it starts the first time it is shown. */
+    private void terminal() {
+        if (terminal == null) {
+            say("no terminal: the IDE was not opened on a folder");
+            return;
+        }
+        views.setSelectedComponent(terminal);
+        terminal.requestFocusInWindow();
+    }
+
+    /** The terminal, if there is one. */
+    java.util.Optional<Terminal> terminalView() {
+        return java.util.Optional.ofNullable(terminal);
     }
 
     Editors editors() {
@@ -364,7 +385,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");

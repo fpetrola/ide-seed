@@ -14,6 +14,14 @@
     <description>An adapter: a Swing window over the capabilities, with Eclipse's keys. No logic: it shows what the
         capabilities answer and asks people what they take.</description>
 
+    <!-- JediTerm is published only in JetBrains' own repository -->
+    <repositories>
+        <repository>
+            <id>intellij-dependencies</id>
+            <url>https://packages.jetbrains.team/maven/p/ij/intellij-dependencies</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>ide</groupId>
@@ -48,6 +56,22 @@
             <groupId>com.formdev</groupId>
             <artifactId>flatlaf-fonts-jetbrains-mono</artifactId>
             <version>2.304</version>
+        </dependency>
+        <!-- a terminal inside the window, as IntelliJ's: JediTerm draws it, pty4j gives it a real one -->
+        <dependency>
+            <groupId>org.jetbrains.jediterm</groupId>
+            <artifactId>jediterm-ui</artifactId>
+            <version>3.76</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.jediterm</groupId>
+            <artifactId>jediterm-core</artifactId>
+            <version>3.76</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.pty4j</groupId>
+            <artifactId>pty4j</artifactId>
+            <version>0.14.0</version>
         </dependency>
         <dependency>
             <groupId>com.tngtech.archunit</groupId>

@@ -14,5 +14,6 @@ class AdapterTest {
     @ArchTest
     static final ArchRule onlyTheSessionAndTheCore = classes().that().resideInAPackage("ide.ui..")
             .should().onlyDependOnClassesThat().resideInAnyPackage("ide.ui..", "ide.session..", "ide.core..", "java..",
-                    "javax.swing..", "org.fife..", "com.formdev..");
+                    "javax.swing..", "org.fife..", "com.formdev..",
+                    "com.jediterm..", "com.pty4j..");
 }

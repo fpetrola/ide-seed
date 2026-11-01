@@ -38,6 +38,7 @@ final class Icons {
             Map.entry("ERROR", mark(new Color(0xE05555), "!")),
             Map.entry("WARNING", warning()),
             Map.entry("STEP", dot(new Color(0x6A9FD8))),
+            Map.entry("TERMINAL", letter(">", new Color(0x8C8C8C))),
             Map.entry("PRIMITIVE", dot(new Color(0x5FB865))),
             Map.entry("QUESTION", mark(new Color(0x6A9FD8), "?")),
             Map.entry("ANSWER", mark(new Color(0x5FB865), "✓")),

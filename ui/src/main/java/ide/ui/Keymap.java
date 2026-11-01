@@ -50,6 +50,7 @@ final class Keymap {
             key("previous-problem", "Previous Highlighted Error", "Go to the previous problem", "shift F2", "ctrl COMMA"),
             key("back", "Back", "Go back to where the caret was", "ctrl alt LEFT", "alt LEFT"),
             key("forward", "Forward", "Go forward again", "ctrl alt RIGHT", "alt RIGHT"),
+            key("terminal", "Terminal", "The terminal, in the project's folder", "alt F12"),
             key("zoom-in", "Zoom In", "Bigger text, everywhere", "ctrl PLUS", "ctrl ADD", "ctrl shift EQUALS", "ctrl EQUALS"),
             key("zoom-out", "Zoom Out", "Smaller text", "ctrl MINUS", "ctrl SUBTRACT"),
             key("zoom-reset", "Reset Zoom", "Text at its usual size", "ctrl 0"),

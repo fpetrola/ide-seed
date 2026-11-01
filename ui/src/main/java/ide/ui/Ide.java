@@ -16,6 +16,11 @@ final class Ide {
         this.workspace = workspace;
     }
 
+    /** The project's folder, if the IDE was opened on one. */
+    java.util.Optional<java.nio.file.Path> folder() {
+        return workspace.root();
+    }
+
     Capability capability(String id) {
         return workspace.capabilities().get(id);
     }
