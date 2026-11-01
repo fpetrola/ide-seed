@@ -86,6 +86,11 @@ final class Workbench extends JPanel {
             }
 
             @Override
+            public void undo() {
+                act("undo-change");
+            }
+
+            @Override
             public Optional<Runnable> link(String path, int line, int column) {
                 if (!editors().unapplied().isEmpty()) return Optional.empty();
                 var at = ide.record("at", Map.of("path", path, "line", String.valueOf(line), "column", String.valueOf(column)));
@@ -204,6 +209,7 @@ final class Workbench extends JPanel {
             }
         } catch (RuntimeException failed) {
             say("error: " + failed.getMessage());
+            dialogs.tell("Could not " + action, List.of(String.valueOf(failed.getMessage())), editors.caretOnScreen());
         }
     }
 
@@ -338,9 +344,13 @@ final class Workbench extends JPanel {
 
     /** What a refactoring would change: its diff, or why it would not apply. */
     private String preview(String capability, Map<String, Object> args) {
-        var report = ide.record("preview", Map.of("refactoring", capability, "args", args));
-        return Boolean.TRUE.equals(report.get("applied")) ? String.valueOf(report.get("diff"))
-                : String.join("\n", strings(report.get("violations")));
+        try {
+            var report = ide.record("preview", Map.of("refactoring", capability, "args", args));
+            return Boolean.TRUE.equals(report.get("applied")) ? String.valueOf(report.get("diff"))
+                    : "not applied:\n" + String.join("\n", strings(report.get("violations")));
+        } catch (RuntimeException failed) {
+            return "error: " + failed.getMessage();
+        }
     }
 
     private void quickFix() {
@@ -384,8 +394,9 @@ final class Workbench extends JPanel {
 
     private void shown(String what, Map<String, Object> report) {
         views.steps(strings(report.get("steps")));
-        say(what + (Boolean.TRUE.equals(report.get("applied")) ? ": applied, " + report.get("guarantee")
-                : ": not applied: " + String.join("; ", strings(report.get("violations")))));
+        var applied = Boolean.TRUE.equals(report.get("applied"));
+        say(what + (applied ? ": applied, " + report.get("guarantee") : ": not applied: " + String.join("; ", strings(report.get("violations")))));
+        if (!applied) dialogs.tell(what + " was not applied", strings(report.get("violations")), editors.caretOnScreen());
     }
 
     /** The element under the caret, with its kind; what the editors say is applied first, so that it is the program's. */

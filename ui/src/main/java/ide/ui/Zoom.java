@@ -12,8 +12,8 @@ import java.nio.file.Path;
  */
 final class Zoom {
 
-    /** The factor a window starts with when none is remembered. */
-    static final float USUAL = 0.55f;
+    /** The factor a window starts with when none is remembered: the code at 9 points. */
+    static final float USUAL = 9f / 14f;
 
     private static final float STEP = 1.1f;
     private static final Path REMEMBERED = Path.of(System.getProperty("user.home"), ".ideseed", "zoom.txt");

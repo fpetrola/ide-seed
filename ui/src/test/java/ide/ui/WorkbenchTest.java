@@ -137,4 +137,29 @@ class WorkbenchTest {
             assertThat(workbench.getActionMap().get(key.action())).as(key.action()).isNotNull();
         }
     }
+
+    /** A change the program makes is undone as a change, not as typing: the editor never shows an empty file. */
+    @Test
+    void ctrlZWithNothingTypedUndoesTheLastChange() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 4, 16);
+        dialogs.line("count");
+        workbench.act("rename");
+
+        var area = (javax.swing.text.JTextComponent) find(workbench, org.fife.ui.rsyntaxtextarea.RSyntaxTextArea.class);
+        area.getActionMap().get("undo-typing-or-change").actionPerformed(null);
+
+        assertThat(workbench.text("a/A.java")).isEqualTo(A);
+    }
+
+    private static java.awt.Component find(java.awt.Container container, Class<?> type) {
+        for (var child : container.getComponents()) {
+            if (type.isInstance(child)) return child;
+            if (child instanceof java.awt.Container inner) {
+                var found = find(inner, type);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
 }

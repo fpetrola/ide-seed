@@ -50,6 +50,9 @@ final class Editors extends JTabbedPane {
         /** Each a {@code label} and the {@code kind} of what it names. */
         List<Map<String, Object>> completions(String path, String text, int offset);
 
+        /** Undoes the last change to the program, when the editor has nothing of its own to undo. */
+        void undo();
+
         /** Going where the name at a line and column leads, if it leads anywhere. */
         Optional<Runnable> link(String path, int line, int column);
 
@@ -118,6 +121,14 @@ final class Editors extends JTabbedPane {
             area.discardAllEdits();
             area.addParser(editor.problems);
             keys.forEach(key -> area.getInputMap().put(key, "none"));
+            area.getInputMap().put(KeyStroke.getKeyStroke("ctrl Z"), "undo-typing-or-change");
+            area.getActionMap().put("undo-typing-or-change", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent event) {
+                    if (area.canUndo()) area.undoLastAction();
+                    else help.undo();
+                }
+            });
             area.setHyperlinksEnabled(true);
             area.setLinkScanningMask(InputEvent.CTRL_DOWN_MASK);
             area.setLinkGenerator((textArea, offset) -> link(path, textArea, offset));
@@ -169,6 +180,7 @@ final class Editors extends JTabbedPane {
             var caret = editor.area.getCaretPosition();
             editor.area.setText(text);
             editor.area.setCaretPosition(Math.min(caret, text.length()));
+            editor.area.discardAllEdits(); // the program changed it: its undo is the program's, not the text's
         }
         editor.applied = text;
     }

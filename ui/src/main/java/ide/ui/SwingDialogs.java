@@ -158,6 +158,12 @@ final class SwingDialogs implements Dialogs {
             input.setToolTipText(param.description());
             fields.add(label, at(0, row));
             fields.add(input, at(1, row++));
+            if (!param.description().isEmpty()) {
+                var hint = new JLabel(param.description());
+                hint.setForeground(new Color(0x808080));
+                hint.setFont(hint.getFont().deriveFont(hint.getFont().getSize2D() * 0.9f));
+                fields.add(hint, at(1, row++));
+            }
         }
         var diff = new DiffPane();
         var diffScroll = new JScrollPane(diff);
