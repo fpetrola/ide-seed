@@ -12,7 +12,7 @@ final class DiffPane extends JTextPane {
 
     DiffPane() {
         setEditable(false);
-        setFont(new Font("JetBrains Mono", Font.PLAIN, 13));
+        setFont(Zoom.code(13));
         setBackground(new Color(0x2B2B2B));
     }
 

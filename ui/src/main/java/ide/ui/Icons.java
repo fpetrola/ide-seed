@@ -17,7 +17,10 @@ import java.util.Map;
  */
 final class Icons {
 
-    private static final int SIZE = 16;
+    /** Drawn on a 16-pixel square, shown at the size the zoom gives the text, a little larger. */
+    private static int size() {
+        return Math.max(10, Math.round(Zoom.of(13) * 1.6f));
+    }
 
     private static final Map<String, Icon> KINDS = Map.ofEntries(
             Map.entry("CLASS", letter("C", new Color(0x3F8BD8))),
@@ -58,6 +61,7 @@ final class Icons {
             public void paintIcon(Component c, Graphics g, int x, int y) {
                 var g2 = (Graphics2D) g.create();
                 g2.translate(x, y);
+                g2.scale(size() / 16.0, size() / 16.0);
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 painting.paint(g2);
@@ -66,12 +70,12 @@ final class Icons {
 
             @Override
             public int getIconWidth() {
-                return SIZE;
+                return size();
             }
 
             @Override
             public int getIconHeight() {
-                return SIZE;
+                return size();
             }
         };
     }

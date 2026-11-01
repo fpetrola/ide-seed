@@ -195,8 +195,9 @@ final class Workbench extends JPanel {
                 case "previous-problem" -> problem(-1);
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
-                case "zoom-in" -> editors.zoom(1);
-                case "zoom-out" -> editors.zoom(-1);
+                case "zoom-in" -> zoom(1);
+                case "zoom-out" -> zoom(-1);
+                case "zoom-reset" -> zoom(0);
                 case "keys" -> dialogs.tell("Keys", Keymap.KEYS.stream()
                         .map(key -> String.format("%-16s %s", key.stroke().toString().replace("pressed ", ""), key.description())).toList(), null);
                 default -> throw new IllegalArgumentException("no action " + action);
@@ -204,6 +205,15 @@ final class Workbench extends JPanel {
         } catch (RuntimeException failed) {
             say("error: " + failed.getMessage());
         }
+    }
+
+    /** Everything bigger or smaller at once: the look's fonts, and the code's. */
+    private void zoom(int steps) {
+        Zoom.by(steps);
+        com.formdev.flatlaf.FlatLaf.updateUI();
+        editors.zoomed();
+        views.zoomed();
+        say("zoom " + Math.round(Zoom.of(100)) + "%");
     }
 
     private Editors editors() {
@@ -260,7 +270,7 @@ final class Workbench extends JPanel {
         menu(bar, "Refactor", "rename", "refactor", "change-signature", "move");
         menu(bar, "Navigate", "open-declaration", "open-type", "outline", "references", "callers", "hierarchy", "go-to-line",
                 "next-problem", "previous-problem", "back", "forward");
-        menu(bar, "View", "zoom-in", "zoom-out", "keys");
+        menu(bar, "View", "zoom-in", "zoom-out", "zoom-reset", "keys");
         return bar;
     }
 

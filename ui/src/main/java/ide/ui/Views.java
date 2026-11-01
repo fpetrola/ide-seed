@@ -46,7 +46,6 @@ final class Views extends JTabbedPane {
     Views(Consumer<String> openProblem, Consumer<String> openResult) {
         this.openProblem = openProblem;
         this.openResult = openResult;
-        putClientProperty("JTabbedPane.tabHeight", 28);
         putClientProperty("JTabbedPane.showContentSeparator", true);
         var problemList = list(problems, this::openProblem);
         problemList.setCellRenderer(new ProblemRenderer());
@@ -56,12 +55,18 @@ final class Views extends JTabbedPane {
         stepsTree.setShowsRootHandles(true);
         stepsTree.setCellRenderer(new StepRenderer());
         output.setEditable(false);
-        output.setFont(new Font("JetBrains Mono", Font.PLAIN, 12));
+        output.setFont(Zoom.code(12));
         addTab("Problems", Icons.of("ERROR"), scroll(problemList));
         addTab("Changes", Icons.of("PRIMITIVE"), scroll(changes));
         addTab("Steps", Icons.of("STEP"), scroll(stepsTree));
         addTab("Output", Icons.of("NOTE"), scroll(output));
         addTab("Results", Icons.of("QUESTION"), scroll(resultList));
+    }
+
+    /** Writes the code's text at the current zoom. */
+    void zoomed() {
+        output.setFont(Zoom.code(12));
+        changes.setFont(Zoom.code(13));
     }
 
     void problems(List<String> lines) {

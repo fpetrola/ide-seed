@@ -40,9 +40,9 @@ public final class Main {
             FlatLaf.setPreferredMonospacedFontFamily(FlatJetBrainsMonoFont.FAMILY);
             UIManager.put("ScrollBar.width", 10);
             UIManager.put("TabbedPane.showTabSeparators", true);
-            UIManager.put("Tree.rowHeight", 22);
-            UIManager.put("List.cellHeight", 22);
             FlatDarculaLaf.setup();
+            Zoom.start();
+            FlatLaf.updateUI();
             var frame = new JFrame();
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setSize(1400, 900);

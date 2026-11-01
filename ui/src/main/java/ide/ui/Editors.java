@@ -91,7 +91,6 @@ final class Editors extends JTabbedPane {
     private final Map<String, Editor> editors = new LinkedHashMap<>();
     private final List<KeyStroke> keys;
     private final Help help;
-    private float size = 14f;
 
     /** {@code keys} are the window's: the editors leave them to it. */
     Editors(List<KeyStroke> keys, Help help) {
@@ -126,6 +125,7 @@ final class Editors extends JTabbedPane {
             editor.completion = completion(path, area);
             editor.scroll = new RTextScrollPane(area);
             editor.scroll.setIconRowHeaderEnabled(true);
+            editor.scroll.getGutter().setLineNumberFont(Zoom.code(13));
             editor.scroll.setBorder(BorderFactory.createEmptyBorder());
             var panel = new JPanel(new BorderLayout());
             panel.add(editor.scroll, BorderLayout.CENTER);
@@ -305,14 +305,17 @@ final class Editors extends JTabbedPane {
         return current().map(path -> editor(path).area.getCaretPosition()).orElse(0);
     }
 
-    void zoom(float delta) {
-        size = Math.max(8f, size + delta);
-        editors.values().forEach(editor -> editor.area.setFont(editor.area.getFont().deriveFont(size)));
+    /** Writes the code at the current zoom. */
+    void zoomed() {
+        editors.values().forEach(editor -> {
+            editor.area.setFont(Zoom.code(14));
+            editor.scroll.getGutter().setLineNumberFont(Zoom.code(13));
+        });
     }
 
     private void theme(RSyntaxTextArea area) {
         try (var in = Editors.class.getResourceAsStream("/ide/ui/darcula.xml")) {
-            Theme.load(in, new Font("JetBrains Mono", Font.PLAIN, (int) size)).apply(area);
+            Theme.load(in, Zoom.code(14)).apply(area);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

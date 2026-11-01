@@ -32,8 +32,9 @@ final class Keymap {
             key("previous-problem", "ctrl COMMA", "Go to the previous problem"),
             key("back", "alt LEFT", "Go back to where the caret was"),
             key("forward", "alt RIGHT", "Go forward again"),
-            key("zoom-in", "ctrl EQUALS", "Bigger text"),
+            key("zoom-in", "ctrl EQUALS", "Bigger text, everywhere"),
             key("zoom-out", "ctrl MINUS", "Smaller text"),
+            key("zoom-reset", "ctrl 0", "Text at its usual size"),
             key("keys", "ctrl shift L", "Every key and what it does"));
 
     private Keymap() {

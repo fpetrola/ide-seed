@@ -108,7 +108,7 @@ final class SwingDialogs implements Dialogs {
     @Override
     public void tell(String title, List<String> lines, Point at) {
         var list = new JList<>(lines.toArray(String[]::new));
-        list.setFont(new Font("JetBrains Mono", Font.PLAIN, 12));
+        list.setFont(Zoom.code(12));
         list.setVisibleRowCount(Math.min(lines.size(), 24));
         var content = new JPanel(new BorderLayout());
         content.add(label(title), BorderLayout.PAGE_START);
@@ -248,7 +248,7 @@ final class SwingDialogs implements Dialogs {
         heading.add(label(title), BorderLayout.PAGE_START);
         query.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, border()),
                 BorderFactory.createEmptyBorder(search ? 6 : 2, 8, search ? 6 : 2, 8)));
-        if (search) query.setFont(query.getFont().deriveFont(15f));
+        if (search) query.setFont(query.getFont().deriveFont(query.getFont().getSize2D() * 1.15f));
         heading.add(query, BorderLayout.CENTER);
         return heading;
     }
@@ -257,7 +257,7 @@ final class SwingDialogs implements Dialogs {
         var label = new JLabel(title);
         label.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
         label.setForeground(new Color(0x8C8C8C));
-        label.setFont(label.getFont().deriveFont(Font.PLAIN, 12f));
+        label.setFont(label.getFont().deriveFont(Font.PLAIN, label.getFont().getSize2D() * 0.9f));
         return label;
     }
 
