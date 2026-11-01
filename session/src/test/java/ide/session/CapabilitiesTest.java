@@ -58,4 +58,32 @@ class CapabilitiesTest {
 
         assertThat(ws.capabilities().help("make-private")).isEqualTo("make-private member:element(FIELD,METHOD) — Makes a member private");
     }
+
+    /** What an editor asks: what the caret is on, where something is, the elements to choose from, and a fix's questions. */
+    @Test
+    void anEditorAsksWhereThingsAreAndAnswersWhatAFixAsks() {
+        var ws = Workspace.of(Map.of("a/P.java", P, "a/U.java", """
+                package a;
+
+                class U {
+                    int total() {
+                        return count;
+                    }
+                }
+                """));
+        var capabilities = ws.capabilities();
+
+        assertThat(capabilities.invoke("at", Map.of("path", "a/P.java", "line", "4", "column", "16"))).isEqualTo("\"a.P#x\"");
+        assertThat(capabilities.invoke("at", Map.of("path", "a/P.java", "line", "1", "column", "1"))).isEqualTo("null");
+        assertThat(capabilities.invoke("where", Map.of("element", "a.P#x"))).isEqualTo("{\"path\":\"a/P.java\",\"line\":4,\"column\":16}");
+        assertThat(capabilities.invoke("elements", Map.of("kinds", "CLASS,FIELD"))).isEqualTo("[\"a.P\",\"a.P#x\",\"a.U\"]");
+        assertThat(capabilities.invoke("asks", Map.of("path", "a/U.java", "line", "5", "title", "create field count")))
+                .isEqualTo("[{\"name\":\"type\",\"question\":\"type of the new field\",\"default\":\"int\"}]");
+
+        capabilities.invoke("fix", Map.of("path", "a/U.java", "line", "5", "title", "create field count", "answers", Map.of("type", "short")));
+        assertThat(ws.source("a/U.java")).contains("short count;");
+
+        assertThat(capabilities.invoke("edit", Map.of("path", "a/P.java", "text", P.replace("int x", "long x")))).contains("\"applied\":true");
+        assertThat(ws.source("a/P.java")).contains("public long x;");
+    }
 }

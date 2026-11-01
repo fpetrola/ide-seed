@@ -17,7 +17,8 @@ class CommandTest {
     private static final CapabilityRegistry REGISTRY = new CapabilityRegistry()
             .register(Capability.of("extract", "Extracts", List.of(Param.of("type", "element", "CLASS"),
                     Param.of("name", "text"), Param.of("fields", "elements", "FIELD"), Param.of("deep", "bool").optional()), args -> args))
-            .register(Capability.of("preview", "Previews", List.of(Param.of("refactoring", "text"), Param.of("args", "text")), args -> args));
+            .register(Capability.of("preview", "Previews", List.of(Param.of("refactoring", "text"), Param.of("args", "text")), args -> args))
+            .register(Capability.of("fix", "Fixes", List.of(Param.of("title", "text"), Param.of("answers", "text").optional()), args -> args));
 
     @Test
     void wordsBindTheParametersInOrderOrByName() {
@@ -28,10 +29,12 @@ class CommandTest {
     }
 
     @Test
-    void aTruthIsATruthAndArgumentsForAnotherCapabilityNest() {
+    void aTruthIsATruthAndAParameterOfSeveralEntriesTakesThemByName() {
         assertThat(Command.of(List.of("extract", "a.B", "Base", "a.B#x", "deep=false"), REGISTRY).args().get("deep")).isEqualTo(false);
         assertThat(Command.of(List.of("preview", "rename", "args.element=a.P#x", "args.name=y"), REGISTRY).args())
                 .isEqualTo(Map.of("refactoring", "rename", "args", Map.of("element", "a.P#x", "name", "y")));
+        assertThat(Command.of(List.of("fix", "create field count", "answers.type=short"), REGISTRY).args())
+                .isEqualTo(Map.of("title", "create field count", "answers", Map.of("type", "short")));
     }
 
     @Test

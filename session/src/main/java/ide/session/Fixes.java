@@ -1,5 +1,6 @@
 package ide.session;
 
+import ide.engine.Plan;
 import ide.engine.Trace;
 import ide.knowledge.Knowledge;
 import ide.projection.Diagnostic;
@@ -27,6 +28,11 @@ public final class Fixes {
     public List<String> asks(String path, int line, String title) {
         return find(path, line, title).plan().asks().stream()
                 .map(ask -> ask.name() + ": " + ask.question() + " [" + ask.defaultAnswer() + "]").toList();
+    }
+
+    /** The questions a fix asks, each with its default answer. */
+    public List<Plan.Ask> questions(String path, int line, String title) {
+        return find(path, line, title).plan().asks();
     }
 
     /** The fix with that title for a diagnostic on the line. */

@@ -3,11 +3,14 @@ package ide.session;
 import ide.program.Element;
 import ide.program.Mode;
 import ide.program.Program;
+import ide.projection.Location;
 import ide.projection.Projection;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What people ask of a program while they read it: who calls a method, where a type sits in its hierarchy, who uses
@@ -46,6 +49,23 @@ public final class Navigation {
         var program = projection.program();
         return program.referencesTo(element(program, element).id()).stream()
                 .map(r -> program.element(r.site()).qualified()).toList();
+    }
+
+    /** The element whose name is at a line and column of a file, declared or used there. */
+    public Optional<String> at(String path, int line, int column) {
+        return projection.elementAt(path, line, column).map(id -> projection.program().element(id).qualified());
+    }
+
+    /** Where an element is declared; nowhere for what has no text. */
+    public Optional<Location> where(String element) {
+        return projection.locate(element(projection.program(), element).id());
+    }
+
+    /** The workspace's elements of these kinds (any kind, if none is given), sorted by address. */
+    public List<String> elements(Collection<String> kinds) {
+        return projection.program().elements().stream()
+                .filter(e -> !e.inLibrary() && (kinds.isEmpty() || kinds.contains(e.kind().name())))
+                .map(Element::qualified).sorted().toList();
     }
 
     /** The model as sorted text: {@code KIND qualified} per element, {@code site -> target (mode)} per reference. */

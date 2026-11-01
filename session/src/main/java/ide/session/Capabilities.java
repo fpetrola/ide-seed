@@ -47,8 +47,27 @@ final class Capabilities {
                         .map(d -> Map.of("code", d.code(), "path", d.path(), "line", d.line(), "message", d.message())).toList()))
                 .register(Capability.of("fixes", "Quick fixes for a line", List.of(path, line),
                         args -> workspace.fixes(text(args, "path"), number(args, "line"))))
-                .register(Capability.of("fix", "Applies a quick fix", List.of(path, line, Param.of("title", "text")),
-                        args -> Session.report(workspace.fix(text(args, "path"), number(args, "line"), text(args, "title")))))
+                .register(Capability.of("fix", "Applies a quick fix, with the answers to what it asks",
+                        List.of(path, line, Param.of("title", "text"), Param.of("answers", "text").optional()),
+                        args -> Session.report(workspace.fix(text(args, "path"), number(args, "line"), text(args, "title"),
+                                answers(args)))))
+                .register(Capability.of("asks", "What a quick fix asks, and what it answers if not told",
+                        List.of(path, line, Param.of("title", "text")), args -> workspace.questions(text(args, "path"),
+                                number(args, "line"), text(args, "title")).stream()
+                                .map(ask -> entries("name", ask.name(), "question", ask.question(), "default", ask.defaultAnswer()))
+                                .toList()))
+                .register(Capability.of("edit", "Replaces a file's text with what was written by hand",
+                        List.of(path, Param.of("text", "text")),
+                        args -> Session.report(workspace.edit(text(args, "path"), text(args, "text")))))
+                .register(Capability.of("at", "The element whose name is at a line and column of a file",
+                        List.of(path, line, Param.of("column", "text")),
+                        args -> workspace.at(text(args, "path"), number(args, "line"), number(args, "column")).orElse(null)))
+                .register(Capability.of("where", "Where an element is declared: file, line and column",
+                        List.of(Param.of("element", "element")), args -> workspace.where(text(args, "element"))
+                                .map(at -> entries("path", at.path(), "line", at.line(), "column", at.column())).orElse(null)))
+                .register(Capability.of("elements", "The workspace's elements of some kinds (comma-separated), or all",
+                        List.of(Param.of("kinds", "text").optional()), args -> workspace.elements(args.containsKey("kinds")
+                                ? List.of(text(args, "kinds").split(",")) : List.of())))
                 .register(Capability.of("why", "How the fixes for a line are deduced", List.of(path, line),
                         args -> workspace.why(text(args, "path"), number(args, "line")).lines()))
                 .register(Capability.of("complete", "Completions at an offset of edited text",
@@ -81,6 +100,20 @@ final class Capabilities {
 
     private static int number(Map<String, ?> args, String name) {
         return Integer.parseInt(text(args, name));
+    }
+
+    /** An answer's fields, in the order given: names and values, alternating. */
+    private static Map<String, Object> entries(Object... namesAndValues) {
+        var entries = new java.util.LinkedHashMap<String, Object>();
+        for (var i = 0; i < namesAndValues.length; i += 2) entries.put((String) namesAndValues[i], namesAndValues[i + 1]);
+        return entries;
+    }
+
+    /** The answers to what a quick fix asks, by name. */
+    private static Map<String, String> answers(Map<String, ?> args) {
+        var answers = new java.util.LinkedHashMap<String, String>();
+        if (args.get("answers") instanceof Map<?, ?> given) given.forEach((k, v) -> answers.put(String.valueOf(k), String.valueOf(v)));
+        return answers;
     }
 
     /** The arguments of the refactoring a capability is about. */

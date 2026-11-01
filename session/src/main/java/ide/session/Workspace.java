@@ -1,17 +1,21 @@
 package ide.session;
 
 import ide.core.CapabilityRegistry;
+import ide.engine.Plan;
 import ide.engine.Repairer;
 import ide.engine.Result;
 import ide.engine.Trace;
 import ide.java.JavaProjection;
 import ide.knowledge.Knowledge;
 import ide.projection.Diagnostic;
+import ide.projection.Location;
 import ide.refactoring.Library;
 
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -136,6 +140,10 @@ public final class Workspace {
         return fixes.asks(path, line, title);
     }
 
+    public List<Plan.Ask> questions(String path, int line, String title) {
+        return fixes.questions(path, line, title);
+    }
+
     public Trace why(String path, int line) {
         return fixes.why(path, line);
     }
@@ -156,6 +164,18 @@ public final class Workspace {
 
     public List<String> model() {
         return navigation.model();
+    }
+
+    public Optional<String> at(String path, int line, int column) {
+        return navigation.at(path, line, column);
+    }
+
+    public Optional<Location> where(String element) {
+        return navigation.where(element);
+    }
+
+    public List<String> elements(Collection<String> kinds) {
+        return navigation.elements(kinds);
     }
 
     public List<String> callers(String method) {
