@@ -138,7 +138,7 @@ class ViewsTest {
         assertThat(view.check(new Comparison(memory.program(), projection))).hasSize(2);
         assertThat(view.check(new Comparison(memory.program(), projection, List.of(old)))).singleElement().satisfies(v -> {
             assertThat(v.code()).isEqualTo("ecj.UndefinedType");
-            assertThat(v.facts()).isEqualTo(Map.of("symbol", "List", "path", "a/A.java", "line", "3"));
+            assertThat(v.facts()).isEqualTo(Map.of("symbol", "List", "path", "a/A.java", "line", "3", "column", "0", "arguments", List.of()));
         });
         assertThat(view.check(new Comparison(memory.program(), projection, List.of(old, fresh)))).isEmpty();
         assertThat(view.costly()).isTrue();

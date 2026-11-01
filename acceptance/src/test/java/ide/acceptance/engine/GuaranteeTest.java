@@ -38,8 +38,8 @@ class GuaranteeTest {
 
     /**
      * An error anywhere in the project does not turn the compiler off: pulling up a blank final that its class's
-     * constructor gives a value leaves the new superclass with no value for it, and a constructor assigning what is
-     * not its own; both are new errors, so the change is undone.
+     * constructor gives a value it computes leaves the new superclass with no value for it, and a constructor assigning
+     * what is not its own; no repair says that value in no language, so both are new errors and the change is undone.
      */
     @Test
     void anErrorElsewhereDoesNotLetAChangeBreakTheCode() {
@@ -54,7 +54,7 @@ class GuaranteeTest {
                     }
 
                     Unset(int limit) {
-                        this.limit = limit;
+                        this.limit = limit * 2;
                     }
                 }
                 """;

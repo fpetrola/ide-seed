@@ -26,7 +26,8 @@ public final class Repairer {
      * Repairs applied, the violations left (empty if the transaction can close), and the search: each violation a
      * question, each plan kept an answer, each plan undone dropped with its reason.
      */
-    public record Outcome(List<String> repairs, List<Violation> violations, Trace search) {
+    /** What the repairs did, what is left, how they were searched, and the program meant once they are folded in. */
+    public record Outcome(List<String> repairs, List<Violation> violations, Trace search, Program baseline) {
     }
 
     private final Verifier verifier;
@@ -55,9 +56,10 @@ public final class Repairer {
         var repairs = new ArrayList<String>();
         var search = new Trace();
         var branches = 0;
+        var meant = baseline; // what the repairs kept mean is folded in, as a change's is
         for (var round = 0; round < MAX_ROUNDS; round++) {
-            var violations = verify(baseline, errorsBefore, projection);
-            if (violations.isEmpty()) return new Outcome(repairs, List.of(), search);
+            var violations = verify(meant, errorsBefore, projection);
+            if (violations.isEmpty()) return new Outcome(repairs, List.of(), search, meant);
             String kept = null;
             for (var target : violations) { // one with no plan may follow from another: the next one is tried
                 search.open(Trace.Kind.QUESTION, target.code() + " " + target.detail());
@@ -67,12 +69,13 @@ public final class Repairer {
                 for (var plan : plans) {
                     if (branches++ >= MAX_BRANCHES) {
                         search.add(Trace.Kind.DROPPED, "branch cap reached").close();
-                        return new Outcome(repairs, violations, search);
+                        return new Outcome(repairs, violations, search, meant);
                     }
                     var saved = projection.snapshot();
                     var intent = state(projection.program(), pinned);
+                    var folding = Transaction.folding(projection, meant);
                     try {
-                        plan.apply(projection);
+                        plan.apply(folding);
                     } catch (RuntimeException failed) {
                         projection.restore(saved);
                         search.add(Trace.Kind.DROPPED, plan.title() + ": " + String.valueOf(failed.getMessage()).lines().findFirst().orElse(""));
@@ -83,8 +86,9 @@ public final class Repairer {
                         search.add(Trace.Kind.DROPPED, plan.title() + ": would undo what the refactoring did");
                         continue;
                     }
-                    if (!same(target, verify(baseline, errorsBefore, projection))) {
+                    if (!same(target, verify(folding.baseline(), errorsBefore, projection))) {
                         kept = plan.title();
+                        meant = folding.baseline();
                         search.add(Trace.Kind.ANSWER, plan.title());
                         break;
                     }
@@ -94,10 +98,10 @@ public final class Repairer {
                 search.close();
                 if (kept != null) break;
             }
-            if (kept == null) return new Outcome(repairs, violations, search);
+            if (kept == null) return new Outcome(repairs, violations, search, meant);
             repairs.add(kept);
         }
-        return new Outcome(repairs, verify(baseline, errorsBefore, projection), search);
+        return new Outcome(repairs, verify(meant, errorsBefore, projection), search, meant);
     }
 
     /** The current value of every pinned aspect. */

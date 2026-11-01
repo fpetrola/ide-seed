@@ -142,6 +142,27 @@ effect initialize-in-constructors "initialize ${field} in the constructors"
   end
 end
 
+# A constructor may not give a final field of its superclass its value: the superclass's constructor takes the value
+# and gives it, and the constructor passes it to that constructor first, instead of giving it. The field gets the
+# same value when the object is made: it keeps meaning, so it also repairs a refactoring (a field pulled up).
+goal ecj.FinalFieldAssignment needs given-by-its-type(element-at(path, line, column), inside(path, line, column))
+
+effect pass-to-superclass "pass ${name(field)} to the constructor of ${name(owner(field))}"
+  makes given-by-its-type(field, constructor)
+  keeps meaning
+  when and(eq(kind(constructor), "CONSTRUCTOR"), nonempty(value-given(constructor, field)))
+  needs constructed-explicitly(owner(field))
+  do
+    let made = first(constructors(owner(field)))
+    let value = value-given(constructor, field)
+    let rest = said-without(constructor, field)
+    p := create PARAM ${made} ${name(field)}
+    set ${p} type ${type(field)}
+    set ${made} body "...; ${said(field)} = ${said(p)}"
+    set ${constructor} body "${said(made)}(${value}); ${rest}"
+  end
+end
+
 effect drop-final "make ${field} not final"
   makes initialized(field)
   cost 2

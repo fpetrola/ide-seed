@@ -47,6 +47,19 @@ class RepairerTest {
     }
 
     @Test
+    void aRepairIsJudgedByWhatItsChangesMean() {
+        // n() is said anew, reading neither field: what it no longer reads is what the repair meant, not a lost binding
+        Remedy rewrite = (violation, p) -> List.of(new Plan("say n anew", List.of(),
+                (target, answers) -> target.apply(new Primitive.Set(id(target.program(), "a.A#n()"), "body", "return default"))));
+
+        var outcome = new Repairer(List.of(rewrite)).stabilize(before, List.of(), projection);
+
+        assertThat(outcome.violations()).isEmpty();
+        assertThat(outcome.repairs()).containsExactly("say n anew");
+        assertThat(outcome.baseline().referencesFrom(id(before, "a.B#n()"))).isEmpty();
+    }
+
+    @Test
     void withoutAPlanTheViolationsStay() {
         var outcome = new Repairer(List.of()).stabilize(before, List.of(), projection);
 

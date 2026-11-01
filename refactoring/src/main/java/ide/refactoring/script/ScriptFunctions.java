@@ -95,6 +95,13 @@ final class ScriptFunctions {
             case "constructors" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "body" -> text(element(args, 0).fact(Fact.BODY));
             case "said" -> text(ide.program.Body.name(element(args, 0).id())); // how a body names it
+            case "value-given" -> said(element(args, 0).id()).flatMap(body -> body.statements().stream()
+                    .filter(st -> st instanceof ide.program.Body.Assign given && given.field().equals(element(args, 1).id()))
+                    .map(st -> ide.program.Body.text(((ide.program.Body.Assign) st).value())).findFirst())
+                    .map(ScriptFunctions::text).orElse(null); // what a body gives a field, said in no language
+            case "said-without" -> said(element(args, 0).id()).map(body -> new ide.program.Body(body.statements().stream()
+                    .filter(st -> !(st instanceof ide.program.Body.Assign given && given.field().equals(element(args, 1).id())))
+                    .toList()).text()).map(ScriptFunctions::text).orElse(null); // the rest of what it does
             case "types-of" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
             case "subclasses" -> elems(graph.subclasses(element(args, 0).id()));
             case "family" -> elems(graph.family(element(args, 0)));
@@ -254,6 +261,11 @@ final class ScriptFunctions {
 
     private static String text(List<Value> args, int index) {
         return Value.asText(args.get(index));
+    }
+
+    /** A body as the projection says it in no language, if it can. */
+    private java.util.Optional<ide.program.Body> said(ide.program.ElementId callable) {
+        return projection.said(callable).map(text -> ide.program.Body.parse(text, graph, callable));
     }
 
     private static Value text(String text) {

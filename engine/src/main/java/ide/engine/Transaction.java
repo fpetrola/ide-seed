@@ -37,16 +37,31 @@ public final class Transaction implements Projection {
 
     /** A transaction over {@code projection}, judged by {@code repairer} whenever it is checked. */
     public Transaction(Projection projection, Repairer repairer) {
+        this(projection, repairer, projection.program(), projection.diagnostics().stream().filter(Diagnostic::isError).toList());
+    }
+
+    private Transaction(Projection projection, Repairer repairer, Program baseline, List<Diagnostic> errorsBefore) {
         this.projection = projection;
         this.repairer = repairer;
         this.start = projection.snapshot();
-        this.baseline = projection.program();
-        this.errorsBefore = projection.diagnostics().stream().filter(Diagnostic::isError).toList();
+        this.baseline = baseline;
+        this.errorsBefore = errorsBefore;
+    }
+
+    /** What a repair runs on: the primitives it applies fold what they mean into {@code baseline}, as a change's do. */
+    static Transaction folding(Projection projection, Program baseline) {
+        return new Transaction(projection, null, baseline, List.of());
+    }
+
+    /** The program the changes meant to leave, so far. */
+    Program baseline() {
+        return baseline;
     }
 
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else restores the start. */
     public Result commit() {
         var outcome = repairer.stabilize(baseline, errorsBefore, projection, pinned);
+        baseline = outcome.baseline();
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());
         if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), trace, search, List.copyOf(obligations));
@@ -85,6 +100,7 @@ public final class Transaction implements Projection {
     /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
     private Violation check() {
         var outcome = repairer.stabilize(baseline, errorsBefore, projection, pinned);
+        baseline = outcome.baseline();
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();

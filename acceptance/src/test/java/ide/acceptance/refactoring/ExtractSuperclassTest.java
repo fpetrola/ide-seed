@@ -116,4 +116,48 @@ class ExtractSuperclassTest {
                 }
                 """);
     }
+
+    /**
+     * A blank final its class's constructor gives a value, pulled up: the superclass's constructor takes the value and
+     * gives it, and the constructor passes it to it first instead, as IntelliJ's Extract Superclass leaves it.
+     */
+    @Test
+    void aBlankFinalPulledUpIsGivenByTheSuperclassConstructorThatTheConstructorCalls() {
+        var ws = Workspace.of(Map.of("a/Unset.java", """
+                package a;
+
+                public class Unset {
+                    private final int limit;
+
+                    int twice() {
+                        return limit * 2;
+                    }
+
+                    Unset(int limit) {
+                        this.limit = limit;
+                    }
+                }
+                """, "a/User.java", """
+                package a;
+
+                class User {
+                    Unset unset = new Unset(5);
+                }
+                """));
+
+        var result = ws.invoke("extract-superclass", Map.of("type", "a.Unset", "name", "AbstractUnset", "fields", List.of("a.Unset#limit")));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/AbstractUnset.java")).contains("final int limit;", """
+                    AbstractUnset(int limit) {
+                        this.limit = limit;
+                    }
+                """);
+        assertThat(ws.source("a/Unset.java")).contains("""
+                    Unset(int limit) {
+                        super(limit);
+                    }
+                """);
+    }
 }

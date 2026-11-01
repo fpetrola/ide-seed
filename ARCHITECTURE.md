@@ -402,7 +402,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `Remedy` y `QuickFix`: proponen `Plan`s para una violación o un diagnóstico, sobre la proyección, que trae sus
     reglas. `Plan`: título, preguntas (asks), acción sobre la proyección.
   - `Repairer`: toma la primera violación, prueba planes sin preguntas del más barato al más caro desde un punto
-    guardado; conserva el que hace desaparecer esa violación sin mover un pin; topes de 10 rondas y 16 ramas.
+    guardado; conserva el que hace desaparecer esa violación sin mover un pin; topes de 10 rondas y 16 ramas. Solo
+    toma planes que conservan el sentido (decisión 31), y lo que declaran sus primitivas se pliega al programa esperado
+    como el de un cambio (una reparación que reescribe un cuerpo no se juzga como un binding perdido).
   - `Trace`: árbol de pasos con tipo (call, primitive, question, answer, dropped, assumed, note), etiqueta e hijos.
     Un único render a líneas con sigilos (`.`, `'`, `?`, `!`, `X`, `:`).
   - `Result`: aplicado o abortado, violaciones, reparaciones, rastro, obligaciones y garantía (`guaranteed` o
@@ -538,6 +540,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   reglas) y lo asigna después de lo que ya hacía: el lenguaje de cuerpos ganó `...`, primero, que conserva el cuerpo
   y agrega al final (sus usos se suman, no reemplazan a los viejos). Eclipse dice el problema en el constructor que no
   asigna, nombrando el campo en sus argumentos: la meta es `initialized(first(arguments))`.
+  Un constructor no puede asignar un `final` de su superclase (`FinalFieldAssignment`): `pass-to-superclass` hace que
+  el constructor de la superclase tome el valor y lo asigne (declarándolo antes si no hay, por la misma
+  `constructed-explicitly`), y el constructor se lo pasa primero (`#{constructor}(valor)`, que Java escribe
+  `super(...)`) en vez de asignarlo. Lee el cuerpo con `said` (obligación 11) y `value-given`/`said-without`; si el
+  cuerpo no se puede decir sin lenguaje, no se ofrece. Conserva el sentido, así que también repara: un extract
+  superclass que sube un `final` que el constructor inicializa deja `super(limit)`, como IntelliJ.
 - **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 
