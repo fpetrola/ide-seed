@@ -172,4 +172,28 @@ class IdeQuickFixesTest {
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).contains("long total(int limit) {", "return total(0);");
     }
+
+    @Test
+    void aMethodThatOverridesNothingIsDeclaredInTheSuperclass() {
+        var ws = Workspace.of(Map.of("a/Base.java", """
+                package a;
+
+                class Base {
+                }
+                """, "a/Sub.java", """
+                package a;
+
+                class Sub extends Base {
+                    @Override
+                    int size() {
+                        return 1;
+                    }
+                }
+                """));
+
+        ws.fix("a/Sub.java", 5, "declare size() in Base");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Base.java")).contains("abstract class Base {", "abstract int size();");
+    }
 }

@@ -209,3 +209,14 @@ effect create-parameter "create parameter ${symbol} in ${name(m)}()"
     set ${p} type ${t}
   end
 end
+
+# A method that says it overrides and overrides nothing: its superclass declares it, abstract.
+goal ecj.MethodMustOverrideOrImplement needs overrides(symbol)
+
+effect declare-in-superclass "declare ${name(m)}() in ${name(superclass(owner(m)))}"
+  makes overrides(symbol)
+  for m in methods-in(path, symbol)
+  do
+    declare-abstract-in-superclass ${m}
+  end
+end
