@@ -23,6 +23,7 @@
         <module>session</module>
         <module>cli</module>
         <module>ui</module>
+        <module>mcp</module>
         <module>acceptance</module>
     </modules>
 

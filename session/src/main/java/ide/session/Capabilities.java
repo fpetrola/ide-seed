@@ -28,7 +28,7 @@ final class Capabilities {
         var path = Param.of("path", "text");
         var line = Param.of("line", "text");
         var refactoring = Param.of("refactoring", "text");
-        var itsArgs = Param.of("args", "text");
+        var itsArgs = Param.of("args", "map");
         return registry
                 .register(Capability.of("ls", "Source files", List.of(), args -> workspace.files().stream().sorted().toList()))
                 .register(Capability.of("show", "Source of a file", List.of(path), args -> workspace.source(text(args, "path"))))
@@ -49,7 +49,7 @@ final class Capabilities {
                 .register(Capability.of("fixes", "Quick fixes for a line", List.of(path, line),
                         args -> workspace.fixes(text(args, "path"), number(args, "line"))))
                 .register(Capability.of("fix", "Applies a quick fix, with the answers to what it asks",
-                        List.of(path, line, Param.of("title", "text"), Param.of("answers", "text").optional()),
+                        List.of(path, line, Param.of("title", "text"), Param.of("answers", "map").optional()),
                         args -> Session.report(workspace.fix(text(args, "path"), number(args, "line"), text(args, "title"),
                                 answers(args)))))
                 .register(Capability.of("asks", "What a quick fix asks, and what it answers if not told",
