@@ -108,7 +108,7 @@ public final class Repairer {
             state.put(pin, switch (pin.aspect()) {
                 case PARENT -> String.valueOf(e.parent());
                 case NAME -> e.name();
-                case VISIBILITY -> String.valueOf(e.fact(Fact.VISIBILITY));
+                default -> String.valueOf(e.fact(pin.aspect().fact()));
             });
         }
         return state;

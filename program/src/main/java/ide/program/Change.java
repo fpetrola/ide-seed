@@ -72,7 +72,28 @@ public record Change(ElementId produced, List<Expectation> expectations, List<Pi
     public record Pin(ElementId element, Aspect aspect) {
     }
 
+    /** Where an element is, its name, and the facts a {@code Set} gives it, which a repair may not take back. */
     public enum Aspect {
-        PARENT, NAME, VISIBILITY
+        PARENT, NAME, VISIBILITY, STATIC, ABSTRACT, FINAL, TYPE;
+
+        /** The aspect a set of a fact pins, if it pins one. */
+        public static java.util.Optional<Aspect> of(Fact fact) {
+            return switch (fact) {
+                case VISIBILITY -> java.util.Optional.of(VISIBILITY);
+                case STATIC -> java.util.Optional.of(STATIC);
+                case ABSTRACT -> java.util.Optional.of(ABSTRACT);
+                case FINAL -> java.util.Optional.of(FINAL);
+                case TYPE -> java.util.Optional.of(TYPE);
+                default -> java.util.Optional.empty();
+            };
+        }
+
+        /** The fact it is, for a pinned fact. */
+        public Fact fact() {
+            return switch (this) {
+                case PARENT, NAME -> null;
+                default -> Fact.valueOf(name());
+            };
+        }
     }
 }

@@ -457,9 +457,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   se fue `is-type-name`. Para create-method, `expected` y `arguments` (pares nombre y tipo) le preguntan a la
   proyección lo que el uso necesita (por eso las funciones tienen la proyección, no solo el programa y las reglas), y `last` acompaña a `first`. El lenguaje de cuerpos ganó `return default`: lo que el tipo del método
   vale al empezar, o nada si no responde nada.
+  Llegaron generate-constructor (con `create CONSTRUCTOR`, que ahora entienden los dos drivers; el cuerpo se arma en un
+  bucle con `said(e)`, cómo nombra un cuerpo a un elemento, y `;` separa sentencias del lenguaje de cuerpos),
+  make-final y make-static: una línea cada uno, y el compilador decide si quedan. Un parámetro puede declarar un
+  valor sugerido (`default "Abstract${name(type)}"`) y un tipo `lines` (las líneas de la selección), y un refactoring
+  responde sus sugerencias (`suggestions`). Extract acepta un fragmento que termina el método con su último return.
 - **Abierto.** El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
-  spec faltan annotate, delegate y delegates, generate-constructor, make-final, make-static, rename-with-delegate,
-  use-supertype-where-possible, extract-interface-and-use, fold-constructors y delete-tree.
+  spec faltan annotate, delegate y delegates, rename-with-delegate, use-supertype-where-possible,
+  extract-interface-and-use, fold-constructors y delete-tree; y lo que trabaja sobre locales (extract variable,
+  inline variable, introduce parameter desde una expresión), que el grafo no tiene.
 
 ### 5.7 `knowledge`: planificador por metas
 
@@ -670,6 +676,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 26 | Usos de miembros sin resolver | un campo o método que no liga nada es un uso del programa solo si el resolvedor lo asegura (para una llamada: ningún método con ese nombre donde se busca); en la duda no es nada, como un local. El uso dice en qué tipo se busca, y los fixes parten de él | tomada, 2026-11-01 |
 | 27 | Lo que necesita un uso   | qué tipo espera un uso sin resolver y qué pasa una llamada se le pregunta a la proyección por un uso (`needs`, obligación 10), no se guarda en el grafo: solo lo usa un fix, y así se prueba sin lenguaje | tomada, 2026-11-01 |
 | 28 | Compilador               | el de Eclipse (ECJ) en vez de javac, incremental como su builder: compila lo que cambió y lo que nombra un tipo cuya forma cambió (class file con cambios estructurales, o que vino o se fue), leyendo lo demás de los class files anteriores. Da errores y warnings con línea, columna y largo; un warning no es una violación. Los códigos son `ecj.<problema>` | tomada, 2026-11-01 |
+| 29 | Lo fijado                | un `Set` fija el atributo que da (visibilidad, static, abstract, final, tipo), no solo la visibilidad: una reparación que lo deshace se descarta. Antes make-final sobre un campo sin inicializar se "aplicaba" y el reparador lo quitaba | tomada, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 

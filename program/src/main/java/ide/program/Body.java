@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * What a method does, in no language: statements over elements, which each projection writes in its own. As text it
- * is one statement per line, each element named by id as {@code #{id}} ({@link #name}):
+ * is one statement per line (or after a {@code ;}), each element named by id as {@code #{id}} ({@link #name}):
  * <pre>
  * return #{field:2}                              answers the value of a field or of a parameter
  * #{field:2} = #{param:7}                        gives a field a value
@@ -71,7 +71,7 @@ public record Body(List<Statement> statements) {
      */
     public static Body parse(String text, Program program, ElementId method) {
         var statements = new ArrayList<Statement>();
-        for (var line : text.lines().map(String::strip).filter(line -> !line.isEmpty()).toList()) {
+        for (var line : text.lines().flatMap(line -> java.util.Arrays.stream(line.split(";"))).map(String::strip).filter(line -> !line.isEmpty()).toList()) {
             statements.add(new Parser(line, program, method).statement());
         }
         return new Body(statements);

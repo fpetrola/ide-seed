@@ -42,13 +42,16 @@ final class WriteBody {
         var program = c.program();
         var body = Body.parse(text, program, method);
         var declaration = c.declaration(program.element(method));
-        var callable = declaration.as(MethodDeclaration.class);
+        com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
         var unit = declaration.unit();
         var edits = new EditSet();
-        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, callable.getType().asString());
+        var type = callable instanceof MethodDeclaration m ? m.getType().asString() : "void";
+        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, type);
         var statements = body.statements().stream().map(writer::statement).filter(s -> !s.isEmpty()).collect(Collectors.joining("\n"));
         var indent = unit.indentation(callable.getBegin().orElseThrow().line);
-        edits.replace(unit, callable.getBody().orElseThrow(), Render.block(statements, indent));
+        var block = callable instanceof MethodDeclaration m ? m.getBody().orElseThrow()
+                : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
+        edits.replace(unit, block, Render.block(statements, indent));
         c.sources().apply(edits);
     }
 

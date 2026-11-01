@@ -48,6 +48,10 @@ final class CreateElement {
             case CLASS, INTERFACE -> new Address.Type(owner.qualified() + "." + name);
             case FIELD -> new Address.Field(owner.id(), name);
             case METHOD -> new Address.Callable(owner.id(), name, List.of());
+            case CONSTRUCTOR -> {
+                if (!name.equals(owner.name())) throw new PrimitiveRejected("create.constructor", "a constructor of " + owner.name() + " is named " + owner.name());
+                yield new Address.Callable(owner.id(), "new", List.of());
+            }
             case PARAM -> new Address.Param(owner.id(), name);
             default -> throw new IllegalArgumentException("unsupported create: " + kind);
         };
@@ -69,13 +73,18 @@ final class CreateElement {
                 var indent = Members.indentation(type.unit(), type.as(TypeDeclaration.class));
                 sources.apply(Shared.edits(e -> Members.append(e, type.unit(), type.as(TypeDeclaration.class), Render.emptyMethod(name, indent))));
             }
+            case CONSTRUCTOR -> {
+                var type = c.declaration(owner);
+                var indent = Members.indentation(type.unit(), type.as(TypeDeclaration.class));
+                sources.apply(Shared.edits(e -> Members.append(e, type.unit(), type.as(TypeDeclaration.class), Render.emptyConstructor(name, indent))));
+            }
             default -> { // a parameter
                 var calls = Shared.callsTo(c, owner.id());
                 if (!calls.isEmpty() && argument == null) {
                     throw new PrimitiveRejected("create.argument", "the calls of " + owner.qualified() + " need an argument for " + name);
                 }
                 var declaration = c.declaration(owner);
-                var method = declaration.as(MethodDeclaration.class);
+                com.github.javaparser.ast.body.CallableDeclaration<?> method = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
                 var edits = new EditSet();
                 Lists.append(edits, declaration.unit(), method.getParameters(), method.getName(), "Object " + name);
                 for (var call : calls) Lists.append(edits, sources.unitOf(call), call.getArguments(), call.getName(), argument);

@@ -19,6 +19,10 @@ public final class Render {
         return "void " + name + "() {\n" + indent + "}";
     }
 
+    public static String emptyConstructor(String name, String indent) {
+        return name + "() {\n" + indent + "}";
+    }
+
     /** A block with one statement per line of {@code statements}, its braces at {@code indent}. */
     public static String block(String statements, String indent) {
         return "{\n" + statements.lines().map(line -> indent + "    " + line + "\n").collect(Collectors.joining()) + indent + "}";

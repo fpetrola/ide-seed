@@ -256,3 +256,30 @@ refactoring rename-package "Moves every type of a package to a new package"
   end
   return ${p}
 end
+
+refactoring generate-constructor "A constructor that takes a value for each field given, and assigns it"
+  param type : element(CLASS) "the class"
+  param fields : elements(FIELD) "the fields it sets"
+  c := create CONSTRUCTOR ${type} ${name(type)}
+  set ${c} visibility public
+  let body = ""
+  for f in fields
+    p := create PARAM ${c} ${name(f)}
+    set ${p} type ${type(f)}
+    let body = concat(body, said(f), " = ", said(p), "; ")
+  end
+  set ${c} body ${body}
+  return ${c}
+end
+
+refactoring make-final "Makes a field final: nothing may assign it but where it is declared or a constructor"
+  param field : element(FIELD) "the field"
+  set ${field} final true
+  return ${field}
+end
+
+refactoring make-static "Makes a method static: it may use nothing of an object"
+  param method : element(METHOD) "the method"
+  set ${method} static true
+  return ${method}
+end

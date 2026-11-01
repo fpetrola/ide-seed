@@ -208,7 +208,8 @@ class ProgramTest {
         assertThat(new Primitive.Move(B_X, A, null).intent(p, null).pins()).containsExactly(new Change.Pin(B_X, Change.Aspect.PARENT));
         assertThat(new Primitive.Set(B_X, "visibility", "private").intent(p, null).pins())
                 .containsExactly(new Change.Pin(B_X, Change.Aspect.VISIBILITY));
-        assertThat(new Primitive.Set(B_X, "static", "true").intent(p, null)).isEqualTo(Change.NONE);
+        assertThat(new Primitive.Set(B_X, "static", "true").intent(p, null).pins()).containsExactly(new Change.Pin(B_X, Change.Aspect.STATIC));
+        assertThat(new Primitive.Set(B_X, "initializer", "1").intent(p, null)).isEqualTo(Change.NONE);
         assertThat(new Primitive.Create(Kind.FIELD, A, "y").intent(p, created)).isEqualTo(Change.produced(created)
                 .pin(created, Change.Aspect.PARENT, Change.Aspect.NAME));
         assertThat(new Primitive.Create(Kind.PACKAGE, null, "b").intent(p, created)).isEqualTo(Change.produced(created));

@@ -88,6 +88,7 @@ final class ScriptFunctions {
             case "params" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList());
             case "constructors" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "body" -> text(element(args, 0).fact(Fact.BODY));
+            case "said" -> text(ide.program.Body.name(element(args, 0).id())); // how a body names it
             case "types-of" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
             case "subclasses" -> elems(graph.subclasses(element(args, 0).id()));
             case "family" -> elems(graph.family(element(args, 0)));

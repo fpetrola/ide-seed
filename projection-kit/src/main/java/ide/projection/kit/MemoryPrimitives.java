@@ -81,7 +81,7 @@ final class MemoryPrimitives {
             case FIELD -> new Address.Field(parent, name);
             case METHOD -> new Address.Callable(parent, name, List.of());
             case PARAM -> new Address.Param(parent, name);
-            case CONSTRUCTOR -> throw new PrimitiveRejected("projection.unsupported", "constructors are not created");
+            case CONSTRUCTOR -> new Address.Callable(parent, "new", List.of());
         };
         if (ids.has(address)) throw duplicate(ids.render(address));
         var id = ids.of(address, kind);

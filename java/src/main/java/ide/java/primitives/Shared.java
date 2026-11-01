@@ -3,6 +3,7 @@ package ide.java.primitives;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import ide.program.Kind;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
@@ -58,8 +59,10 @@ final class Shared {
     static void resign(Context c, Element method, String path, List<String> parameterNames) {
         var callable = (Address.Callable) c.ids().address(method.id());
         var owner = c.ids().render(c.ids().address(callable.owner()));
-        var declaration = typeIn(c.sources().unit(path), owner).getMethodsByName(method.name()).stream()
-                .filter(m -> parameterNames(m).equals(parameterNames)).findFirst().orElseThrow();
+        var type = typeIn(c.sources().unit(path), owner);
+        var callables = method.kind() == Kind.CONSTRUCTOR ? List.<CallableDeclaration<?>>copyOf(type.getConstructors())
+                : List.<CallableDeclaration<?>>copyOf(type.getMethodsByName(method.name()));
+        var declaration = callables.stream().filter(m -> parameterNames(m).equals(parameterNames)).findFirst().orElseThrow();
         c.ids().resign(method.id(), c.keys().of(declaration));
     }
 

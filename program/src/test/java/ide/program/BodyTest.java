@@ -82,7 +82,8 @@ class BodyTest {
         var program = program();
 
         assertThatThrownBy(() -> Body.parse("return x;", program, SET)).hasMessageContaining("expected an element");
-        assertThatThrownBy(() -> Body.parse("return #{field:2};", program, SET)).hasMessageContaining("expected the end");
+        assertThatThrownBy(() -> Body.parse("return #{field:2} #{field:2}", program, SET)).hasMessageContaining("expected the end");
+        assertThat(Body.parse("#{field:2} = #{param:5}; return #{field:2};", program, SET).statements()).hasSize(2);
         assertThatThrownBy(() -> Body.parse("this.x = 1", program, SET)).hasMessageContaining("expected an element");
     }
 }

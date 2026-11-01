@@ -47,7 +47,8 @@ public sealed interface Primitive {
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
             case Set s -> {
                 if (Fact.BODY.label().equals(s.attribute())) yield body(before, s.element(), s.value());
-                yield Fact.VISIBILITY.label().equals(s.attribute()) ? Change.NONE.pin(s.element(), Change.Aspect.VISIBILITY) : Change.NONE;
+                yield java.util.Arrays.stream(Fact.values()).filter(f -> f.label().equals(s.attribute())).findFirst()
+                        .flatMap(Change.Aspect::of).map(aspect -> Change.NONE.pin(s.element(), aspect)).orElse(Change.NONE);
             }
             case Link l -> {
                 if (l.mode() == Mode.IMPLEMENTS) yield Change.NONE; // implements adds one more
