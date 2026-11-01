@@ -117,6 +117,30 @@ class MemberHolesTest {
     }
 
     @Test
+    void aNewOfAWorkspaceTypeWithNoConstructorTakingWhatItPassesIsAUseThatBindsNothing() {
+        var projection = JavaProjection.of(Map.of("a/C.java", """
+                package a;
+
+                class C {
+                    C(String name) {
+                    }
+
+                    static C make(int size) {
+                        new StringBuilder(size);
+                        new C("named");
+                        return new C(size, "big");
+                    }
+                }
+                """));
+        var program = projection.program();
+
+        assertThat(program.unresolved()).extracting(u -> u.name() + " " + u.mode().label() + " in " + program.element(u.scope()).qualified())
+                .containsExactly("C new in a.C");
+        assertThat(projection.needs(program.unresolved().getFirst().id()).orElseThrow().arguments())
+                .extracting(a -> a.name() + " " + a.type()).containsExactly("size int", "string String");
+    }
+
+    @Test
     void aRetargetBindsItAndWritesTheName() {
         var projection = JavaProjection.of(SOURCES);
         var p = projection.program();

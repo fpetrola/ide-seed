@@ -141,10 +141,11 @@ public final class EcjCheck {
         return type.replaceAll("\\bjava\\.lang\\.([A-Z]\\w*)", "$1");
     }
 
-    /** What a problem's text is about: its last name, the one a member access or an import ends with. */
+    /** What a problem's text is about: its last name, the one a member access or an import ends with; a new's type. */
     private static String symbol(String text) {
         var call = text.indexOf('(');
         var name = (call < 0 ? text : text.substring(0, call)).strip();
+        if (name.startsWith("new ")) name = name.substring(4).strip(); // a new object is about its type
         if (name.contains("<")) name = name.substring(0, name.indexOf('<'));
         var dot = name.lastIndexOf('.');
         name = dot < 0 ? name : name.substring(dot + 1);

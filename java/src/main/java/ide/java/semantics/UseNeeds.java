@@ -68,15 +68,15 @@ public final class UseNeeds {
 
     /** What a use needs: what its place expects, and what it passes if it is a call. */
     public static Needs of(Expression use) {
-        return new Needs(expected(use), use instanceof MethodCallExpr call ? arguments(call) : List.of());
+        return new Needs(expected(use), use instanceof com.github.javaparser.ast.nodeTypes.NodeWithArguments<?> call ? arguments(call.getArguments()) : List.of());
     }
 
     /** What a call passes: each argument named as a parameter that takes it would be, once, with its type. */
-    static List<Needs.Argument> arguments(MethodCallExpr call) {
-        var unit = call.findCompilationUnit().orElseThrow();
+    static List<Needs.Argument> arguments(List<Expression> passed) {
         var arguments = new ArrayList<Needs.Argument>();
         var taken = new HashSet<String>();
-        for (var argument : call.getArguments()) {
+        for (var argument : passed) {
+            var unit = argument.findCompilationUnit().orElseThrow();
             var type = typeOf(argument, unit);
             var name = nameFor(argument, type);
             if (SourceVersion.isKeyword(name)) name += "1";

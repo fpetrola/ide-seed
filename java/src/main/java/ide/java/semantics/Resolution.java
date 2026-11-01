@@ -231,6 +231,24 @@ public final class Resolution {
                 || type.getAllMethods().stream().anyMatch(m -> m.getName().equals(method));
     }
 
+    /**
+     * Whether a {@code new} surely binds nothing: its type is the workspace's, plain (no anonymous body), and none of
+     * its constructors takes as many arguments as it passes; with none declared, the one Java gives takes none.
+     */
+    public static boolean constructorBindsNothing(ObjectCreationExpr creation, java.util.function.Predicate<String> workspace) {
+        if (creation.getAnonymousClassBody().isPresent()) return false;
+        try {
+            var type = creation.getType().resolve().asReferenceType().getTypeDeclaration().orElse(null);
+            if (type == null || !workspace.test(type.getQualifiedName())) return false;
+            var passed = creation.getArguments().size();
+            var constructors = type.getConstructors();
+            return constructors.isEmpty() ? passed > 0 : constructors.stream().noneMatch(c -> c.getNumberOfParams() == passed
+                    || c.hasVariadicParameter() && passed >= c.getNumberOfParams() - 1);
+        } catch (RuntimeException unknown) {
+            return false;
+        }
+    }
+
     /** The field the expression resolves to, or null if it is not a (resolvable) field use. */
     public static ResolvedFieldDeclaration resolveField(Expression expr) {
         try {

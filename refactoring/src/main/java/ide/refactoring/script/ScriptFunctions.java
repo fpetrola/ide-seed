@@ -194,9 +194,9 @@ final class ScriptFunctions {
                 && ca.keys().equals(cb.keys());
     }
 
-    /** What a use that binds nothing is: a {@code type}, a {@code call}, or a {@code value} read or written. */
+    /** What a use that binds nothing is: a {@code type}, a {@code call}, a {@code new} object, or a {@code value} read or written. */
     private static String used(Mode mode) {
-        return mode == Mode.CALL ? "call" : mode.isTypeUse() || mode == Mode.NEW ? "type" : "value";
+        return mode == Mode.CALL ? "call" : mode == Mode.NEW ? "new" : mode.isTypeUse() ? "type" : "value";
     }
 
     /**

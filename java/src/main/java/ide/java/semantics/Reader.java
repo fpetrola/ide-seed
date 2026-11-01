@@ -310,7 +310,10 @@ public final class Reader {
                     target = resolveMethod(call);
                     bindsNothing = target == null && callBindsNothing(call);
                 }
-                case ObjectCreationExpr creation -> target = callable(resolveConstructor(creation));
+                case ObjectCreationExpr creation -> {
+                    target = callable(resolveConstructor(creation));
+                    bindsNothing = target == null && constructorBindsNothing(creation, this::workspaceType);
+                }
                 case MethodReferenceExpr reference -> target = callable(resolveMethodReference(reference));
                 case ClassOrInterfaceType type -> {
                     var declaration = resolveDeclaration(type);
@@ -342,8 +345,20 @@ public final class Reader {
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
     }
 
+    /** Whether a qualified name is a type of the workspace. */
+    private boolean workspaceType(String qualified) {
+        return type(qualified) != null;
+    }
+
     /** The workspace type a member use is looked up in: its receiver's, or the one it is written in; null if neither. */
     private ElementId scopeOf(Node use) {
+        if (use instanceof ObjectCreationExpr creation) {
+            try {
+                return type(creation.getType().resolve().asReferenceType().getQualifiedName());
+            } catch (RuntimeException unknown) {
+                return null;
+            }
+        }
         var receiver = use instanceof MethodCallExpr call ? call.getScope()
                 : use instanceof FieldAccessExpr access ? Optional.of(access.getScope()) : Optional.<Expression>empty();
         if (receiver.isEmpty()) {

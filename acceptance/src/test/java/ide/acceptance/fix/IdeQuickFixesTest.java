@@ -196,4 +196,28 @@ class IdeQuickFixesTest {
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/Base.java")).contains("abstract class Base {", "abstract int size();");
     }
+
+    @Test
+    void aNewNoConstructorMakesCreatesTheConstructor() {
+        var ws = Workspace.of(Map.of("a/Money.java", """
+                package a;
+
+                class Money {
+                    long cents;
+                }
+                """, "a/Shop.java", """
+                package a;
+
+                class Shop {
+                    Money price(long amount) {
+                        return new Money(amount, "ARS");
+                    }
+                }
+                """));
+
+        ws.fix("a/Shop.java", 5, "create constructor in Money");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Money.java")).contains("Money(long amount, String string) {");
+    }
 }

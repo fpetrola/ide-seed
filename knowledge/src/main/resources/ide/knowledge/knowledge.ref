@@ -220,3 +220,21 @@ effect declare-in-superclass "declare ${name(m)}() in ${name(superclass(owner(m)
     declare-abstract-in-superclass ${m}
   end
 end
+
+# A new object no constructor makes: the class gets one that takes what the new passes.
+goal ecj.UndefinedConstructor needs constructs(symbol)
+
+effect create-constructor "create constructor in ${name(scope(unresolved-in(path, symbol, "new")))}"
+  makes constructs(symbol)
+  when nonempty(unresolved-in(path, symbol, "new"))
+  do
+    let made = unresolved-in(path, symbol, "new")
+    let t = scope(made)
+    let passed = arguments(made)
+    c := create CONSTRUCTOR ${t} ${name(t)}
+    for a in passed
+      p := create PARAM ${c} ${first(a)}
+      set ${p} type ${last(a)}
+    end
+  end
+end
