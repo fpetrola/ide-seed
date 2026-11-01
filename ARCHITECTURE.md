@@ -1191,7 +1191,19 @@ que esto no escala solo:
    Antes de las sentencias quedan efectos que tampoco las necesitan y que la misma máquina puede reemplazar. Los
    estáticos ya pasaron (el 2026-11-01, 37279f6..): hizo falta que un uso diga sobre qué se hace (`Reference.receiver`,
    obligación 12), restricciones (`rule`, `problem`), abducir hechos que se quitan, revisar las reglas después de
-   cada cambio supuesto y promesas. Quedan `make-abstract`, `unfinal`, `drop-final` y los cambios de tipo.
+   cada cambio supuesto y promesas. Después pasaron `make-abstract`, `unfinal`, `drop-final` y los dos cambios de
+   tipo (38b5704..ea3354e): `knowledge.ref` tiene 14 efectos, de los 25 del principio, y `java.rules` 32 definiciones
+   y reglas, ninguna un fix. Los que quedan son de tres clases, y cada una pide una pieza que todavía no está:
+   - *Crean miembros o tipos con forma* (`create-field`, `create-method`, `create-parameter`, `create-constructor`,
+     `create-class`, `create-interface`, `implement-methods`, `declare-in-superclass`): la abducción hoy crea solo un
+     constructor sin parámetros; hace falta crear un elemento con su nombre, sus parámetros y su tipo, tomados de lo
+     que el problema dice.
+   - *Necesitan un valor o un tipo que solo la persona sabe* (`create-field`, `create-method`,
+     `initialize-in-declaration`): un hecho cambiable cuyo valor no se deduce tiene que volverse una pregunta, como
+     hoy lo es un `ask`.
+   - *Hablan de sentencias* (`initialize-in-constructors`, `pass-to-superclass`): esperan la fase 1 de esta etapa.
+   Y dos que eligen por parecido (`use-similar`, `call-similar`) y uno que borra (`remove-unused`): el parecido de
+   nombres puede ser una relación del grafo, y borrar lo que nada usa, quitar un hecho de existencia.
 1. *Locales.* `LOCAL` y sus usos en el grafo, con obligación del contrato. Lo que gana: rename de locales verificado
    (y el rename en el lugar de la UI), Inline Variable.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
