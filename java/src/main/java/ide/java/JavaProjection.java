@@ -66,7 +66,8 @@ public final class JavaProjection implements Projection {
     private JavaProjection() {
         typeSolver = new WorkspaceTypeSolver(this::trees, new ReflectionTypeSolver());
         reader = new Reader(ids, keys, typeSolver);
-        sources = new Sources(new ParserConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
+        sources = new Sources(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
+                .setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
         context = new Context() {
             @Override
             public Program program() {

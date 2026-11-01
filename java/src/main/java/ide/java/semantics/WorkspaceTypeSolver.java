@@ -1,14 +1,18 @@
 package ide.java.semantics;
 
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.model.SymbolReference;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserAnnotationDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserEnumDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserInterfaceDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserRecordDeclaration;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -55,7 +59,7 @@ public final class WorkspaceTypeSolver implements TypeSolver {
         return jdk.tryToSolveType(name);
     }
 
-    /** Qualified name → declaration for every class, interface and enum in the workspace. */
+    /** Qualified name → declaration for every type in the workspace: classes, interfaces, enums, records, annotations. */
     private Map<String, ResolvedReferenceTypeDeclaration> buildIndex() {
         var built = new HashMap<String, ResolvedReferenceTypeDeclaration>();
         for (var cu : units.get()) {
@@ -66,6 +70,12 @@ public final class WorkspaceTypeSolver implements TypeSolver {
             }
             for (var type : cu.findAll(EnumDeclaration.class)) {
                 type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserEnumDeclaration(type, getRoot())));
+            }
+            for (var type : cu.findAll(RecordDeclaration.class)) {
+                type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserRecordDeclaration(type, getRoot())));
+            }
+            for (var type : cu.findAll(AnnotationDeclaration.class)) {
+                type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserAnnotationDeclaration(type, getRoot())));
             }
         }
         return built;

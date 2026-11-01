@@ -9,7 +9,9 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.expr.Expression;
@@ -125,6 +127,7 @@ public final class Resolution {
             case ClassOrInterfaceDeclaration c -> c.getExtendedTypes().stream().anyMatch(t -> t == type) ? Mode.EXTENDS
                     : c.getImplementedTypes().stream().anyMatch(t -> t == type) ? Mode.IMPLEMENTS : Mode.TYPE;
             case EnumDeclaration e -> e.getImplementedTypes().stream().anyMatch(t -> t == type) ? Mode.IMPLEMENTS : Mode.TYPE;
+            case RecordDeclaration r -> r.getImplementedTypes().stream().anyMatch(t -> t == type) ? Mode.IMPLEMENTS : Mode.TYPE;
             case Parameter p -> p.getType() == type ? Mode.DECLARED : Mode.TYPE;
             case MethodDeclaration m -> m.getType() == type ? Mode.DECLARED : Mode.TYPE;
             case VariableDeclarator v -> v.getType() == type
@@ -177,18 +180,21 @@ public final class Resolution {
         }
     }
 
-    /** Classes, interfaces and enums of a unit, outermost first. */
+    /** The types of a unit, outermost first: classes and records, interfaces and annotation types, enums. */
     public static List<TypeDeclaration<?>> types(CompilationUnit cu) {
         var types = new ArrayList<TypeDeclaration<?>>();
-        cu.findAll(TypeDeclaration.class).forEach(t -> {
-            if (t instanceof ClassOrInterfaceDeclaration || t instanceof EnumDeclaration) types.add(t);
-        });
+        cu.findAll(TypeDeclaration.class).forEach(types::add);
         return types;
     }
 
+    /** A record is a class and an annotation type an interface, as Java says they are. */
     public static Kind kindOf(TypeDeclaration<?> type) {
-        if (type instanceof EnumDeclaration) return Kind.ENUM;
-        return ((ClassOrInterfaceDeclaration) type).isInterface() ? Kind.INTERFACE : Kind.CLASS;
+        return switch (type) {
+            case EnumDeclaration e -> Kind.ENUM;
+            case AnnotationDeclaration a -> Kind.INTERFACE;
+            case ClassOrInterfaceDeclaration c when c.isInterface() -> Kind.INTERFACE;
+            default -> Kind.CLASS;
+        };
     }
 
     /** The facts a declaration's modifiers state. */
