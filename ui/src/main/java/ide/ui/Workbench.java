@@ -138,7 +138,7 @@ final class Workbench extends JPanel {
         bulbs.setRepeats(false);
         checks.setRepeats(false);
         var center = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editors, views);
-        center.setResizeWeight(0.72);
+        center.setResizeWeight(0.85);
         center.setBorder(BorderFactory.createEmptyBorder());
         var projectScroll = new JScrollPane(project);
         projectScroll.setBorder(BorderFactory.createEmptyBorder());

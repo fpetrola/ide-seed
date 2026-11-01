@@ -38,6 +38,17 @@ class KeymapTest {
         assertThat(Keymap.action(KeyStroke.getKeyStroke("ctrl SPACE"))).contains("complete");
     }
 
+    /** Ctrl and '+' zooms in whatever keyboard writes the '+': its own key, the keypad's, or shift and '='. */
+    @Test
+    void zoomIsCtrlPlusOnEveryKeyboard() {
+        assertThat(Keymap.action(KeyStroke.getKeyStroke("ctrl PLUS"))).contains("zoom-in");
+        assertThat(Keymap.action(KeyStroke.getKeyStroke("ctrl ADD"))).contains("zoom-in");
+        assertThat(Keymap.action(KeyStroke.getKeyStroke("ctrl shift EQUALS"))).contains("zoom-in");
+        assertThat(Keymap.action(KeyStroke.getKeyStroke("ctrl EQUALS"))).contains("zoom-in");
+        assertThat(Keymap.action(KeyStroke.getKeyStroke("ctrl SUBTRACT"))).contains("zoom-out");
+        assertThat(Keymap.of("zoom-in").stroke()).isEqualTo(KeyStroke.getKeyStroke("ctrl PLUS"));
+    }
+
     @Test
     void noKeyDoesTwoThings() {
         assertThat(Keymap.KEYS).extracting(Keymap.Key::action).doesNotHaveDuplicates();

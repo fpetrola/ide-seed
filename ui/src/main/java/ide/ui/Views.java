@@ -57,6 +57,12 @@ final class Views extends JTabbedPane {
     private final Consumer<Problem> openProblem;
     private final Consumer<String> openResult;
 
+    /** A strip of a few lines under the editors, as IDEs open their tool windows; what it lists scrolls. */
+    @Override
+    public java.awt.Dimension getPreferredSize() {
+        return new java.awt.Dimension(super.getPreferredSize().width, Math.round(Zoom.of(180)));
+    }
+
     /** A problem opens where it is ({@code path:line: message}); a result, where the element it names is. */
     Views(Consumer<Problem> openProblem, Consumer<String> openResult) {
         this.openProblem = openProblem;

@@ -204,6 +204,30 @@ class WorkbenchTest {
         }
     }
 
+    /** In a window the size of the one Main opens, the editors take most of the height; the views below, the rest. */
+    @Test
+    void theEditorsTakeMostOfTheHeight() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 1, 1);
+        workbench.setSize(1400, 860);
+        layOut(workbench);
+
+        var center = (javax.swing.JSplitPane) java.util.Arrays.stream(workbench.getComponents())
+                .filter(javax.swing.JSplitPane.class::isInstance).map(javax.swing.JSplitPane.class::cast)
+                .findFirst().orElseThrow().getRightComponent();
+        var editors = center.getTopComponent().getHeight();
+        var views = center.getBottomComponent().getHeight();
+
+        assertThat(editors).as("editors %d, views %d", editors, views).isGreaterThanOrEqualTo(3 * views);
+    }
+
+    private static void layOut(java.awt.Container container) {
+        container.doLayout();
+        for (var child : container.getComponents()) {
+            if (child instanceof java.awt.Container inner) layOut(inner);
+        }
+    }
+
     /** A change the program makes is undone as a change, not as typing: the editor never shows an empty file. */
     @Test
     void ctrlZWithNothingTypedUndoesTheLastChange() throws IOException {
