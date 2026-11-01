@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
@@ -299,6 +300,7 @@ public final class Reader {
         uses.addAll(cu.findAll(MethodCallExpr.class));
         uses.addAll(cu.findAll(ClassOrInterfaceType.class));
         uses.addAll(cu.findAll(ObjectCreationExpr.class));
+        uses.addAll(cu.findAll(ExplicitConstructorInvocationStmt.class));
         uses.addAll(cu.findAll(MethodReferenceExpr.class));
         uses.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
         for (var use : uses) {
@@ -315,6 +317,7 @@ public final class Reader {
                     bindsNothing = target == null && constructorBindsNothing(creation, this::workspaceType);
                 }
                 case MethodReferenceExpr reference -> target = callable(resolveMethodReference(reference));
+                case ExplicitConstructorInvocationStmt invocation -> target = callable(resolveConstructor(invocation));
                 case ClassOrInterfaceType type -> {
                     var declaration = resolveDeclaration(type);
                     target = named(declaration, named);
@@ -329,6 +332,7 @@ public final class Reader {
                 }
             }
             var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
+                    : use instanceof ExplicitConstructorInvocationStmt invocation ? constructed(invocation)
                     : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                     : ((NodeWithSimpleName<?>) use).getNameAsString();
             var site = target == null && !bindsNothing ? null : siteOf(use);
@@ -343,6 +347,13 @@ public final class Reader {
             else references.add(new Reference(id, site, target, name, mode));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
+    }
+
+    /** The simple name of the type a {@code super(...)} or {@code this(...)} makes, as its constructor is named. */
+    private static String constructed(ExplicitConstructorInvocationStmt invocation) {
+        var type = invocation.findAncestor(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration.class);
+        if (invocation.isThis() || type.isEmpty()) return type.map(t -> t.getNameAsString()).orElse("this");
+        return type.get().getExtendedTypes().getFirst().map(t -> t.getNameAsString()).orElse("Object");
     }
 
     /** Whether a qualified name is a type of the workspace. */

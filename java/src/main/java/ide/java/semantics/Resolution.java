@@ -1,5 +1,6 @@
 package ide.java.semantics;
 
+import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.CompilationUnit;
@@ -57,6 +58,15 @@ public final class Resolution {
         }
     }
 
+    /** The constructor a {@code super(...)} or {@code this(...)} resolves to, or null. */
+    public static ResolvedConstructorDeclaration resolveConstructor(ExplicitConstructorInvocationStmt invocation) {
+        try {
+            return invocation.resolve();
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
     /** Qualified name of the type a type use resolves to, or null. */
     public static String resolveType(ClassOrInterfaceType type) {
         try {
@@ -105,7 +115,7 @@ public final class Resolution {
     }
 
     public static Mode modeOf(Node use) {
-        if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr) return Mode.CALL;
+        if (use instanceof MethodCallExpr || use instanceof MethodReferenceExpr || use instanceof ExplicitConstructorInvocationStmt) return Mode.CALL;
         if (use instanceof ObjectCreationExpr) return Mode.NEW;
         if (use instanceof ClassOrInterfaceType type) return linkMode(type);
         var parent = use.getParentNode().orElseThrow();

@@ -56,4 +56,38 @@ class ConstructorCallsTest {
 
         assertThat(projection.source("a/User.java")).contains("Q q = new Q(\"one\");", "return new Q(\"two\");");
     }
+
+    @Test
+    void aSuperOrThisCallIsACallOfItsConstructorAndPassesWhatANewParameterTakes() {
+        var projection = JavaProjection.of(Map.of("a/Q.java", """
+                package a;
+
+                class Q {
+                    Q(int a) {
+                    }
+                }
+                """, "a/R.java", """
+                package a;
+
+                class R extends Q {
+                    R() {
+                        this(1);
+                    }
+
+                    R(int a) {
+                        super(a);
+                    }
+                }
+                """));
+        var p = projection.program();
+
+        assertThat(p.referencesFrom(id(p, "a.R#new()"))).extracting(r -> p.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactly("a.R#new(int) call");
+        assertThat(p.referencesFrom(id(p, "a.R#new(int)"))).extracting(r -> p.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactly("a.Q#new(int) call");
+
+        projection.apply(new Primitive.Create(Kind.PARAM, id(p, "a.Q#new(int)"), "b", Map.of(Fact.TYPE, "long"), "0L"));
+
+        assertThat(projection.source("a/R.java")).contains("super(a, 0L);", "this(1);");
+    }
 }

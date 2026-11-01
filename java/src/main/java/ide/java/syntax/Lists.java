@@ -15,10 +15,15 @@ public final class Lists {
 
     /** One more item at the end of the list whose '(' follows {@code name}. */
     public static void append(EditSet edits, Unit unit, NodeList<? extends Node> items, Node name, String item) {
+        append(edits, unit, items, name.getEnd().orElseThrow(), item);
+    }
+
+    /** The same, the list being in the first parentheses after {@code from}. */
+    public static void append(EditSet edits, Unit unit, NodeList<? extends Node> items, com.github.javaparser.Position from, String item) {
         if (items.isNonEmpty()) {
             edits.insertAfter(unit, items.getLast().orElseThrow(), ", " + item);
         } else {
-            var open = unit.next('(', name.getEnd().orElseThrow());
+            var open = unit.next('(', from);
             edits.insertAt(unit, unit.next(')', open), item);
         }
     }
