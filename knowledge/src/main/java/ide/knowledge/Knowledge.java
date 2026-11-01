@@ -113,10 +113,10 @@ public final class Knowledge implements Remedy, QuickFix {
         return search(violation.code(), facts, projection);
     }
 
-    /** The search for a diagnostic, with what it says: its symbol, and where it is (path and line). */
+    /** The search for a diagnostic, with what it says: its symbol, and where it is (path, line and column). */
     public Search search(Diagnostic diagnostic, Projection projection) {
         return search(diagnostic.code(), Map.of("symbol", diagnostic.symbol(), "path", diagnostic.path(),
-                "line", String.valueOf(diagnostic.line())), projection);
+                "line", String.valueOf(diagnostic.line()), "column", String.valueOf(diagnostic.column())), projection);
     }
 
     /**
@@ -130,7 +130,14 @@ public final class Knowledge implements Remedy, QuickFix {
         var ways = new ArrayList<Way>();
         for (var goal : goals) {
             if (!goal.code().equals(code)) continue;
-            var args = goal.needs().args().stream().map(known::get).toList();
+            List<Value> args;
+            try { // a goal's arguments are facts, or expressions over them
+                var run = Run.on(projection, library);
+                args = goal.needs().args().stream().map(arg -> known.containsKey(arg) ? known.get(arg) : Script.evaluate(arg, run, known)).toList();
+            } catch (RuntimeException inapplicable) {
+                trace.add(Trace.Kind.DROPPED, goal.needs().name() + ": " + inapplicable.getMessage());
+                continue;
+            }
             ways.addAll(ways(goal.needs().name(), args, known, projection, trace, 1));
         }
         ways.sort(Comparator.comparingInt(way -> way.cost() * 100 + way.rank()));

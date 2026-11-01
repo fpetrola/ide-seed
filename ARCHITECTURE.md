@@ -492,6 +492,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   busca, con un parámetro por argumento (nombrado y tipado por el driver), estático si se llama desde un lugar
   estático de su propio tipo, y con `return default`; pregunta el tipo de retorno y propone el que espera el lugar de
   la llamada. create-field propone también ese tipo, ya no `int`. Un `ask` acepta comillas dentro de `${...}`.
+  Con el compilador de Eclipse llegaron los quick fixes de los IDEs para sus problemas, cada uno deducido: implementar
+  los métodos que los supertipos dejan abstractos (`unimplemented`, sin lenguaje) o hacer la clase abstracta; hacer
+  estático un método usado desde un lugar estático; quitar un miembro privado sin uso (un warning); y abrir lo que
+  un archivo no ve. Para eso último, los argumentos de una meta son expresiones sobre los hechos
+  (`accessible(top-in(path), element-at(path, line, column))`), y un diagnóstico da también su columna.
 - **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 

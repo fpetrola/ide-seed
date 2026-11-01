@@ -115,3 +115,63 @@ effect drop-final "make ${symbol} not final"
     set ${field-in(path, symbol)} final false
   end
 end
+
+# A class that does not implement what its supertypes leave abstract: it implements each, answering what the type
+# starts with until it is written; or it is abstract too.
+goal ecj.AbstractMethodMustBeImplemented needs complete(symbol)
+
+effect implement-methods "implement methods of ${symbol}"
+  makes complete(symbol)
+  when nonempty(unimplemented(type-in(path, symbol)))
+  do
+    let t = type-in(path, symbol)
+    for m in unimplemented(t)
+      d := create METHOD ${t} ${name(m)}
+      set ${d} visibility ${attr(m, "visibility")}
+      set ${d} type ${type(m)}
+      for p in params(m)
+        q := create PARAM ${d} ${name(p)}
+        set ${q} type ${type(p)}
+      end
+      set ${d} body "return default"
+    end
+  end
+end
+
+effect make-abstract "make ${symbol} abstract"
+  makes complete(symbol)
+  when nonempty(type-in(path, symbol))
+  cost 2
+  do
+    set ${type-in(path, symbol)} abstract true
+  end
+end
+
+# A method used from a static place, where there is no object to call it on: it needs none.
+goal ecj.StaticMethodRequested needs callable-alone(symbol)
+
+effect make-static "make ${name(m)}() static"
+  makes callable-alone(symbol)
+  for m in methods-in(path, symbol)
+  do
+    set ${m} static true
+  end
+end
+
+# A private member nothing uses: it goes.
+goal ecj.UnusedPrivateField needs used-or-gone(symbol)
+goal ecj.UnusedPrivateMethod needs used-or-gone(symbol)
+
+effect remove-unused "remove ${name(e)}"
+  makes used-or-gone(symbol)
+  for e in members-in(path, symbol)
+  do
+    delete ${e}
+  end
+end
+
+# What a file cannot see: the member or type the name at the problem binds.
+goal ecj.NotVisibleMethod needs accessible(top-in(path), element-at(path, line, column))
+goal ecj.NotVisibleField needs accessible(top-in(path), element-at(path, line, column))
+goal ecj.NotVisibleConstructor needs accessible(top-in(path), element-at(path, line, column))
+goal ecj.NotVisibleType needs accessible(top-in(path), element-at(path, line, column))

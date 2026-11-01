@@ -98,6 +98,20 @@ class ViewsTest {
                 .containsExactlyInAnyOrder("a.C#m() would override a.A#m()", "a.B#m() no longer overrides a.A#m()");
     }
 
+    /** An abstract method had no body to run: what implements it changes no dispatch. */
+    @Test
+    void dispatchIgnoresImplementingAnAbstractMethod() {
+        var projection = MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
+                .type("a.A").method("a.A", "m", "void").fact("a.A#m()", ide.program.Fact.ABSTRACT, "true")
+                .type("a.B").extend("a.B", "a.A")
+                .build();
+        var before = projection.program();
+
+        projection.apply(new Primitive.Create(ide.program.Kind.METHOD, id(before, "a.B"), "m"));
+
+        assertThat(new DispatchView().check(new Comparison(before, projection, true))).isEmpty();
+    }
+
     /** The calls of a method moved up were made on receivers of the type it was in: a sibling's override they never reach. */
     @Test
     void dispatchIgnoresAnOverrideNoCallOfTheOverriddenMethodCanReach() {

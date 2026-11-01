@@ -55,6 +55,15 @@ final class ScriptFunctions {
                     .filter(m -> m.kind().name().equals("FIELD") && m.name().equals(text(args, 1)))
                     .map(m -> elem(m.id())).findFirst().orElse(null);
             case "top-in" -> elem(graph.typesIn(text(args, 0)).getFirst().id());
+            case "type-in" -> types(text(args, 0)).stream().filter(t -> t.name().equals(text(args, 1))).findFirst()
+                    .map(t -> elem(t.id())).orElse(null);
+            case "members-in" -> elems(types(text(args, 0)).stream().flatMap(t -> graph.members(t.id()).stream())
+                    .filter(m -> m.name().equals(text(args, 1))).toList());
+            case "methods-in" -> elems(types(text(args, 0)).stream().flatMap(t -> graph.members(t.id()).stream())
+                    .filter(m -> m.kind().name().equals("METHOD") && m.name().equals(text(args, 1))).toList());
+            case "element-at" -> projection.elementAt(text(args, 0), Integer.parseInt(text(args, 1)), Integer.parseInt(text(args, 2)))
+                    .map(ScriptFunctions::elem).orElse(null);
+            case "unimplemented" -> args.getFirst() == null ? elems(List.of()) : elems(unimplemented(element(args, 0)));
             // language
             case "default-value" -> text(rules.defaultValue(text(args, 0)));
             case "can-access" -> bool(rules.accessible(graph, element(args, 0).id(), element(args, 1).id()));
@@ -142,6 +151,43 @@ final class ScriptFunctions {
             case Value.Text t -> graph.find(t.text()).orElseThrow(() -> new IllegalArgumentException("no element " + t.text()));
             case null, default -> throw new IllegalArgumentException("not an element: " + Value.asText(value));
         };
+    }
+
+    /** The types declared in a file, nested ones too. */
+    private List<Element> types(String path) {
+        var types = new java.util.ArrayList<Element>();
+        var pending = new java.util.ArrayDeque<>(graph.typesIn(path));
+        while (!pending.isEmpty()) {
+            var type = pending.poll();
+            types.add(type);
+            graph.children(type.id()).stream().filter(e -> e.kind().isType()).forEach(pending::add);
+        }
+        return types;
+    }
+
+    /**
+     * The methods a type's supertypes leave abstract and nothing in it or above it implements: once each, as the
+     * nearest supertype declares it.
+     */
+    private List<Element> unimplemented(Element type) {
+        var above = graph.ancestors(type);
+        var concrete = new java.util.ArrayList<Element>(graph.members(type.id()));
+        above.forEach(a -> concrete.addAll(graph.members(a.id())));
+        concrete.removeIf(m -> "true".equals(m.fact(Fact.ABSTRACT)) || !m.kind().name().equals("METHOD"));
+        var missing = new java.util.ArrayList<Element>();
+        for (var ancestor : above) {
+            for (var method : graph.members(ancestor.id())) {
+                if (!method.kind().name().equals("METHOD") || !"true".equals(method.fact(Fact.ABSTRACT))) continue;
+                if (concrete.stream().anyMatch(c -> sameSignature(c, method)) || missing.stream().anyMatch(m -> sameSignature(m, method))) continue;
+                missing.add(method);
+            }
+        }
+        return missing;
+    }
+
+    private static boolean sameSignature(Element a, Element b) {
+        return a.name().equals(b.name()) && a.address() instanceof Address.Callable ca && b.address() instanceof Address.Callable cb
+                && ca.keys().equals(cb.keys());
     }
 
     /** What a use that binds nothing is: a {@code type}, a {@code call}, or a {@code value} read or written. */

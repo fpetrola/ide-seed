@@ -273,6 +273,9 @@ public final class Reader {
                 if (kindOf(type) == Kind.INTERFACE && method.getAccessSpecifier().asString().isEmpty()) {
                     facts.put(Fact.VISIBILITY, "public"); // interface members are implicitly public
                 }
+                if (kindOf(type) == Kind.INTERFACE && method.getBody().isEmpty() && !method.isStatic()) {
+                    facts.put(Fact.ABSTRACT, "true"); // and abstract, unless they have a body
+                }
                 var id = add(elements, new Address.Callable(typeId, method.getNameAsString(), keys.of(method)), Kind.METHOD,
                         method.getNameAsString(), typeId, facts);
                 declarations.put(id, new Decl(unit, method));
