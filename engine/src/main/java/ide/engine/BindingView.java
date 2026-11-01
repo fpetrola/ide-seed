@@ -1,5 +1,6 @@
 package ide.engine;
 
+import ide.program.ElementId;
 import ide.program.Program;
 import ide.program.Reference;
 import ide.projection.LanguageRules;
@@ -26,15 +27,19 @@ public final class BindingView implements View {
         if (rebound.isPresent()) {
             return new Violation("binding.rebound", ref.site(), ref.target(), after.element(ref.site()).qualified()
                     + " now binds " + ref.name() + " to " + after.element(rebound.get().target()).qualified()
-                    + " instead of " + baseline.element(ref.target()).qualified());
+                    + " instead of " + qualified(ref.target(), baseline, after));
         }
         if (after.contains(ref.site()) && after.contains(ref.target()) && inScope(after, ref)
                 && !rules.accessible(after, ref.site(), ref.target())) {
             return AccessView.inaccessible(ref, after);
         }
-        var site = (after.contains(ref.site()) ? after : baseline).element(ref.site()).qualified();
         return new Violation("binding.unresolved", ref.site(), ref.target(),
-                site + " no longer binds to " + baseline.element(ref.target()).qualified());
+                qualified(ref.site(), after, baseline) + " no longer binds to " + qualified(ref.target(), baseline, after));
+    }
+
+    /** An element as one program names it, or the other: a change may have meant one born with it, or gone. */
+    private static String qualified(ElementId element, Program first, Program second) {
+        return (first.contains(element) ? first : second).element(element).qualified();
     }
 
     /** Whether the target is a member of the site's type or of one of its supertypes (so only access can hide it). */

@@ -53,6 +53,42 @@ class ScriptTest {
                 "    ' move a.B#y -> a.A");
     }
 
+    /** A body names elements; the engine checks that what the language wrote binds them, and nothing else. */
+    @Test
+    void aBodyWrittenSoThatItBindsSomethingElseIsNotKept() {
+        var outer = """
+                package a;
+
+                public class Outer {
+                    int x;
+
+                    class Inner {
+                        int x;
+
+                        int get() {
+                            return 0;
+                        }
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Outer.java", outer));
+        ws.define("""
+                refactoring answer-field "Makes a method answer the value of a field"
+                  param method : element(METHOD) "the method"
+                  param field : element(FIELD) "the field it answers"
+                  set ${method} body "return #{field}"
+                  return ${method}
+                end
+                """);
+
+        var result = ws.invoke("answer-field", Map.of("method", "a.Outer.Inner#get()", "field", "a.Outer#x"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code, Violation::detail).containsExactly(org.assertj.core.groups.Tuple.tuple(
+                "binding.rebound", "a.Outer.Inner#get() now binds x to a.Outer.Inner#x instead of a.Outer#x"));
+        assertThat(ws.source("a/Outer.java")).isEqualTo(outer);
+    }
+
     @Test
     void requireAbortsWithItsMessage() {
         var ws = Workspace.of(SOURCES);

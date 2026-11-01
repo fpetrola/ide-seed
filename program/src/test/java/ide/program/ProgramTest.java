@@ -218,6 +218,18 @@ class ProgramTest {
     }
 
     @Test
+    void aBodyExpectsTheUsesItNamesInPlaceOfTheOldOnes() {
+        var p = program();
+
+        var change = new Primitive.Set(B_NAME, "body", "return " + Body.name(B_X)).intent(p, null);
+
+        assertThat(change.expectations()).containsExactly(new Change.Dropped(B_NAME, B_X), new Change.Dropped(B_NAME, A_NAME),
+                new Change.Added(B_NAME, B_X, "x", Mode.READ));
+        assertThat(p.expecting(change).referencesFrom(B_NAME)).extracting(r -> r.target() + " " + r.name() + " " + r.mode())
+                .containsExactly(B_X + " x READ");
+    }
+
+    @Test
     void aLinkExpectsTheDeclarationToBindItsNewTarget() {
         var p = program();
 

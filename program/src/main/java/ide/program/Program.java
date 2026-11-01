@@ -340,6 +340,7 @@ public final class Program {
             case Change.Retargeted r -> retargeted(r.site(), r.from(), r.to());
             case Change.Resited r -> resited(r.from(), r.target(), r.to());
             case Change.Dropped d -> without(d.site(), d.target());
+            case Change.Added a -> with(new Reference(a.site() + "@+" + references.size(), a.site(), a.target(), a.name(), a.mode()));
             case Change.Bound b -> bound(b.use(), b.to());
             case Change.UsesGone g -> withoutUsesFrom(g.element());
         };
@@ -377,6 +378,13 @@ public final class Program {
                 break;
             }
         }
+        return new Program(elements.values(), copy, unresolved);
+    }
+
+    /** A copy with one more reference; its id is no reading's, since nothing but a comparison looks at it. */
+    private Program with(Reference reference) {
+        var copy = new ArrayList<>(references);
+        copy.add(reference);
         return new Program(elements.values(), copy, unresolved);
     }
 

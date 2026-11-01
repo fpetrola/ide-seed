@@ -45,8 +45,10 @@ public sealed interface Primitive {
             case Delete d -> Change.NONE.expect(new Change.UsesGone(d.element()));
             case Move m -> Change.NONE.pin(m.element(), Change.Aspect.PARENT);
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
-            case Set s -> Fact.VISIBILITY.label().equals(s.attribute())
-                    ? Change.NONE.pin(s.element(), Change.Aspect.VISIBILITY) : Change.NONE;
+            case Set s -> {
+                if (Fact.BODY.label().equals(s.attribute())) yield body(before, s.element(), s.value());
+                yield Fact.VISIBILITY.label().equals(s.attribute()) ? Change.NONE.pin(s.element(), Change.Aspect.VISIBILITY) : Change.NONE;
+            }
             case Link l -> {
                 if (l.mode() == Mode.IMPLEMENTS) yield Change.NONE; // implements adds one more
                 yield before.link(l.element(), l.mode()).filter(old -> !old.target().equals(l.target()))
@@ -64,6 +66,18 @@ public sealed interface Primitive {
                 yield Change.NONE.expect(new Change.Dropped(reference.site(), reference.target()));
             }
         };
+    }
+
+    /** A new body ({@link Body}): the uses of the old one are gone, and the method makes the ones the new one names. */
+    private static Change body(Program before, ElementId method, String text) {
+        var change = Change.NONE;
+        for (var use : before.referencesFrom(method)) {
+            if (!use.mode().isLink()) change = change.expect(new Change.Dropped(method, use.target()));
+        }
+        for (var use : Body.parse(text, before, method).uses()) {
+            change = change.expect(new Change.Added(method, use.element(), before.element(use.element()).name(), use.mode()));
+        }
+        return change;
     }
 
     /** The elements this primitive changes; a projection refuses it when one of them belongs to a library. */

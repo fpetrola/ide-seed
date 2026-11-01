@@ -89,6 +89,8 @@ public abstract class ProjectionContract {
                 new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)),
                 new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))),
                 new Scenario("write a body", p -> new Primitive.Set(id(p, "a.A#k(int)"), "body",
+                        "return " + Body.name(id(p, "a.A#x")))),
+                new Scenario("replace a body", p -> new Primitive.Set(id(p, "a.A#total()"), "body",
                         "return " + Body.name(id(p, "a.A#x")))));
     }
 

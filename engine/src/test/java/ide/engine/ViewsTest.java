@@ -1,5 +1,6 @@
 package ide.engine;
 
+import ide.program.Body;
 import ide.program.Change;
 import ide.program.Fact;
 import ide.program.Kind;
@@ -42,6 +43,27 @@ class ViewsTest {
                 .extracting(Violation::code, Violation::detail).containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("binding.rebound", "a.C#m() now binds x to a.B#x instead of a.A#x"),
                         org.assertj.core.groups.Tuple.tuple("binding.unresolved", "a.C#a no longer binds to a.A"));
+    }
+
+    @Test
+    void bindingSeesABodyThatBindsSomethingElseThanItNames() {
+        var projection = MemoryProjection.builder()
+                .type("a.A").field("a.A", "x", "int")
+                .type("a.B").field("a.B", "x", "int").method("a.B", "m", "int").method("a.B", "n", "int")
+                .build();
+        var before = projection.program();
+        var m = id(before, "a.B#m()");
+        var n = id(before, "a.B#n()");
+        var y = projection.apply(new Primitive.Create(Kind.FIELD, id(before, "a.B"), "y")).produced();
+        // the bodies named A's x and the new y; what was written binds B's x, and nothing
+        var meant = before.expecting(new Change.Added(m, id(before, "a.A#x"), "x", Mode.READ))
+                .expecting(new Change.Added(n, y, "y", Mode.READ));
+        projection.apply(new Primitive.Set(m, "body", "return " + Body.name(id(before, "a.B#x"))));
+
+        assertThat(new BindingView().check(new Comparison(meant, projection, true)))
+                .extracting(Violation::code, Violation::detail).containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("binding.rebound", "a.B#m() now binds x to a.B#x instead of a.A#x"),
+                        org.assertj.core.groups.Tuple.tuple("binding.unresolved", "a.B#n() no longer binds to a.B#y"));
     }
 
     @Test
