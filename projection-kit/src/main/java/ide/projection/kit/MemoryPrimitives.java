@@ -280,12 +280,16 @@ final class MemoryPrimitives {
         else throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot express a " + use.mode().label()
                     + " of " + graph.render(use.target()) + " with " + graph.render(target));
         var receiver = use.receiver() == Reference.Receiver.NONE ? Reference.Receiver.of(mode) : use.receiver();
-        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), mode, receiver));
+        graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), mode, receiver).in(use.statement()));
         declare(graph, use.site(), mode, target);
     }
 
-    /** The fragment is a range of the method's uses by position: {@code "1-2"} is its second and third use. */
+    /**
+     * The fragment is statements of the method's body that follow one another, by their ids, or a range of the method's
+     * uses by position: {@code "1-2"} is its second and third use.
+     */
     private static Change extract(MemoryGraph graph, Primitive.Extract extract, Program before) {
+        if (extract.fragment().contains(Kind.STATEMENT.prefix() + ":")) return extractStatements(graph, extract, before);
         var range = extract.fragment().split("-");
         var positions = graph.usesFrom(extract.method());
         int first;
@@ -299,13 +303,7 @@ final class MemoryPrimitives {
         if (first < 0 || last < first || last >= positions.size()) {
             throw new PrimitiveRejected("extract.fragment", "uses " + extract.fragment() + " are not uses of " + graph.render(extract.method()));
         }
-        requireName(extract.name(), false);
-        var method = graph.nodes.get(extract.method());
-        var address = new Address.Callable(method.parent(), extract.name(), List.of());
-        if (graph.ids.has(address)) throw duplicate(graph.ids.render(address));
-        var created = graph.ids.of(address, Kind.METHOD);
-        graph.add(created, new MemoryGraph.Node(Kind.METHOD, extract.name(), method.parent(),
-                MemoryGraph.typed(MemoryGraph.modifiers("private", method.facts().getOrDefault(Fact.STATIC, "false")), "void")));
+        var created = extracted(graph, extract);
         var change = extract.intent(before, created);
         var where = graph.uses.get(positions.get(first)).statement(); // the call goes where the fragment began
         for (var k = first; k <= last; k++) {
@@ -314,6 +312,56 @@ final class MemoryPrimitives {
             if (use.target() != null) change = change.expect(new Change.Resited(use.target(), extract.method(), created));
         }
         graph.uses.add(positions.get(first), new MemoryGraph.Use(extract.method(), created, extract.name(), Mode.CALL).in(where));
+        return change;
+    }
+
+    /** The new private method an extraction makes, next to the method, static if it is. */
+    private static ElementId extracted(MemoryGraph graph, Primitive.Extract extract) {
+        requireName(extract.name(), false);
+        var method = graph.nodes.get(extract.method());
+        var address = new Address.Callable(method.parent(), extract.name(), List.of());
+        if (graph.ids.has(address)) throw duplicate(graph.ids.render(address));
+        var created = graph.ids.of(address, Kind.METHOD);
+        graph.add(created, new MemoryGraph.Node(Kind.METHOD, extract.name(), method.parent(),
+                MemoryGraph.typed(MemoryGraph.modifiers("private", method.facts().getOrDefault(Fact.STATIC, "false")), "void")));
+        return created;
+    }
+
+    /**
+     * Statements that follow one another move into the new method, keeping who they are, with the uses made in them;
+     * a new statement calling it takes their place.
+     */
+    private static Change extractStatements(MemoryGraph graph, Primitive.Extract extract, Program before) {
+        var method = extract.method();
+        var own = graph.statements(method);
+        var named = java.util.Arrays.stream(extract.fragment().split(",")).map(String::strip).map(ElementId::new).toList();
+        var from = own.indexOf(named.getFirst());
+        if (from < 0 || from + named.size() > own.size() || !own.subList(from, from + named.size()).equals(named)) {
+            throw new PrimitiveRejected("extract.fragment", extract.fragment() + " are not statements of " + graph.render(method)
+                    + " that follow one another");
+        }
+        var created = extracted(graph, extract);
+        var change = extract.intent(before, created);
+        for (var statement : named) graph.nodes.put(statement, graph.nodes.get(statement).under(created));
+        graph.ids.placeStatements(created, named);
+        var call = graph.ids.of(new Address.Statement(method, from), Kind.STATEMENT); // where the first one was
+        graph.order.add(graph.order.indexOf(named.getFirst()), call);
+        graph.nodes.put(call, new MemoryGraph.Node(Kind.STATEMENT, "", method, MemoryGraph.initialFacts(Kind.STATEMENT)));
+        var left = new java.util.ArrayList<>(own.subList(0, from));
+        left.add(call);
+        left.addAll(own.subList(from + named.size(), own.size()));
+        graph.ids.placeStatements(method, left);
+        var first = -1;
+        for (var i = 0; i < graph.uses.size(); i++) {
+            var use = graph.uses.get(i);
+            if (use.statement() == null || !named.contains(use.statement())) continue;
+            if (first < 0) first = i;
+            graph.uses.set(i, use.moved(created, use.target(), use.name()));
+            if (use.target() != null) change = change.expect(new Change.Resited(use.target(), method, created));
+        }
+        var calling = new MemoryGraph.Use(method, created, extract.name(), Mode.CALL).in(call);
+        if (first < 0) graph.uses.add(calling);
+        else graph.uses.add(first, calling);
         return change;
     }
 

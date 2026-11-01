@@ -178,7 +178,10 @@ public sealed interface Primitive {
     record Retarget(String reference, ElementId target) implements Primitive {
     }
 
-    /** Moves a fragment of a method, opaque to all but the projection, into a new method that the method calls. */
+    /**
+     * Moves a fragment of a method into a new method that the method calls: statements of its body that follow one
+     * another, named by their ids ({@code statement:7,statement:8}), or a fragment only the projection understands.
+     */
     @Summary("Moves a fragment of a method into a new method, and calls it")
     record Extract(ElementId method, String fragment, String name) implements Primitive {
     }

@@ -103,12 +103,10 @@ final class ExtractFragment {
         var method = declaration.as(MethodDeclaration.class);
         var stretch = STRETCH.matcher(extract.fragment().strip());
         if (stretch.matches()) return expression(extract, c, before, source, owner, declaration, method, stretch);
-        var dash = extract.fragment().indexOf('-');
-        var first = Integer.parseInt(extract.fragment().substring(0, dash).strip());
-        var last = Integer.parseInt(extract.fragment().substring(dash + 1).strip());
-        var selected = Bodies.statementsWithin(method, first, last);
+        var selected = extract.fragment().contains(Kind.STATEMENT.prefix() + ":") ? named(c, before, source, method, extract.fragment())
+                : lines(method, extract.fragment());
         if (selected.isEmpty()) {
-            throw new PrimitiveRejected("extract.fragment", "lines " + extract.fragment() + " are not whole statements of one block");
+            throw new PrimitiveRejected("extract.fragment", extract.fragment() + " is not whole statements of one block");
         }
         var ending = selected.getLast();
         var returning = ending instanceof ReturnStmt answer && answer.getExpression().isPresent()
@@ -145,6 +143,27 @@ final class ExtractFragment {
         Members.append(edits, unit, type, modifiers + outputType + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
         return created(extract, c, before, source, owner, unit, name, locals, statements);
+    }
+
+    /** The statements on lines {@code first-last}, whole statements of one block; none if they are not. */
+    private static List<Statement> lines(MethodDeclaration method, String fragment) {
+        var dash = fragment.indexOf('-');
+        return Bodies.statementsWithin(method, Integer.parseInt(fragment.substring(0, dash).strip()),
+                Integer.parseInt(fragment.substring(dash + 1).strip()));
+    }
+
+    /** The statements the fragment names by their ids: statements of the method's body that follow one another. */
+    private static List<Statement> named(Context c, Program before, ide.program.Element source, MethodDeclaration method, String fragment) {
+        var body = Bodies.statements(method);
+        var named = new ArrayList<Statement>();
+        for (var id : fragment.split(",")) {
+            var element = new ElementId(id.strip());
+            if (!before.contains(element) || !source.id().equals(before.element(element).parent())) return List.of();
+            var statement = c.declaration(before.element(element)).as(Statement.class);
+            if (!named.isEmpty() && Bodies.place(body, statement) != Bodies.place(body, named.getLast()) + 1) return List.of();
+            named.add(statement);
+        }
+        return named;
     }
 
     /**

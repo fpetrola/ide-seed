@@ -100,6 +100,8 @@ public abstract class ProjectionContract {
                         Map.of(Fact.TYPE, "long"), "0")),
                 new Scenario("inline a call", p -> new Primitive.Inline(reference(p, "a.B#n()", "a.A#m(int)"))),
                 new Scenario("extract a statement", p -> new Primitive.Extract(id(p, "a.A#total()"), fragmentOfTotalCallingM(), "add")),
+                new Scenario("extract statements by their ids", p -> new Primitive.Extract(id(p, "a.A#total()"),
+                        id(p, "a.A#total()[2]").value() + "," + id(p, "a.A#total()[3]").value(), "finish")),
                 new Scenario("rename a type", p -> new Primitive.Rename(id(p, "a.A"), "Base")),
                 new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)),
                 new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))),
@@ -209,6 +211,30 @@ public abstract class ProjectionContract {
         assertThat(after.children(m)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id).hasSize(2).startsWith(own);
         assertThat(after.children(total)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id)
                 .hasSize(1).doesNotContain(replaced);
+        assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+    }
+
+    /**
+     * Obligation 14 too: a fragment that names statements of a body moves them into the new method, where they keep who
+     * they are and the uses made in them are the new method's; a statement calling it takes their place.
+     */
+    @Test
+    void aFragmentNamingStatementsMovesThemIntoTheNewMethod() {
+        var projection = fixture();
+        var p = projection.program();
+        var total = id(p, "a.A#total()");
+        var second = id(p, "a.A#total()[2]");
+
+        var change = projection.apply(new Primitive.Extract(total, second.value(), "add"));
+
+        var after = projection.program();
+        var added = change.produced();
+        assertThat(after.element(second).parent()).isEqualTo(added);
+        assertThat(after.referencesIn(second)).isNotEmpty().allMatch(r -> r.site().equals(added));
+        var own = after.children(total).stream().filter(e -> e.kind() == Kind.STATEMENT).toList();
+        assertThat(own).hasSize(3).doesNotContain(after.element(second));
+        assertThat(after.referencesIn(own.get(1).id())).anyMatch(r -> r.target().equals(added) && r.mode() == Mode.CALL);
+        assertThat(p.expecting(change).diff(after).lost()).isEmpty();
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 

@@ -219,8 +219,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     - `Link(element, mode, target)`: extends, implements, declared hacia un tipo del workspace. Reemplaza
       `set superclass`, `set implements` y `set type` con tipo del workspace.
     - `Retarget(reference, target)`.
-    - `Extract(method, fragment, name)` e `Inline(reference)`: el fragmento es una dirección opaca que entiende la
-      proyección (hoy `primera-última` en líneas). `Inline` reemplaza una llamada por el cuerpo del método, o la
+    - `Extract(method, fragment, name)` e `Inline(reference)`: el fragmento son sentencias del cuerpo que se siguen,
+      por sus ids (`statement:7,statement:8`), o una dirección opaca que entiende la proyección (en Java, líneas
+      `primera-última` o el tramo exacto de una expresión). `Inline` reemplaza una llamada por el cuerpo del método, o la
       lectura de un local por el valor que se le da.
   - `Body`: lo que hace un método, en ningún lenguaje. Sentencias (`return`, asignar un campo) sobre expresiones (el
     valor de un campo o de un parámetro, un objeto nuevo), con cada elemento nombrado por id como `#{id}`. Es el
@@ -1310,6 +1311,11 @@ que esto no escala solo:
    - En la proyección en memoria, un uso escrito desde una sentencia (`.use("a.A#total()[2]", ...)`) se hace desde su
      método y en ella. Un cuerpo dicho hace los usos de cada sentencia en ella. Lo que extract en memoria lleva al
      método nuevo no queda en ninguna sentencia, porque ese método todavía no tiene.
+
+   **Ciclo 3 hecho el 2026-11-01**: `Extract` toma sentencias por sus ids, en los dos drivers. Se mudan al método
+   nuevo con su identidad y con los usos hechos en ellas, y una sentencia que lo llama ocupa su lugar. El contrato ya
+   extrae del fixture sin un fragmento en los términos de cada driver. Las líneas y el tramo de una expresión quedan
+   para lo que selecciona una persona.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
