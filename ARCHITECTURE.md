@@ -85,6 +85,8 @@ De la arquitectura (nuevos):
           ___________|________________
          |           |            |   \
          |       knowledge        |    maven     (lo que Maven dice de un proyecto)
+         |           :            |
+         |         rules          |              (Datalog: no depende de nada; knowledge lo usará)
          |        /     \         |
        java   engine   refactoring
          \       |       /
@@ -110,6 +112,7 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | engine      | projection                                                 | transacciones verificadas                    |
 | refactoring | projection, engine                                         | refactorings, run, lenguaje `.ref`, catálogo |
 | knowledge   | engine, refactoring                                        | planificador por metas                       |
+| rules       | nada                                                       | Datalog: reglas sobre hechos, un motor detrás de un contrato |
 | maven       | nada                                                       | el classpath de un proyecto, según Maven     |
 | session     | java, engine, refactoring, knowledge, maven; JavaParser en runtime | el ensamblado                         |
 | acceptance  | session, solo para tests                                   | escenarios transversales, samples, reglas    |
@@ -643,6 +646,36 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 
+### 5.11 `rules`: Datalog
+
+- **Qué es.** Un Datalog: relaciones que se definen con reglas sobre hechos, con negación estratificada. No sabe de
+  programas, de lenguajes ni de refactorings, y se usa como una herramienta externa: `knowledge` le pasa reglas y
+  hechos, y le pregunta.
+- **Para qué lo usarías.** Cualquier consulta con reglas sobre hechos que viven en otro lado: dependencias, permisos,
+  un grafo de lo que sea.
+- **Dominio.**
+  - `Term` (`Variable`, `Constant`), `Atom`, `Literal` (`Positive`, `Negative`, `Comparison` con `=` y `!=`),
+    `Clause`.
+  - `Rules`: el programa. Se arma desde cláusulas o desde texto escrito como lo lee cualquier Datalog
+    (`ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z).`), y se rechaza si podría significar dos cosas: una variable
+    que ningún átomo de su cuerpo liga, o una relación que depende de su propia negación. Dice qué relaciones define
+    y cuáles son recursivas.
+  - `Tuple` y `Facts`: los hechos se piden por patrón (un valor donde se sabe, nada donde vale cualquiera); son una
+    vista sobre lo que los tenga, no una copia. `with(agregados, quitados)` y `and(otros)`.
+  - `Engine` y `Evaluation`: `answers(consulta)`, `holds(átomo)` y `suppose(agregados, quitados)`, un estado
+    supuesto tan barato de armar como de tirar. El motor estándar (`OnDemand`) evalúa desde la consulta hacia abajo,
+    recuerda lo que calculó por patrón, calcula entera hasta su punto fijo una relación recursiva, y pide los hechos
+    solo con los valores que ya tiene.
+- **Qué ignora.** El grafo del programa, el lenguaje de superficie de las reglas (`def`, que vive en `knowledge`), el
+  planificador y los primitivos.
+- **Prueba de autonomía.** `RulesContract`: lo que cualquier motor contesta igual (consultas por patrón, uniones,
+  recursión hasta el punto fijo, negación, comparaciones, el orden de las respuestas, un estado supuesto que no toca
+  el original, hechos pedidos solo para las relaciones que las reglas usan). Corre contra el motor estándar.
+- **Abierto.** Un segundo motor (uno maduro) entra como otra implementación de `Engine`, con un adaptador que
+  traduzca las cláusulas a su dialecto y los mismos tests de contrato; ese día `RulesContract` se muda a un
+  `rules-kit`. No hay agregados ni símbolos de función: las reglas los evitan (un `count` se dice como "un parámetro
+  sin argumento").
+
 ## 6. Cómo se testea
 
 Maven asegura que los productos no se conocen; los tests de producto aseguran que no se necesitan. Hay tres clases
@@ -736,6 +769,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 30 | Errores de antes         | la vista del compilador compara: es violación todo error que no estaba antes de la transacción (mismo archivo, código y mensaje, sin importar la línea). Antes, con un solo error en cualquier archivo, la transacción no se compilaba y quedaba como obligación ("types were not checked"): en un proyecto real, siempre con algo roto, un extract superclass dejaba la superclase y la subclase sin compilar | tomada, 2026-11-01 |
 | 31 | Reparar sin cambiar el sentido | un efecto del conocimiento es un quick fix que la gente elige; solo uno que declara `keeps meaning` (abrir, mover adonde se usa, importar, ampliar un override, declarar el constructor que el lenguaje ya daba) puede reparar solo un refactoring. Un `Plan` dice si `changesMeaning` y el `Repairer` no lo toma. Antes cualquier fix sin preguntas podía reparar: cambiar una llamada a un método de nombre parecido, sacar un `final`, inventar un valor para los llamadores | tomada, 2026-11-01 |
 | 32 | Sentencias y locales     | las sentencias de primer nivel de un cuerpo y las variables locales son elementos del grafo (`STATEMENT`, `LOCAL`), sitio de sus usos; las expresiones siguen opacas; los nueve primitivos alcanzan; `Body` dice una sentencia. El conocimiento pasa a ser reglas generales del lenguaje, sin transformaciones escritas: el motor las deduce de lo que se rompe, y un refactoring es solo una intención. Reemplaza en parte la 7 (cuerpos fuera del grafo). Sección 9, etapa 3 y su apéndice | propuesta, 2026-11-01 |
+| 33 | Motor de reglas          | un producto propio, `rules`, que no depende de nada: Datalog con negación estratificada (seguro y estratificado al armarse), hechos como vistas pedidas por patrón y suponer un cambio como operación del contrato; el motor estándar evalúa a demanda. Uno maduro entra como otra implementación de `Engine`, con un adaptador y los mismos tests de contrato. El lenguaje de superficie (`def`, `say`) y el planificador quedan en `knowledge` | tomada, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -1109,8 +1143,8 @@ que esto no escala solo:
    que un refactoring los pida (propuesto)?
 4. Las expresiones siguen opacas (propuesto). Extract Variable desde una expresión usa la selección de la persona,
    que el driver convierte en un local y una sentencia.
-5. Qué motor evalúa las reglas: uno propio con la semántica de Datalog detrás de un contrato, o uno maduro. En
-   discusión.
+5. Qué motor evalúa las reglas: resuelta en la decisión 33. Uno propio y sencillo, con la semántica de Datalog,
+   como producto aparte (`rules`), detrás de un contrato que un motor maduro podría cumplir con un adaptador.
 
 #### Apéndice de la etapa 3: cómo quedaría el conocimiento
 

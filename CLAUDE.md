@@ -80,6 +80,11 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   only Java composite); the `.ref` language in `ide.refactoring.script` (in a text, `${expr}` writes a value and
   `#{expr}` writes elements as a body names them); the catalog
   `refactoring/src/main/resources/ide/refactoring/standard.ref`, which writes no code of any language.
+- `rules` (nothing) — Datalog as a tool apart: Term, Atom, Literal, Clause, Rules (built from clauses or from text
+  written as any Datalog reads it; refused if unsafe or not stratified), Tuple, Facts (relations asked by pattern: a
+  view, never a copy), Engine (`standard()`: on demand, from the query down; a recursive relation to its fixpoint) and
+  Evaluation (answers, holds, `suppose`: the same rules with facts added and removed). `RulesContract` is what every
+  engine answers alike. Knows nothing of programs.
 - `knowledge` (engine, refactoring) — goals/facts/effects planner over
   `knowledge/src/main/resources/ide/knowledge/knowledge.ref` (`Knowledge.standard(library)`); it searches a
   violation or a diagnostic with the facts each gives, backward: what an effect `needs` holds by a `fact` or is made

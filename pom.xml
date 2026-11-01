@@ -18,6 +18,7 @@
         <module>projection-kit</module>
         <module>java</module>
         <module>engine</module>
+        <module>rules</module>
         <module>refactoring</module>
         <module>knowledge</module>
         <module>maven</module>
@@ -65,6 +66,11 @@
             <dependency>
                 <groupId>ide</groupId>
                 <artifactId>ide-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-rules</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
