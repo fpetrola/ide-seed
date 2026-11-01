@@ -146,7 +146,11 @@ class PullUpMethodTest {
     }
 
     @Test
-    void methodThatWouldBeOverriddenBySiblingAborts() {
+    /**
+     * A sibling's method of the same signature overrides the method moved up, and that changes no dispatch: the calls
+     * of the moved method are made on the type it came from, which the sibling is not.
+     */
+    void aSiblingsMethodOfTheSameSignatureOverridesTheMethodMovedUp() {
         var ws = Workspace.of(Map.of(
                 "a/A.java", A,
                 "a/B.java", """
@@ -172,9 +176,9 @@ class PullUpMethodTest {
 
         var result = ws.invoke("pull-up-method", Map.of("method", "a.B#name()"));
 
-        assertThat(result.applied()).isFalse();
-        assertThat(result.violations()).extracting(Violation::code).containsExactly("dispatch.new-override");
-        assertThat(result.violations().getFirst().detail()).contains("a.C#name()", "a.A#name()");
-        assertThat(ws.source("a/A.java")).isEqualTo(A);
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/A.java")).contains("return \"b\";");
+        assertThat(ws.source("a/C.java")).contains("return \"c\";");
+        assertThat(ws.diagnostics()).isEmpty();
     }
 }

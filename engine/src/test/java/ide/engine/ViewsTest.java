@@ -98,6 +98,21 @@ class ViewsTest {
                 .containsExactlyInAnyOrder("a.C#m() would override a.A#m()", "a.B#m() no longer overrides a.A#m()");
     }
 
+    /** The calls of a method moved up were made on receivers of the type it was in: a sibling's override they never reach. */
+    @Test
+    void dispatchIgnoresAnOverrideNoCallOfTheOverriddenMethodCanReach() {
+        var projection = MemoryProjection.builder().rules(PRIVATE_TO_TOP_LEVEL)
+                .type("a.A")
+                .type("a.B").extend("a.B", "a.A").method("a.B", "m", "void")
+                .type("a.C").extend("a.C", "a.A").method("a.C", "m", "void")
+                .build();
+        var before = projection.program();
+
+        projection.apply(new Primitive.Move(id(before, "a.B#m()"), id(before, "a.A"), null)); // C's m overrides it now
+
+        assertThat(new DispatchView().check(new Comparison(before, projection, true))).isEmpty();
+    }
+
     @Test
     void theCompilerSeesItsErrorsOnlyIfTheCodeCompiledBefore() {
         var memory = MemoryProjection.builder().type("a.A").build();

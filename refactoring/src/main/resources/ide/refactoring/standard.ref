@@ -193,6 +193,22 @@ refactoring push-down-member "Moves a member into the only subclass of its type"
   return ${member}
 end
 
+refactoring pull-up-unifying "Moves a member up to its superclass; the same member in the other subclasses goes into it"
+  param member : element(FIELD,METHOD) "the member to move up"
+  let sup = superclass(owner(member))
+  require nonempty(sup) "${qualified(owner(member))} has no superclass in the workspace"
+  move ${member} ${sup}
+  for s in subclasses(sup)
+    let twin = member-named(s, member)
+    if nonempty(twin)
+      if and(eq(type(twin), type(member)), eq(body(twin), body(member)), eq(attr(twin, "static"), attr(member, "static")))
+        delete ${twin} into=${member}
+      end
+    end
+  end
+  return ${member}
+end
+
 refactoring collapse-hierarchy "Merges a class into its superclass: its members go up and its uses use the superclass"
   param type : element(CLASS) "the class to merge away"
   let sup = superclass(type)

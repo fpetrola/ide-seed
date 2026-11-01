@@ -1,5 +1,6 @@
 package ide.refactoring.script;
 
+import ide.program.Address;
 import ide.program.Element;
 import ide.program.ElementId;
 import ide.program.Fact;
@@ -40,8 +41,7 @@ final class ScriptFunctions {
             case "superclass" -> graph.superclass(element(args, 0).id()).map(e -> elem(e.id())).orElse(null);
             case "enclosing" -> elem(graph.enclosingType(element(args, 0).id()).id());
             case "subclass-of" -> bool(graph.isSubclass(element(args, 0), element(args, 1)));
-            case "member-named" -> graph.members(element(args, 0).id()).stream()
-                    .filter(m -> m.name().equals(element(args, 1).name()) && m.kind() == element(args, 1).kind())
+            case "member-named" -> graph.members(element(args, 0).id()).stream().filter(m -> alike(m, element(args, 1)))
                     .map(m -> elem(m.id())).findFirst().orElse(null);
             case "field-in" -> graph.typesIn(text(args, 0)).stream()
                     .flatMap(t -> graph.members(t.id()).stream())
@@ -157,6 +157,12 @@ final class ScriptFunctions {
 
     private static Value texts(List<String> texts) {
         return new Value.Items(texts.stream().<Value>map(Value.Text::new).toList());
+    }
+
+    /** Of the same kind and name; for a method, with the same parameter types too. */
+    private static boolean alike(Element a, Element b) {
+        if (a.kind() != b.kind() || !a.name().equals(b.name())) return false;
+        return !(a.address() instanceof Address.Callable ca && b.address() instanceof Address.Callable cb) || ca.keys().equals(cb.keys());
     }
 
     private static String cap(String s) {
