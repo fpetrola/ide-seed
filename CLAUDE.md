@@ -32,7 +32,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   uses read|write|update|call|new|type and links extends|implements|declared; Receiver: what a use is made on, the
   object itself, a type or another object, none for links, types and news), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
-  parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
+  parameter type keys, locals by their callable's id, name and which of that name they are: `m()/i'2`) and Identity
+  (address → id; rebindType, rename, move (a local also to its place among those of its name), resign, forget). The vocabulary of
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
   its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
   baseline), Change (produced element, expectations, pins: what a repair may not take back) and Body (what a method
@@ -60,7 +61,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. A field or call that surely binds nothing (for a call: no method of that
   name where it is looked up) is an unresolved use too; binding it renames the use. What one needs (expected type,
-  arguments) is asked of the projection (semantics.UseNeeds). An edit by hand reconciles identity (types, members,
+  arguments) is asked of the projection (semantics.UseNeeds). The locals of a method or constructor (not of a lambda or
+  a class inside it) are its elements and their uses references from it; JavaRules reaches a local only from inside
+  its method. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the
+  others are gone (they are the new method's parameters, or its own local). An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through

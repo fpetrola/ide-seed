@@ -1,7 +1,7 @@
 package ide.program;
 
 public enum Kind {
-    PACKAGE, CLASS, INTERFACE, ENUM, FIELD, CONSTRUCTOR, METHOD, PARAM;
+    PACKAGE, CLASS, INTERFACE, ENUM, FIELD, CONSTRUCTOR, METHOD, PARAM, LOCAL;
 
     public boolean isType() {
         return this == CLASS || this == INTERFACE || this == ENUM;
@@ -15,6 +15,7 @@ public enum Kind {
             case CONSTRUCTOR -> "ctor";
             case METHOD -> "method";
             case PARAM -> "param";
+            case LOCAL -> "local";
         };
     }
 }

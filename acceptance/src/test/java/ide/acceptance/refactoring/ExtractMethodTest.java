@@ -99,6 +99,44 @@ class ExtractMethodTest {
     }
 
     @Test
+    void aLoopIsExtractedAlthoughTheNextOneReusesTheNameOfItsVariable() {
+        var ws = Workspace.of(Map.of("a/Scores.java", """
+                package a;
+
+                class Scores {
+                    int total(int[] points) {
+                        int sum = 0;
+                        for (int i = 0; i < points.length; i++) sum += points[i];
+                        for (int i = 0; i < points.length; i++) sum -= i;
+                        return sum;
+                    }
+                }
+                """));
+
+        var result = ws.invoke("extract-method", Map.of("method", "a.Scores#total(int[])", "lines", "6-6", "name", "add"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Scores.java")).isEqualTo("""
+                package a;
+
+                class Scores {
+                    int total(int[] points) {
+                        int sum = 0;
+                        sum = add(points, sum);
+                        for (int i = 0; i < points.length; i++) sum -= i;
+                        return sum;
+                    }
+
+                    private int add(int[] points, int sum) {
+                        for (int i = 0; i < points.length; i++) sum += points[i];
+                        return sum;
+                    }
+                }
+                """);
+    }
+
+    @Test
     void aFragmentWithAJumpOutOfItIsRefused() {
         var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
 

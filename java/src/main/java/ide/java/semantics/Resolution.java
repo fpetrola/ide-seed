@@ -34,6 +34,7 @@ import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclar
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserVariableDeclaration;
 
 import ide.program.Fact;
 import ide.program.Kind;
@@ -148,6 +149,15 @@ public final class Resolution {
                     && v.getParentNode().filter(FieldDeclaration.class::isInstance).isPresent() ? Mode.DECLARED : Mode.TYPE;
             case null, default -> Mode.TYPE;
         };
+    }
+
+    /** The local variable a name binds, or null: a field, a parameter, or what the solver cannot tell. */
+    public static VariableDeclarator resolveLocal(NameExpr name) {
+        try {
+            return name.resolve() instanceof JavaParserVariableDeclaration variable ? variable.getVariableDeclarator() : null;
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
     }
 
     /** The method a method reference ({@code Book::code}) resolves to, or null. */

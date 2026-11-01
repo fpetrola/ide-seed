@@ -27,6 +27,7 @@ class ReconciliationTest {
             case FIELD -> new Address.Field(parent, name);
             case METHOD, CONSTRUCTOR -> new Address.Callable(parent, kind == Kind.CONSTRUCTOR ? "new" : name, List.of());
             case PARAM -> new Address.Param(parent, name);
+            case LOCAL -> new Address.Local(parent, name, 0);
         };
         elements.add(new Element(element, kind, name, parent, address, id, facts));
         return element;

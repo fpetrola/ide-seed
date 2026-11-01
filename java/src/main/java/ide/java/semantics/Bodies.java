@@ -17,9 +17,11 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.BreakStmt;
@@ -37,10 +39,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Expression-level helpers for the body primitives (inline, extract): purity, precedence, parentheses. */
+/** Expression-level helpers for the body primitives (inline, extract): purity, precedence, parentheses, locals. */
 public final class Bodies {
 
     private Bodies() {
+    }
+
+    /**
+     * The variables a method or constructor declares in its own body, in the order they are written; those of a class
+     * or a lambda inside it are theirs.
+     */
+    public static List<VariableDeclarator> locals(CallableDeclaration<?> callable) {
+        return callable.findAll(VariableDeclarator.class, v -> v.getParentNode().filter(VariableDeclarationExpr.class::isInstance).isPresent()
+                && v.findAncestor(CallableDeclaration.class).orElse(null) == callable
+                && v.findAncestor(LambdaExpr.class).map(lambda -> lambda.findAncestor(CallableDeclaration.class).orElse(null) != callable).orElse(true));
+    }
+
+    /** Which of its name a local is among {@code locals}, 0 the first; -1 if it is not one of them. */
+    public static int ordinal(List<VariableDeclarator> locals, VariableDeclarator local) {
+        var ordinal = 0;
+        for (var other : locals) {
+            if (other == local) return ordinal; // nodes are equal by shape: two alike declarations are still two
+            if (other.getNameAsString().equals(local.getNameAsString())) ordinal++;
+        }
+        return -1;
     }
 
     /** Evaluating it twice, or not at all, cannot be told apart: names, literals, this, and field reads of those. */
@@ -159,8 +181,11 @@ public final class Bodies {
                 if (u.getExpression() instanceof NameExpr target) assigned.add(target.getNameAsString());
             });
         }
+        var declared = new java.util.ArrayList<VariableDeclarator>();
+        fragment.forEach(s -> declared.addAll(s.findAll(VariableDeclarator.class)));
         var usedAfter = new java.util.HashSet<String>();
         method.findAll(NameExpr.class).stream().filter(n -> n.getBegin().orElseThrow().isAfter(end))
+                .filter(n -> !inside.containsKey(n.getNameAsString()) || bindsOneOf(n, declared))
                 .forEach(n -> usedAfter.add(n.getNameAsString()));
         var outputs = new LinkedHashMap<String, Type>();
         inside.forEach((n, t) -> {
@@ -170,6 +195,15 @@ public final class Bodies {
             if (before.containsKey(n) && !inside.containsKey(n) && usedAfter.contains(n)) outputs.put(n, before.get(n));
         });
         return new Flow(inputs, outputs, inside.keySet());
+    }
+
+    /**
+     * Whether a name binds one of {@code declared}: another local of the same name, in a block of its own, does not.
+     * What the solver cannot tell is taken to bind it.
+     */
+    private static boolean bindsOneOf(NameExpr name, List<VariableDeclarator> declared) {
+        var local = Resolution.resolveLocal(name);
+        return local == null || declared.stream().anyMatch(v -> v == local);
     }
 
     /** Shifts lines so the least indented one starts with {@code indent}. */

@@ -82,6 +82,12 @@ public final class Identity {
         rebind(address(id), address(id).withOwner(owner));
     }
 
+    /** A local is now the {@code ordinal}th of its name in {@code owner} (0 the first): it moved, or one before it went. */
+    public void move(ElementId local, ElementId owner, int ordinal) {
+        var address = (Address.Local) address(local);
+        rebind(address, new Address.Local(owner, address.name(), ordinal));
+    }
+
     /** A callable's parameter list changed: same owner and name, new keys. */
     public void resign(ElementId id, List<String> keys) {
         var callable = (Address.Callable) address(id);
@@ -133,6 +139,7 @@ public final class Identity {
             case Address.Callable c -> render(address(c.owner())) + "#" + c.name()
                     + c.keys().stream().map(this::renderKey).collect(Collectors.joining(",", "(", ")"));
             case Address.Param p -> render(address(p.owner())) + "/" + p.name();
+            case Address.Local l -> render(address(l.owner())) + "/" + l.name() + (l.ordinal() == 0 ? "" : "'" + (l.ordinal() + 1));
         };
     }
 

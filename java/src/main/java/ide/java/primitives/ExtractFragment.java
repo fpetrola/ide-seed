@@ -1,18 +1,28 @@
 package ide.java.primitives;
 
+import com.github.javaparser.Range;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import ide.java.semantics.Bodies;
 import ide.java.syntax.Members;
 import ide.java.text.EditSet;
 import ide.program.Address;
 import ide.program.Change;
+import ide.program.ElementId;
+import ide.program.Identity;
 import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
 import ide.projection.PrimitiveRejected;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -21,7 +31,8 @@ import java.util.stream.Collectors;
  * inputs become parameters, at most one value used afterwards becomes the result. A fragment that ends the method with
  * its last return answers what the method answers, and the method returns what it answers. Refuses fragments that
  * are not whole statements of one block, that jump out otherwise, or that have more than one output. The change also says which uses
- * the new method makes now.
+ * the new method makes now, and which uses of the method's locals are gone: the new method has parameters for them, or a
+ * local of its own for what it answers. The locals declared only in the fragment move into the new method.
  */
 final class ExtractFragment {
 
@@ -55,6 +66,7 @@ final class ExtractFragment {
             throw new PrimitiveRejected("extract.type", "cannot tell the type of '" + expression + "'");
         }
         var params = inputs.entrySet().stream().map(e -> e.getValue().asString() + " " + e.getKey()).collect(Collectors.joining(", "));
+        var locals = Locals.of(c, before, source.id(), method, expression.getRange().orElseThrow(), List.of(), null);
         var typeDeclaration = c.declaration(owner).as(TypeDeclaration.class);
         var indent = Members.indentation(unit, typeDeclaration);
         var modifiers = method.isStatic() ? "private static " : "private ";
@@ -63,15 +75,17 @@ final class ExtractFragment {
         edits.replace(unit, expression, name + "(" + String.join(", ", inputs.keySet()) + ")");
         Members.append(edits, unit, typeDeclaration, modifiers + type + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
-        return created(extract, c, before, source, owner, unit, name);
+        return created(extract, c, before, source, owner, unit, name, locals);
     }
 
     /** What an extraction made: the new method, which the uses moved into it are made from now. */
     private static Change created(Primitive.Extract extract, Context c, Program before, ide.program.Element source,
-                                  ide.program.Element owner, ide.java.text.Unit unit, String name) {
+                                  ide.program.Element owner, ide.java.text.Unit unit, String name, Locals locals) {
         var created = Shared.typeIn(c.sources().unit(unit.path()), owner.qualified()).getMethodsByName(name).getFirst();
         var id = c.ids().of(new Address.Callable(owner.id(), name, c.keys().of(created)), Kind.METHOD);
+        locals.move(c.ids(), source.id(), id);
         var change = extract.intent(before, id);
+        for (var gone : locals.gone()) change = change.expect(gone);
         for (var moved : c.program().referencesFrom(id)) { // the fragment's uses are made from the new method
             change = change.expect(new Change.Resited(moved.target(), source.id(), id));
         }
@@ -115,6 +129,8 @@ final class ExtractFragment {
         var end = selected.getLast().getEnd().orElseThrow().line;
         var body = Bodies.reindent(unit.lines(begin, end), indent + "    ");
         if (output != null) body += indent + "    return " + output + ";\n";
+        var locals = Locals.of(c, before, source.id(), method, new Range(selected.getFirst().getBegin().orElseThrow(),
+                selected.getLast().getEnd().orElseThrow()), selected, output != null && flow.declaredInside(output) ? output : null);
         var call = name + "(" + String.join(", ", flow.inputs().keySet()) + ")";
         var callLine = returning ? "return " + call + ";" : output == null ? call + ";"
                 : flow.declaredInside(output) ? outputType + " " + output + " = " + call + ";"
@@ -123,6 +139,49 @@ final class ExtractFragment {
         var edits = new EditSet().replaceLines(unit, begin, end, unit.indentation(begin) + callLine + "\n");
         Members.append(edits, unit, type, modifiers + outputType + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
-        return created(extract, c, before, source, owner, unit, name);
+        return created(extract, c, before, source, owner, unit, name, locals);
+    }
+
+    /**
+     * What an extraction does to the method's locals. Those declared in the fragment move into the new method, all but
+     * the one it answers, which stays where the call declares it again; the fragment's uses of the others are gone.
+     * {@code moving} and {@code staying} say which of its name each is, in the new method and in this one.
+     */
+    private record Locals(Map<ElementId, Integer> moving, Map<ElementId, Integer> staying, List<Change.Expectation> gone) {
+
+        /** {@code statements} are the fragment's own (none for an expression), {@code answered} the output it declares. */
+        static Locals of(Context c, Program before, ElementId source, MethodDeclaration method,
+                         Range fragment, List<Statement> statements, String answered) {
+            var all = Bodies.locals(method);
+            var inside = all.stream().filter(v -> v.getRange().filter(fragment::contains).isPresent()).toList();
+            var moving = new LinkedHashMap<ElementId, Integer>();
+            var left = new ArrayList<VariableDeclarator>();
+            for (var local : all) {
+                if (inside.stream().noneMatch(v -> v == local) || answers(local, statements, answered)) left.add(local);
+                else moving.put(c.reader().local(local), Bodies.ordinal(inside, local));
+            }
+            var staying = new LinkedHashMap<ElementId, Integer>();
+            for (var local : left) staying.put(c.reader().local(local), Bodies.ordinal(left, local));
+            var gone = new ArrayList<Change.Expectation>();
+            for (var use : before.referencesFrom(source)) {
+                if (before.element(use.target()).kind() == Kind.LOCAL && !moving.containsKey(use.target())
+                        && c.use(use.id()).getRange().filter(fragment::contains).isPresent()) {
+                    gone.add(new Change.Dropped(source, use.target()));
+                }
+            }
+            return new Locals(moving, staying, gone);
+        }
+
+        /** Whether a local is the output the fragment declares at its top, which the call declares again. */
+        private static boolean answers(VariableDeclarator local, List<Statement> statements, String answered) {
+            var statement = local.getParentNode().flatMap(Node::getParentNode).orElse(null);
+            return local.getNameAsString().equals(answered) && statements.stream().anyMatch(s -> s == statement);
+        }
+
+        /** Identity follows, before anything is read again: those that went first, so that those left close ranks. */
+        void move(Identity ids, ElementId source, ElementId method) {
+            moving.forEach((local, ordinal) -> ids.move(local, method, ordinal));
+            staying.forEach((local, ordinal) -> ids.move(local, source, ordinal));
+        }
     }
 }

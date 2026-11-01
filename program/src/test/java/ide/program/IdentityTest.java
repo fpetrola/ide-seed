@@ -50,6 +50,26 @@ class IdentityTest {
     }
 
     @Test
+    void aLocalMovesAsWhichOfItsNameItIsWhereItGoes() {
+        var ids = new Identity();
+        var a = ids.of(new Address.Type("a.A"), Kind.CLASS);
+        var m = ids.of(new Address.Callable(a, "m", List.of()), Kind.METHOD);
+        var n = ids.of(new Address.Callable(a, "n", List.of()), Kind.METHOD);
+        var first = ids.of(new Address.Local(m, "i", 0), Kind.LOCAL);
+        var second = ids.of(new Address.Local(m, "i", 1), Kind.LOCAL);
+        var third = ids.of(new Address.Local(m, "i", 2), Kind.LOCAL);
+
+        ids.move(second, n, 0);
+        ids.move(third, m, 1);
+
+        assertThat(ids.get(new Address.Local(m, "i", 0))).isEqualTo(first);
+        assertThat(ids.get(new Address.Local(n, "i", 0))).isEqualTo(second);
+        assertThat(ids.get(new Address.Local(m, "i", 1))).isEqualTo(third);
+        assertThat(ids.has(new Address.Local(m, "i", 2))).isFalse();
+        assertThat(ids.render(ids.address(third))).isEqualTo("a.A#m()/i'2");
+    }
+
+    @Test
     void anElementReadAnewCanBeTheOneItWas() {
         var ids = new Identity();
         var a = ids.of(new Address.Type("a.A"), Kind.CLASS);

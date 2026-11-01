@@ -6,7 +6,8 @@ import java.util.regex.Pattern;
 /**
  * Where an element is, as the text names it. A type is addressed by its qualified name; a member by the id of its
  * owner and its name, so renaming or moving a type changes no member's address; a callable also by the keys of its
- * parameter types (the id of a workspace type, the name of any other); a parameter by the id of its callable.
+ * parameter types (the id of a workspace type, the name of any other); a parameter by the id of its callable; a local
+ * by the id of its callable, its name, and which of the locals of that name it is (the first is 0).
  */
 public sealed interface Address {
 
@@ -28,12 +29,16 @@ public sealed interface Address {
     record Param(ElementId owner, String name) implements Address {
     }
 
+    record Local(ElementId owner, String name, int ordinal) implements Address {
+    }
+
     /** The element this address hangs from: the owner of a member or parameter; null for packages and types. */
     default ElementId owner() {
         return switch (this) {
             case Field f -> f.owner();
             case Callable c -> c.owner();
             case Param p -> p.owner();
+            case Local l -> l.owner();
             case Package p -> null;
             case Type t -> null;
         };
@@ -45,6 +50,7 @@ public sealed interface Address {
             case Field f -> new Field(owner, f.name());
             case Callable c -> new Callable(owner, c.name(), c.keys());
             case Param p -> new Param(owner, p.name());
+            case Local l -> new Local(owner, l.name(), l.ordinal());
             default -> throw new IllegalArgumentException("not owned: " + this);
         };
     }
@@ -55,6 +61,7 @@ public sealed interface Address {
             case Field f -> new Field(f.owner(), name);
             case Callable c -> new Callable(c.owner(), name, c.keys());
             case Param p -> new Param(p.owner(), name);
+            case Local l -> new Local(l.owner(), name, l.ordinal());
             default -> throw new IllegalArgumentException("renamed by qualified name: " + this);
         };
     }

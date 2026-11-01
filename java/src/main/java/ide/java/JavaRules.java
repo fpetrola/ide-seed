@@ -9,7 +9,7 @@ import ide.program.Program;
 
 import java.util.List;
 
-/** Java semantics: access control, and the value a field holds before anything is assigned to it. */
+/** Java semantics: access control (a local by its scope), and the value a field holds before anything is assigned to it. */
 public final class JavaRules implements LanguageRules {
 
     @Override
@@ -21,6 +21,7 @@ public final class JavaRules implements LanguageRules {
             case "package" -> samePackage(graph, site, target);
             case "protected" -> samePackage(graph, site, target)
                     || graph.isSubclass(graph.enclosingType(site), graph.enclosingType(target));
+            case null -> graph.within(site, element.parent()); // a local: reached from inside its method only
             default -> throw new IllegalStateException("unknown visibility of " + element);
         };
     }

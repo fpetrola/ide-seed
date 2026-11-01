@@ -31,7 +31,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The fixture is this program (its outline is checked first, so both sides agree on it):
  * <pre>
  * package a
- *   public class A           int x; int m(int p) reads x; int k(int p); int total() reads x, then calls m
+ *   public class A           int x; int m(int p) reads x; int k(int p); int total() reads x into its local sum,
+ *                            adds what m answers to it, and answers it
  *   public class B extends A int n() calls m, then reads x
  *   public interface I
  * package b
@@ -49,10 +50,12 @@ public abstract class ProjectionContract {
             "CLASS a.A", "CLASS a.B", "CLASS b.C", "CLASS b.C.Note", "CLASS java.lang.String (library)",
             "FIELD a.A#x", "FIELD b.C#a", "FIELD b.C#label", "FIELD b.C#price",
             "INTERFACE a.I",
+            "LOCAL a.A#total()/sum",
             "METHOD a.A#k(int)", "METHOD a.A#m(int)", "METHOD a.A#total()", "METHOD a.B#n()", "METHOD b.C#use(A)",
             "PARAM a.A#k(int)/p", "PARAM a.A#m(int)/p", "PARAM b.C#use(A)/other",
             "a.A#m(int) -> a.A#x (read)",
-            "a.A#total() -> a.A#m(int) (call)", "a.A#total() -> a.A#x (read)",
+            "a.A#total() -> a.A#m(int) (call)", "a.A#total() -> a.A#total()/sum (read)",
+            "a.A#total() -> a.A#total()/sum (read)", "a.A#total() -> a.A#total()/sum (write)", "a.A#total() -> a.A#x (read)",
             "a.B -> a.A (extends)",
             "a.B#n() -> a.A#m(int) (call)", "a.B#n() -> a.A#x (read)",
             "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)", "b.C#price -> ? Money (declared)",
@@ -246,8 +249,8 @@ public abstract class ProjectionContract {
     }
 
     /**
-     * Obligation 12: a use says what it is made on. The fixture's uses are all on the object itself (written alone);
-     * a link or a type used is made on nothing.
+     * Obligation 12: a use says what it is made on. The fixture's uses of members are all on the object itself
+     * (written alone); a link, a type used or a local is made on nothing.
      */
     @Test
     void aUseSaysWhatItIsMadeOn() {
@@ -255,9 +258,26 @@ public abstract class ProjectionContract {
 
         assertThat(p.referencesFrom(id(p, "a.B#n()"))).extracting(r -> r.name() + " " + r.receiver())
                 .containsExactly("m SELF", "x SELF");
-        assertThat(p.referencesFrom(id(p, "a.A#total()"))).extracting(Reference::receiver).containsOnly(Reference.Receiver.SELF);
+        assertThat(p.referencesFrom(id(p, "a.A#total()"))).filteredOn(r -> p.element(r.target()).kind() != Kind.LOCAL)
+                .extracting(Reference::receiver).containsOnly(Reference.Receiver.SELF);
         assertThat(p.referencesFrom(id(p, "a.B"))).extracting(Reference::receiver).containsOnly(Reference.Receiver.NONE);
         assertThat(p.referencesFrom(id(p, "b.C#a"))).extracting(Reference::receiver).containsOnly(Reference.Receiver.NONE);
+    }
+
+    /**
+     * Obligation 13: a local is an element of its method, with its type; its uses are references from the method,
+     * made on nothing, in the order they are written.
+     */
+    @Test
+    void aLocalIsAnElementOfItsMethodAndItsUsesReferencesFromIt() {
+        var p = fixture().program();
+        var sum = p.find("a.A#total()/sum").orElseThrow();
+
+        assertThat(sum.kind()).isEqualTo(Kind.LOCAL);
+        assertThat(sum.parent()).isEqualTo(id(p, "a.A#total()"));
+        assertThat(sum.fact(Fact.TYPE)).isEqualTo("int");
+        assertThat(p.referencesFrom(id(p, "a.A#total()"))).filteredOn(r -> r.target().equals(sum.id()))
+                .extracting(r -> r.mode().label() + " " + r.receiver()).containsExactly("write NONE", "read NONE", "read NONE");
     }
 
     /**

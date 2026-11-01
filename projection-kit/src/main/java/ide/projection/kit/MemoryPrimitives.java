@@ -82,6 +82,8 @@ final class MemoryPrimitives {
             case FIELD -> new Address.Field(parent, name);
             case METHOD -> new Address.Callable(parent, name, List.of());
             case PARAM -> new Address.Param(parent, name);
+            case LOCAL -> new Address.Local(parent, name, (int) graph.nodes.values().stream()
+                    .filter(n -> n.kind() == Kind.LOCAL && parent.equals(n.parent()) && n.name().equals(name)).count());
             case CONSTRUCTOR -> new Address.Callable(parent, "new", List.of());
         };
         if (ids.has(address)) throw duplicate(ids.render(address));

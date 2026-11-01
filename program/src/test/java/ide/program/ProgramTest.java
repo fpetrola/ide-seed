@@ -48,6 +48,7 @@ class ProgramTest {
             case FIELD -> new Address.Field(parent, name);
             case METHOD, CONSTRUCTOR -> new Address.Callable(parent, name, List.of());
             case PARAM -> new Address.Param(parent, name);
+            case LOCAL -> new Address.Local(parent, name, 0);
         };
         return new Element(id, kind, name, parent, address, qualified, Map.of(Fact.VISIBILITY, "package", Fact.STATIC, "false"));
     }

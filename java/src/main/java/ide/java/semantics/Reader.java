@@ -270,6 +270,7 @@ public final class Reader {
                         type.getNameAsString(), typeId, attributes(constructor));
                 declarations.put(id, new Decl(unit, constructor));
                 addParams(elements, declarations, unit, constructor, id);
+                addLocals(elements, declarations, unit, constructor, id);
             }
             for (var method : type.getMethods()) {
                 var facts = new HashMap<>(attributes(method));
@@ -285,6 +286,7 @@ public final class Reader {
                         method.getNameAsString(), typeId, facts);
                 declarations.put(id, new Decl(unit, method));
                 addParams(elements, declarations, unit, method, id);
+                addLocals(elements, declarations, unit, method, id);
             }
         }
         return new Declared(Shape.of(unit), elements, declarations);
@@ -329,10 +331,11 @@ public final class Reader {
                 }
                 default -> {
                     var field = resolveField((Expression) use);
-                    var type = field == null && use instanceof NameExpr name ? resolveTypeDeclaration(name) : null;
+                    var local = field == null && use instanceof NameExpr name && resolveLocal(name) instanceof VariableDeclarator declarator ? local(declarator) : null;
+                    var type = field == null && local == null && use instanceof NameExpr name ? resolveTypeDeclaration(name) : null;
                     typeName = type != null;
-                    target = field != null ? field(field) : named(type, named);
-                    bindsNothing = field == null && type == null && valueBindsNothing((Expression) use);
+                    target = field != null ? field(field) : local != null ? local : named(type, named);
+                    bindsNothing = field == null && local == null && type == null && valueBindsNothing((Expression) use);
                 }
             }
             var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
@@ -347,8 +350,9 @@ public final class Reader {
             var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
             nodes.put(id, use);
             var mode = typeName ? Mode.TYPE : modeOf(use);
+            var receiver = target != null && target.value().startsWith(Kind.LOCAL.prefix()) ? Reference.Receiver.NONE : receiver(use, mode);
             if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use)));
-            else references.add(new Reference(id, site, target, name, mode, receiver(use, mode)));
+            else references.add(new Reference(id, site, target, name, mode, receiver));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
     }
@@ -460,6 +464,34 @@ public final class Reader {
         var id = ids.of(address, kind);
         elements.add(new Element(id, kind, name, parent, address, ids.render(address), Map.copyOf(facts)));
         return id;
+    }
+
+    /**
+     * The locals a method or constructor declares (not those of a class or a lambda inside it, which are theirs), in the
+     * order they are written: two of one name are told apart by which they are.
+     */
+    private void addLocals(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, CallableDeclaration<?> callable,
+                           ElementId owner) {
+        var seen = new HashMap<String, Integer>();
+        for (var local : Bodies.locals(callable)) {
+            var name = local.getNameAsString();
+            var ordinal = seen.merge(name, 1, Integer::sum) - 1;
+            var id = add(elements, new Address.Local(owner, name, ordinal), Kind.LOCAL, name, owner,
+                    Map.of(Fact.TYPE, local.getType().asString()));
+            declarations.put(id, new Decl(unit, local));
+        }
+    }
+
+    /** The local a declarator is, by its callable, its name, and which of that name it is; null if it is none. */
+    public ElementId local(VariableDeclarator declarator) {
+        var callable = declarator.findAncestor(CallableDeclaration.class).orElse(null);
+        var ordinal = callable == null ? -1 : Bodies.ordinal(Bodies.locals(callable), declarator);
+        if (ordinal < 0) return null;
+        var type = callable.findAncestor(TypeDeclaration.class).orElse(null);
+        if (!(type instanceof TypeDeclaration<?> declared) || declared.getFullyQualifiedName().isEmpty()) return null;
+        var owner = ids.get(new Address.Type(qualifiedOf(declared)));
+        var method = owner == null ? null : ids.get(new Address.Callable(owner, nameOf(callable), keys.of(callable)));
+        return method == null ? null : ids.get(new Address.Local(method, declarator.getNameAsString(), ordinal));
     }
 
     private void addParams(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, CallableDeclaration<?> callable,

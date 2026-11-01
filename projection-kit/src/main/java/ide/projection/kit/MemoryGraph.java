@@ -137,6 +137,7 @@ final class MemoryGraph {
                     case Address.Callable c -> new Address.Callable(mapped.get(c.owner()), c.name(),
                             c.keys().stream().map(key -> remap(key, mapped)).toList());
                     case Address.Param a -> new Address.Param(mapped.get(a.owner()), a.name());
+                    case Address.Local a -> new Address.Local(mapped.get(a.owner()), a.name(), a.ordinal());
                 };
                 mapped.put(e.id(), ids.of(address, e.kind()));
             }
@@ -174,8 +175,10 @@ final class MemoryGraph {
         return id;
     }
 
+    /** A use made from {@code site}: of a member, on the object itself; of a local, on nothing. */
     void addUse(ElementId site, ElementId target, Mode mode) {
-        uses.add(new Use(site, target, nodes.get(target).name(), mode));
+        var local = nodes.get(target).kind() == Kind.LOCAL;
+        uses.add(new Use(site, target, nodes.get(target).name(), mode, local ? Reference.Receiver.NONE : Reference.Receiver.of(mode)));
     }
 
     void addUse(ElementId site, ElementId target, Mode mode, Reference.Receiver receiver) {
@@ -278,7 +281,7 @@ final class MemoryGraph {
     static Map<Fact, String> initialFacts(Kind kind) {
         return switch (kind) {
             case PACKAGE -> Map.of();
-            case PARAM -> Map.of(Fact.TYPE, "Object");
+            case PARAM, LOCAL -> Map.of(Fact.TYPE, "Object");
             case CLASS, INTERFACE, ENUM -> modifiers("public", "false");
             case FIELD -> typed(modifiers("package", "false"), "Object");
             case METHOD, CONSTRUCTOR -> typed(modifiers("package", "false"), "void");

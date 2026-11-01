@@ -83,6 +83,13 @@ public final class ProgramBuilder {
         return this;
     }
 
+    /** A local of a method, of {@code type}: its uses are made from the method. */
+    public ProgramBuilder local(String method, String name, String type) {
+        var local = projection.apply(new Primitive.Create(Kind.LOCAL, id(method), name)).produced();
+        declare(local, type);
+        return this;
+    }
+
     public ProgramBuilder extend(String type, String superclass) {
         projection.apply(new Primitive.Link(id(type), Mode.EXTENDS, id(superclass)));
         return this;

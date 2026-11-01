@@ -169,10 +169,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   refactoring sobre otro lenguaje.
 - **Dominio.**
   - `Element`: `id`, `kind`, `name`, `parent`, `facts`. `Kind`: PACKAGE, CLASS, INTERFACE, ENUM, FIELD,
-    CONSTRUCTOR, METHOD, PARAM.
+    CONSTRUCTOR, METHOD, PARAM, LOCAL (una variable de un método o constructor, hija de él; desde la etapa 3).
   - `Reference`: `site`, `target`, `mode`, `name` (cómo se escribió) y `receiver`: sobre qué se hace el uso, el
-    objeto mismo (escrito solo, o con `this` o `super`), un tipo, u otro objeto; un vínculo, un tipo usado o un
-    objeto nuevo, sobre nada. Lo agregó la regla de estáticos: un método estático usa lo que necesita un objeto solo a
+    objeto mismo (escrito solo, o con `this` o `super`), un tipo, u otro objeto; un vínculo, un tipo usado, un
+    objeto nuevo o un local, sobre nada. Lo agregó la regla de estáticos: un método estático usa lo que necesita un objeto solo a
     través de uno, y eso depende de cómo está escrito el uso (obligación 12 del contrato). Modos de uso: READ, WRITE, UPDATE, CALL, NEW,
     TYPE. Modos de vínculo: EXTENDS, IMPLEMENTS, DECLARED (el tipo declarado de un campo, parámetro o retorno). Un
     vínculo es una referencia porque la jerarquía y el verificador lo tratan igual que a un uso: hoy son strings
@@ -190,10 +190,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     `final`. Se amplía solo cuando un refactoring o una vista lo necesita para decidir.
   - `Address`: dirección tipada. Paquete por nombre; tipo por nombre calificado; miembro por id del dueño, nombre y
     claves de tipo de los parámetros (el id si el tipo es del workspace, el nombre si no); parámetro por id del
-    miembro y nombre. Se renderiza como `a.B#m(int)/x` para humanos y tests. Consecuencia buscada: un miembro no
-    cambia de dirección cuando su dueño o un tipo de parámetro se renombra o se mueve.
+    miembro y nombre; local por id de su método o constructor, nombre y cuál de ese nombre es, en el orden en que se
+    escriben. Se renderiza como `a.B#m(int)/x` para humanos y tests, y el segundo `i` de dos bloques hermanos como
+    `a.B#m(int)/i'2`. Consecuencia buscada: un miembro no cambia de dirección cuando su dueño o un tipo de parámetro
+    se renombra o se mueve.
   - `Identity`: tabla dirección → id. `of(address)` crea si no existe; `rebind(type, newType)` para rename y move de
-    tipos; `forget`. Con instantánea. Es la única operación de identidad: el parser nunca decide quién es quién.
+    tipos; `move(local, dueño, cuál)` cuando un local se va a otro método, o cuando se fue uno anterior de su nombre;
+    `forget`. Con instantánea. Es la única operación de identidad: el parser nunca decide quién es quién.
   - `Program`: el grafo inmutable, con índices por padre, por destino y por dirección. Consultas: children,
     members, referencesTo, referencesFrom, supertypes, superclassChain, isSubclass, overriddenAll, family,
     enclosingType, topLevel, byAddress, signature.
@@ -308,7 +311,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   La obligación 11 (`said`): la proyección dice el cuerpo de un método o constructor en el lenguaje de cuerpos cuando
   todo él se puede decir así (asignar un campo, responder un valor, hacer el objeto con otro constructor primero, sobre
   campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
-  La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. El ítem 5 suma al fixture una
+  La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. La obligación 13 (etapa 3,
+  fase 1): un local es un elemento de su método, con su tipo, y cada uso suyo es una referencia desde el método,
+  sin receptor. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
@@ -377,14 +382,19 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `semantics.UseNeeds` cuando se lo preguntan. Responde también en qué elemento cae una posición (`inside`) y qué
   construcciones la rodean (`around`, para agrandar la selección). Crea constructores, y extract toma, además de
   líneas enteras, el tramo exacto de una expresión (`línea:columna-línea:columna`) o un fragmento que termina el
-  método con su return.
+  método con su return. Desde la fase 1 de la etapa 3 lee los locales de cada método y constructor (no los de una
+  lambda ni los de una clase de adentro) y liga sus usos; `JavaRules` dice que a un local se llega solo desde adentro
+  de su método. Extract dice qué usos de locales se van: los que en el método nuevo son parámetros, y los del local
+  que responde, que en el método nuevo es otro. Los locales declarados solo en el fragmento se mudan con su
+  identidad, y los que quedan se numeran de nuevo. El flujo de extract distingue dos locales del mismo nombre por lo
+  que liga cada uso: antes, extraer un `for` se rechazaba si un `for` siguiente reusaba su `i`.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
   cuerpo (`binding.rebound`).
   Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
-  cuerpo, porque esos usos no son referencias del grafo.
+  cuerpo, porque esos usos no son referencias del grafo. Un local todavía no se renombra (el ciclo 2 de la fase 1).
 
 ### 5.5 `engine`: motor de transacciones verificadas
 
@@ -1219,6 +1229,19 @@ que esto no escala solo:
    nombres puede ser una relación del grafo, y borrar lo que nada usa, quitar un hecho de existencia.
 1. *Locales.* `LOCAL` y sus usos en el grafo, con obligación del contrato. Lo que gana: rename de locales verificado
    (y el rename en el lugar de la UI), Inline Variable.
+
+   **Ciclo 1 hecho el 2026-11-01**: los locales y sus usos están en el grafo, en los dos drivers (obligación 13).
+   - Dos locales del mismo nombre en bloques hermanos no son ambiguos, como decía la propuesta: son dos, numerados
+     en el orden en que se escriben (`i`, `i'2`). Así cada uso liga uno solo y el verificador los compara como a
+     cualquier otra referencia.
+   - El `site` de un uso de un local sigue siendo el método. La sentencia como `site` es de la fase 2 (pregunta
+     abierta 2).
+   - Los usos de un parámetro siguen sin ser referencias: `Body` los trata como valores, y renombrar un parámetro
+     todavía no renombra sus usos.
+   - Lo que el verificador encontró al entrar los locales fue extract: movía usos de locales sin decirlo. Ahora lo
+     dice, y lleva la identidad de los locales que se mudan con el fragmento.
+   - Costo: nada que se mida. En el sample de 100 archivos, la carga pasó de 172 a 185 ms y el segundo rename de 47
+     a 46 ms (`PerformanceProbe`, ruido incluido).
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
    sentencias, y `Extract` por lista de sentencias. Lo que gana: el fragmento de extract-method deja de ser opaco.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.

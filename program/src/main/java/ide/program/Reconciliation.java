@@ -53,6 +53,7 @@ public final class Reconciliation {
             case CONSTRUCTOR -> sameParent;
             case PARAM -> sole || sameParent && position(before, old) == position(after, fresh)
                     && (old.name().equals(fresh.name()) || Objects.equals(old.fact(Fact.TYPE), fresh.fact(Fact.TYPE)));
+            case LOCAL -> sole; // the one local of its method that went, and the one that came
         };
     }
 
