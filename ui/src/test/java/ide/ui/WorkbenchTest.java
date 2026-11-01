@@ -267,4 +267,19 @@ class WorkbenchTest {
         assertThat(dialogs.filled.getFirst().fields()).extracting(f -> f.param().name() + "=" + f.value()).contains("lines=7:16-7:20");
         assertThat(workbench.text("a/A.java")).contains("return sum(p);", "private int sum(int p) {");
     }
+
+    @Test
+    void theNextProblemIsWhereItIsOnItsLine() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/B.java", 1, 1);
+        workbench.type("a/B.java", B.replace("return a.m(1);", "return total + count;"));
+        workbench.act("apply-edit");
+
+        workbench.act("next-problem");
+        assertThat(workbench.where()).isEqualTo("a/B.java:5:16");
+        workbench.act("next-problem");
+        assertThat(workbench.where()).isEqualTo("a/B.java:5:24");
+        workbench.act("previous-problem");
+        assertThat(workbench.where()).isEqualTo("a/B.java:5:16");
+    }
 }

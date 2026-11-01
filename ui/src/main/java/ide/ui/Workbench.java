@@ -726,18 +726,22 @@ final class Workbench extends JPanel {
         go(result.strip().replaceFirst("^> ", ""));
     }
 
+    /** Goes to the next problem of the file (or the previous one), where it is on its line, errors and warnings alike. */
     private void problem(int direction) {
         var path = editors.current().orElseThrow(() -> new IllegalStateException("no file is open"));
-        var lines = problems.stream().filter(p -> path.equals(p.get("path"))).map(p -> ((Number) p.get("line")).intValue())
-                .distinct().sorted().toList();
-        if (lines.isEmpty()) {
+        var places = problems.stream().filter(p -> path.equals(p.get("path")))
+                .map(p -> new int[] {((Number) p.get("line")).intValue(), Math.max(1, p.get("column") instanceof Number n ? n.intValue() : 1)})
+                .sorted(java.util.Comparator.<int[]>comparingInt(at -> at[0]).thenComparingInt(at -> at[1])).toList();
+        if (places.isEmpty()) {
             say("no problems in " + path);
             return;
         }
-        var line = editors.line();
-        var next = direction > 0 ? lines.stream().filter(l -> l > line).findFirst().orElse(lines.getFirst())
-                : lines.reversed().stream().filter(l -> l < line).findFirst().orElse(lines.getLast());
-        editors.caret(next, 1);
+        var here = new int[] {editors.line(), editors.column()};
+        java.util.function.Predicate<int[]> after = at -> at[0] > here[0] || at[0] == here[0] && at[1] > here[1];
+        java.util.function.Predicate<int[]> before = at -> at[0] < here[0] || at[0] == here[0] && at[1] < here[1];
+        var next = direction > 0 ? places.stream().filter(after).findFirst().orElse(places.getFirst())
+                : places.reversed().stream().filter(before).findFirst().orElse(places.getLast());
+        editors.caret(next[0], next[1]);
     }
 
     private void remember() {
