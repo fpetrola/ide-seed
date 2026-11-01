@@ -164,17 +164,7 @@ effect make-abstract "make ${symbol} abstract"
   end
 end
 
-# A method used from a static place, where there is no object to call it on: it needs none.
-goal ecj.StaticMethodRequested needs callable-alone(symbol)
-
-effect make-static "make ${name(m)}() static"
-  makes callable-alone(symbol)
-  for m in methods-in(path, symbol)
-  do
-    set ${m} static true
-  end
-end
-
+# A method used from a static place, where there is no object to call it on: java.rules says what needs an object.
 # A private member nothing uses: it goes.
 goal ecj.UnusedPrivateField needs used-or-gone(symbol)
 goal ecj.UnusedPrivateMethod needs used-or-gone(symbol)

@@ -60,3 +60,26 @@ def constructed-explicitly(t) when kind(t, "class") and constructor(k, t)
 def constructed-explicitly(t) when kind(t, "enum") and constructor(k, t)
 
 say constructor for constructed-explicitly "create constructor ${name(value)}()"
+
+# What needs an object (JLS 8.4.3.2, 15.12.3): a static method or field uses an instance member of its own object
+# only through an object, and what is used through a type is static.
+rule no-object "a static member uses an instance member of its own object only through an object"
+  for s, m where self-use(s, m) and not static(m)
+  must not static(s)
+end
+
+rule through-type "what is used through a type is static"
+  for s, m where type-use(s, m)
+  must static(m)
+end
+
+# A field's static says how many values it has: one for all objects, or one for each.
+promise static of field "one value for all objects, or one for each"
+
+problem ecj.StaticMethodRequested is no-object(inside(path, line, column), element-at(path, line, column))
+problem ecj.NonStaticFieldFromStaticInvocation is no-object(inside(path, line, column), element-at(path, line, column))
+
+say static for no-object "make ${called} static"
+say not static for no-object "make ${called} not static"
+say static for through-type "make ${called} static"
+say not static for through-type "make ${called} not static"

@@ -570,7 +570,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   esa regla rota ahí. Una regla rota se hace cumplir quitándole uno de los hechos en que se apoya (la abducción
   también sabe quitar: `static` se pone o se saca), y después de cada cambio supuesto se buscan las violaciones nuevas
   alrededor de lo que cambió y se arreglan en el mismo plan, nunca deshaciendo un cambio propio. `promise relación of
-  tipo "por qué"` corta un camino, y el rastro dice por qué. Y que un tipo escrito en un archivo nombra un tipo
+  tipo "por qué"` corta un camino, y el rastro dice por qué. Las reglas de estáticos (JLS 8.4.3.2 y 15.12.3: un
+  miembro estático usa lo de instancia de su objeto solo a través de un objeto, y lo que se usa a través de un tipo es
+  estático), con el `static` de un campo como promesa, reemplazaron a `make-static`. De un método estático que llama a
+  uno de instancia salen, deducidos: hacerlo no estático, o hacer estático lo llamado y lo que eso llame; el camino
+  que termina en un campo se corta en la promesa, y el que deja sin estático a algo llamado a través del tipo se
+  descarta solo. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).
@@ -1168,9 +1173,10 @@ que esto no escala solo:
      el lenguaje ya daba). Todavía no hay promesas: hacen falta antes de deducir cambios que sí podrían romperlo.
    - Lo que una definición necesita de otra se supone hecho al leer lo que sigue, sin volver a evaluarlo.
 
-   Antes de las sentencias quedan efectos que tampoco las necesitan y que la misma máquina puede reemplazar:
-   `make-static` (la cadena de estáticos del apéndice), `make-abstract`, `unfinal`, `drop-final`, los cambios de tipo.
-   Necesitan abducir hechos que se quitan (`not static(m)`), además de los que se agregan.
+   Antes de las sentencias quedan efectos que tampoco las necesitan y que la misma máquina puede reemplazar. Los
+   estáticos ya pasaron (el 2026-11-01, 37279f6..): hizo falta que un uso diga sobre qué se hace (`Reference.receiver`,
+   obligación 12), restricciones (`rule`, `problem`), abducir hechos que se quitan, revisar las reglas después de
+   cada cambio supuesto y promesas. Quedan `make-abstract`, `unfinal`, `drop-final` y los cambios de tipo.
 1. *Locales.* `LOCAL` y sus usos en el grafo, con obligación del contrato. Lo que gana: rename de locales verificado
    (y el rename en el lugar de la UI), Inline Variable.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
