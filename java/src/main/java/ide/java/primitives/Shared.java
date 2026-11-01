@@ -5,7 +5,10 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import ide.program.Kind;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import ide.java.semantics.Reader;
@@ -39,11 +42,21 @@ final class Shared {
         return edits;
     }
 
-    /** The calls that resolve to a method, as last read. */
-    static List<MethodCallExpr> callsTo(Context c, ElementId method) {
-        var calls = new ArrayList<MethodCallExpr>();
-        for (var ref : c.program().referencesTo(method)) {
-            if (c.use(ref.id()) instanceof MethodCallExpr call) calls.add(call);
+    /** A call as its arguments are written: after {@code name}, a method's name or the type a {@code new} makes. */
+    record Call(Node node, NodeList<Expression> arguments, Node name) {
+    }
+
+    /** The calls that resolve to a method, or the {@code new}s that resolve to a constructor, as last read. */
+    static List<Call> callsTo(Context c, ElementId callable) {
+        var calls = new ArrayList<Call>();
+        for (var ref : c.program().referencesTo(callable)) {
+            switch (c.use(ref.id())) {
+                case MethodCallExpr call -> calls.add(new Call(call, call.getArguments(), call.getName()));
+                case ObjectCreationExpr creation -> calls.add(new Call(creation, creation.getArguments(), creation.getType()));
+                default -> {
+                    // a method reference passes no arguments
+                }
+            }
         }
         return calls;
     }

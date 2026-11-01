@@ -1,7 +1,7 @@
 package ide.java.primitives;
 
 import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.expr.NameExpr;
 import ide.java.syntax.Imports;
 import ide.java.syntax.Lists;
@@ -75,7 +75,7 @@ final class DeleteElement {
     private static void deleteParam(Context c, Element param) {
         var method = c.program().element(param.parent());
         var declaration = c.declaration(method);
-        var node = declaration.as(MethodDeclaration.class);
+        CallableDeclaration<?> node = declaration.as(CallableDeclaration.class);
         var used = node.findAll(NameExpr.class, n -> n.getNameAsString().equals(param.name())).stream().anyMatch(n -> {
             try {
                 return n.resolve().isParameter();
@@ -88,7 +88,7 @@ final class DeleteElement {
         var index = names.indexOf(param.name());
         var edits = new EditSet();
         without(edits, declaration.unit(), node.getParameters(), index);
-        for (var call : Shared.callsTo(c, method.id())) without(edits, c.sources().unitOf(call), call.getArguments(), index);
+        for (var call : Shared.callsTo(c, method.id())) without(edits, c.sources().unitOf(call.node()), call.arguments(), index);
         names.remove(index);
         c.sources().apply(edits);
         c.ids().forget(param.id());

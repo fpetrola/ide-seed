@@ -3,7 +3,7 @@ package ide.java.primitives;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import ide.java.syntax.Imports;
@@ -67,7 +67,7 @@ final class MoveElement {
             throw new PrimitiveRejected("projection.unsupported", "a parameter moves within its method");
         }
         var declaration = c.declaration(method);
-        var node = declaration.as(MethodDeclaration.class);
+        CallableDeclaration<?> node = declaration.as(CallableDeclaration.class);
         var names = Shared.parameterNames(node);
         var from = names.indexOf(param.name());
         var at = anchor == null ? names.size() : names.indexOf(anchor.name());
@@ -75,7 +75,7 @@ final class MoveElement {
         if (index == from) return;
         var edits = new EditSet();
         reorder(edits, declaration.unit(), node.getParameters(), from, index);
-        for (var call : Shared.callsTo(c, method.id())) reorder(edits, c.sources().unitOf(call), call.getArguments(), from, index);
+        for (var call : Shared.callsTo(c, method.id())) reorder(edits, c.sources().unitOf(call.node()), call.arguments(), from, index);
         var reordered = new ArrayList<>(names);
         reordered.add(index, reordered.remove(from));
         c.sources().apply(edits);

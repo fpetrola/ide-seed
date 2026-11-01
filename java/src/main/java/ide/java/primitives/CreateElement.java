@@ -87,7 +87,7 @@ final class CreateElement {
                 com.github.javaparser.ast.body.CallableDeclaration<?> method = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
                 var edits = new EditSet();
                 Lists.append(edits, declaration.unit(), method.getParameters(), method.getName(), "Object " + name);
-                for (var call : calls) Lists.append(edits, sources.unitOf(call), call.getArguments(), call.getName(), argument);
+                for (var call : calls) Lists.append(edits, sources.unitOf(call.node()), call.arguments(), call.name(), argument);
                 var names = new ArrayList<>(Shared.parameterNames(method));
                 names.add(name);
                 sources.apply(edits);
