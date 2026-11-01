@@ -80,10 +80,10 @@ class CapabilitiesTest {
         assertThat(capabilities.invoke("elements", Map.of("kinds", "CLASS,FIELD"))).isEqualTo(
                 "[{\"element\":\"a.P\",\"kind\":\"CLASS\"},{\"element\":\"a.P#x\",\"kind\":\"FIELD\"},{\"element\":\"a.U\",\"kind\":\"CLASS\"}]");
         assertThat(capabilities.invoke("elements", Map.of("path", "a/U.java"))).contains("{\"element\":\"a.U#total()\",\"kind\":\"METHOD\"}");
-        assertThat(capabilities.invoke("asks", Map.of("path", "a/U.java", "line", "5", "title", "create field count")))
+        assertThat(capabilities.invoke("asks", Map.of("path", "a/U.java", "line", "5", "title", "create field count in U")))
                 .isEqualTo("[{\"name\":\"type\",\"question\":\"type of the new field\",\"default\":\"int\"}]");
 
-        capabilities.invoke("fix", Map.of("path", "a/U.java", "line", "5", "title", "create field count", "answers", Map.of("type", "short")));
+        capabilities.invoke("fix", Map.of("path", "a/U.java", "line", "5", "title", "create field count in U", "answers", Map.of("type", "short")));
         assertThat(ws.source("a/U.java")).contains("short count;");
 
         assertThat(capabilities.invoke("edit", Map.of("path", "a/P.java", "text", P.replace("int x", "long x")))).contains("\"applied\":true");

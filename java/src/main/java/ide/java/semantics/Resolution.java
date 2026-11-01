@@ -1,5 +1,7 @@
 package ide.java.semantics;
 
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.AssignExpr;
@@ -17,6 +19,7 @@ import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.TypeExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -74,12 +77,13 @@ public final class Resolution {
 
     /**
      * Whether a written type binds nothing: no type of the workspace or of a library, no type variable. The package
-     * written before a qualified type name ({@code java.util} in {@code java.util.List}) is no type use at all.
+     * written before a qualified type name ({@code java.util} in {@code java.util.List}) is no type use at all, and
+     * what is before a {@code ::} may as well be a value ({@code names} in {@code names::size}).
      */
     public static boolean bindsNothing(ClassOrInterfaceType type) {
         var scopeOfAnother = type.getParentNode().filter(parent -> parent instanceof ClassOrInterfaceType outer
                 && outer.getScope().filter(scope -> scope == type).isPresent()).isPresent();
-        if (scopeOfAnother) return false;
+        if (scopeOfAnother || type.getParentNode().filter(TypeExpr.class::isInstance).isPresent()) return false;
         try {
             type.resolve();
             return false;
@@ -159,6 +163,66 @@ public final class Resolution {
         uses.addAll(cu.findAll(NameExpr.class));
         uses.addAll(cu.findAll(FieldAccessExpr.class));
         return uses;
+    }
+
+    /**
+     * Whether a name used as a value surely binds nothing: the solver says no field, local or parameter has it. A name
+     * before a dot may be a package or a type, a case label an enum's constant, a name in an annotation
+     * anything: none of them is said to bind nothing, nor what the solver cannot model.
+     */
+    public static boolean valueBindsNothing(Expression use) {
+        var parent = use.getParentNode().orElse(null);
+        if (parent instanceof FieldAccessExpr access && access.getScope() == use) return false;
+        if (parent instanceof MethodCallExpr call && call.getScope().filter(scope -> scope == use).isPresent()) return false;
+        if (parent instanceof SwitchEntry || use.findAncestor(AnnotationExpr.class).isPresent()) return false;
+        try {
+            if (use instanceof FieldAccessExpr access && !access.getScope().calculateResolvedType().isReferenceType()) return false;
+        } catch (RuntimeException unknown) {
+            return false; // a receiver of no known type: its members are not known either
+        }
+        try {
+            if (use instanceof NameExpr name) name.resolve();
+            else use.asFieldAccessExpr().resolve();
+            return false;
+        } catch (UnsolvedSymbolException unresolved) {
+            return true;
+        } catch (RuntimeException unknown) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether a call surely binds nothing: no method has its name where it is looked up, in its receiver's type or in
+     * the types it is written in, with their supertypes, nor does a static import bring one. A call with a name that
+     * exists binds something, or is written with the wrong arguments, which is another error.
+     */
+    public static boolean callBindsNothing(MethodCallExpr call) {
+        var name = call.getNameAsString();
+        try {
+            if (call.getScope().isPresent()) {
+                var type = call.getScope().get().calculateResolvedType();
+                return type.isReferenceType() && type.asReferenceType().getTypeDeclaration().filter(t -> !declares(t, name)).isPresent();
+            }
+            var unit = call.findCompilationUnit().orElseThrow();
+            if (unit.getImports().stream().anyMatch(i -> i.isStatic() && (i.isAsterisk() || i.getName().getIdentifier().equals(name)))) {
+                return false;
+            }
+            for (Node at = call; at != null; at = at.getParentNode().orElse(null)) {
+                if (at instanceof TypeDeclaration<?> type && declares(type.resolve(), name)) return false;
+                if (at instanceof ObjectCreationExpr creation && creation.getAnonymousClassBody().isPresent()
+                        && (declares(creation.getType().resolve().asReferenceType().getTypeDeclaration().orElseThrow(), name)
+                        || creation.getAnonymousClassBody().get().stream().anyMatch(m -> m instanceof MethodDeclaration d && d.getNameAsString().equals(name)))) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (RuntimeException unknown) {
+            return false;
+        }
+    }
+
+    private static boolean declares(ResolvedReferenceTypeDeclaration type, String method) {
+        return type.getAllMethods().stream().anyMatch(m -> m.getName().equals(method));
     }
 
     /** The field the expression resolves to, or null if it is not a (resolvable) field use. */

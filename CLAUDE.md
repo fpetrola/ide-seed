@@ -25,8 +25,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   else.
 - `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy), Unresolved (a use that binds
-  nothing, same id space as references; a Retarget binds it), Reconciliation (after an edit by hand, pairs what
-  changed address with what it was, only when the structure leaves no doubt), Reference (id `site@ordinal`, Mode:
+  nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
+  Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
+  no doubt), Reference (id `site@ordinal`, Mode:
   uses read|write|update|call|new|type and links extends|implements|declared), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
   parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
@@ -53,7 +54,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   Body in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
-  binding one writes the name and imports it. An edit by hand reconciles identity (types, members, parameters,
+  binding one writes the name and imports it. A field or call that surely binds nothing (for a call: no method of that
+  name where it is looked up) is an unresolved use too; binding it renames the use. An edit by hand reconciles identity (types, members, parameters,
   reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through

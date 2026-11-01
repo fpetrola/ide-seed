@@ -46,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -302,7 +303,10 @@ public final class Reader {
             var bindsNothing = false;
             ElementId target;
             switch (use) {
-                case MethodCallExpr call -> target = resolveMethod(call);
+                case MethodCallExpr call -> {
+                    target = resolveMethod(call);
+                    bindsNothing = target == null && callBindsNothing(call);
+                }
                 case ObjectCreationExpr creation -> target = callable(resolveConstructor(creation));
                 case MethodReferenceExpr reference -> target = callable(resolveMethodReference(reference));
                 case ClassOrInterfaceType type -> {
@@ -312,25 +316,43 @@ public final class Reader {
                 }
                 default -> {
                     var field = resolveField((Expression) use);
-                    typeName = field == null && use instanceof NameExpr;
-                    target = field != null ? field(field) : typeName ? named(resolveTypeDeclaration((NameExpr) use), named) : null;
+                    var type = field == null && use instanceof NameExpr name ? resolveTypeDeclaration(name) : null;
+                    typeName = type != null;
+                    target = field != null ? field(field) : named(type, named);
+                    bindsNothing = field == null && type == null && valueBindsNothing((Expression) use);
                 }
             }
             var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
                     : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                     : ((NodeWithSimpleName<?>) use).getNameAsString();
-            if (target == null && !bindsNothing) { // members of libraries, locals, what does not compile
+            var site = target == null && !bindsNothing ? null : siteOf(use);
+            if (site == null) { // members of libraries, locals, what does not compile, in declarations it cannot read
                 untracked.add(name);
                 continue;
             }
-            var site = siteOf(use);
             var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
             nodes.put(id, use);
             var mode = typeName ? Mode.TYPE : modeOf(use);
-            if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode));
+            if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use)));
             else references.add(new Reference(id, site, target, name, mode));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
+    }
+
+    /** The workspace type a member use is looked up in: its receiver's, or the one it is written in; null if neither. */
+    private ElementId scopeOf(Node use) {
+        var receiver = use instanceof MethodCallExpr call ? call.getScope()
+                : use instanceof FieldAccessExpr access ? Optional.of(access.getScope()) : Optional.<Expression>empty();
+        if (receiver.isEmpty()) {
+            return use.findAncestor(TypeDeclaration.class, t -> t.getFullyQualifiedName().isPresent())
+                    .map(t -> type((String) t.getFullyQualifiedName().orElseThrow())).orElse(null);
+        }
+        try {
+            var type = receiver.get().calculateResolvedType();
+            return type.isReferenceType() ? type(type.asReferenceType().getQualifiedName()) : null;
+        } catch (RuntimeException unknown) {
+            return null;
+        }
     }
 
     /** A library type joins the program with its package, once, in the order the files name them. */

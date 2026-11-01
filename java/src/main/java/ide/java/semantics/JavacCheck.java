@@ -51,8 +51,14 @@ public final class JavacCheck {
         return errors;
     }
 
-    /** What a diagnostic is about: the identifier at its preferred position, else the text of its range. */
+    /**
+     * What a diagnostic is about: the identifier at its preferred position (after the dot, where javac points at a
+     * member selected as in {@code v.size}), else the text of its range.
+     */
     private static String symbolAt(String code, long position, long start, long end) {
+        if (position >= 0 && position < code.length() && code.charAt((int) position) == '.') {
+            do position++; while (position < code.length() && Character.isWhitespace(code.charAt((int) position)));
+        }
         if (position >= 0 && position < code.length() && Character.isJavaIdentifierStart(code.charAt((int) position))) {
             var stop = (int) position;
             while (stop < code.length() && Character.isJavaIdentifierPart(code.charAt(stop))) stop++;

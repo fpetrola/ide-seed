@@ -6,6 +6,7 @@ goal access.insufficient needs accessible(site, target)
 goal binding.unresolved needs in-scope(site, target)
 goal javac.cant.resolve.location needs resolves(symbol)
 goal javac.cant.resolve needs resolves(symbol)
+goal javac.cant.resolve.location.args needs resolves(symbol)
 
 fact accessible(site, target) when can-access(site, target)
 
@@ -31,21 +32,42 @@ end
 
 effect import "import ${qualified(t)}"
   makes resolves(symbol)
-  when nonempty(unresolved-in(path, symbol))
+  when nonempty(unresolved-in(path, symbol, "type"))
   for t in types-named(symbol)
   needs accessible(top-in(path), t)
   do
-    retarget ${unresolved-in(path, symbol)} ${t}
+    retarget ${unresolved-in(path, symbol, "type")} ${t}
   end
 end
 
-effect create-field "create field ${symbol}"
+# A name misspelled: the members of the type it is looked up in whose names are almost it.
+effect use-similar "change to ${name(f)}"
   makes resolves(symbol)
-  when not(is-type-name(symbol))
+  when nonempty(unresolved-in(path, symbol, "value"))
+  for f in similar(scope(unresolved-in(path, symbol, "value")), symbol, "FIELD")
+  needs accessible(site(unresolved-in(path, symbol, "value")), f)
+  do
+    retarget ${unresolved-in(path, symbol, "value")} ${f}
+  end
+end
+
+effect call-similar "change to ${name(m)}(..)"
+  makes resolves(symbol)
+  when nonempty(unresolved-in(path, symbol, "call"))
+  for m in similar(scope(unresolved-in(path, symbol, "call")), symbol, "METHOD")
+  needs accessible(site(unresolved-in(path, symbol, "call")), m)
+  do
+    retarget ${unresolved-in(path, symbol, "call")} ${m}
+  end
+end
+
+effect create-field "create field ${symbol} in ${name(scope(unresolved-in(path, symbol, "value")))}"
+  makes resolves(symbol)
+  when nonempty(scope(unresolved-in(path, symbol, "value")))
   ask type "type of the new field" "int"
   cost 2
   do
-    f := create FIELD ${top-in(path)} ${symbol}
+    f := create FIELD ${scope(unresolved-in(path, symbol, "value"))} ${symbol}
     set ${f} type ${type}
   end
 end

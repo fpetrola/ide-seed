@@ -77,11 +77,23 @@ final class RetargetUse {
         return retarget.intent(before, null);
     }
 
-    /** A written type that bound nothing names {@code target}: by its simple name, imported if it is not nameable yet. */
+    /**
+     * A use that bound nothing names {@code target}: a written type by its simple name, imported if it is not nameable
+     * yet; a field read or written, or a method called, by the target's name, if it is a field or a method as the use
+     * needs.
+     */
     private static Change bind(Unresolved use, Primitive.Retarget retarget, Context c, Program before) {
         var target = before.element(retarget.target());
-        if (!(c.use(use.id()) instanceof ClassOrInterfaceType node) || !target.kind().isType()) {
-            throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind " + use.name() + " to " + target.qualified());
+        var used = c.use(use.id());
+        var fits = used instanceof ClassOrInterfaceType ? target.kind().isType()
+                : use.mode() == Mode.CALL ? target.kind() == Kind.METHOD
+                : !use.mode().isTypeUse() && target.kind() == Kind.FIELD;
+        if (!fits) throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot bind " + use.name() + " to " + target.qualified());
+        if (!(used instanceof ClassOrInterfaceType node)) {
+            var edits = new EditSet();
+            Shared.renameUse(c, edits, used, target.name());
+            c.sources().apply(edits);
+            return retarget.intent(before, null);
         }
         var signature = Signature.of(c, before.element(use.site()));
         var unit = c.sources().unitOf(node);

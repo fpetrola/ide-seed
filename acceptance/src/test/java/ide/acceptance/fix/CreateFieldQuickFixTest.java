@@ -24,10 +24,10 @@ class CreateFieldQuickFixTest {
     void unresolvedVariableOffersToCreateAFieldAskingItsType() {
         var ws = Workspace.of(Map.of("a/U.java", U));
 
-        assertThat(ws.fixes("a/U.java", 5)).containsExactly("create field count");
-        assertThat(ws.asks("a/U.java", 5, "create field count")).containsExactly("type: type of the new field [int]");
+        assertThat(ws.fixes("a/U.java", 5)).containsExactly("create field count in U");
+        assertThat(ws.asks("a/U.java", 5, "create field count in U")).containsExactly("type: type of the new field [int]");
 
-        var result = ws.fix("a/U.java", 5, "create field count", Map.of("type", "long"));
+        var result = ws.fix("a/U.java", 5, "create field count in U", Map.of("type", "long"));
 
         assertThat(result.applied()).isTrue();
         assertThat(ws.diagnostics()).isEmpty();
@@ -49,9 +49,32 @@ class CreateFieldQuickFixTest {
     void withoutAnswersTheDefaultIsUsed() {
         var ws = Workspace.of(Map.of("a/U.java", U));
 
-        ws.fix("a/U.java", 5, "create field count");
+        ws.fix("a/U.java", 5, "create field count in U");
 
         assertThat(ws.source("a/U.java")).contains("    int count;\n");
+    }
+
+    @Test
+    void aFieldUsedOnAnotherObjectIsCreatedInThatObjectsClass() {
+        var ws = Workspace.of(Map.of("a/U.java", """
+                package a;
+
+                class U {
+                    int twice(V v) {
+                        return v.size * 2;
+                    }
+                }
+                """, "a/V.java", """
+                package a;
+
+                class V {
+                }
+                """));
+
+        ws.fix("a/U.java", 5, "create field size in V");
+
+        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.source("a/V.java")).contains("    int size;");
     }
 
     @Test

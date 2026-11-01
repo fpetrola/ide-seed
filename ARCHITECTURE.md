@@ -171,7 +171,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     TYPE. Modos de vínculo: EXTENDS, IMPLEMENTS, DECLARED (el tipo declarado de un campo, parámetro o retorno). Un
     vínculo es una referencia porque la jerarquía y el verificador lo tratan igual que a un uso: hoy son strings
     duplicados en atributos y eso obliga a re-resolver nombres en todos lados.
-  - `Unresolved`: un uso cuyo nombre no liga nada (site, nombre, modo). Su id está en el mismo espacio que el de
+  - `Unresolved`: un uso cuyo nombre no liga nada (site, nombre, modo, y `scope`: el tipo donde se busca un
+    miembro, el del receptor o el que lo escribe; nulo para un tipo). Su id está en el mismo espacio que el de
     las referencias (`site@ordinal`), así un primitivo puede nombrarlo. Vive aparte de las referencias, que siempre
     ligan algo: nada de lo que lee referencias tiene que preguntar si tienen destino.
   - Elementos de biblioteca: los tipos de una biblioteca que el workspace nombra, con su paquete, marcados con el
@@ -445,9 +446,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   ítem 5 llegó pull-up-unifying (sube un miembro y fusiona en él el mismo miembro de los hermanos: mismo nombre,
   firma, tipo, cuerpo y estaticidad), merge-duplicate pasó a ser un solo `delete ... into=`, `member-named` compara
   también los tipos de los parámetros de un método, y `can-access` le pregunta a las reglas si un sitio alcanza algo.
-- **Abierto.** Quedan dos convenciones de Java fuera de los drivers: `is-type-name` (un nombre con mayúscula es un
-  tipo) y el `int` que create-field propone en el conocimiento. Las resuelve lo abierto del ítem 1, cuando el uso sin
-  resolver diga qué es y qué tipo espera. El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
+  Con los usos de miembros sin resolver, `unresolved-in` toma qué uso se busca (`type`, `value` o `call`), `site`
+  y `scope` leen un uso sin resolver, `similar` da los miembros de un tipo cuyo nombre está a una o dos letras, y
+  se fue `is-type-name`.
+- **Abierto.** Queda una convención de Java fuera de los drivers: el `int` que create-field propone en el
+  conocimiento. La resuelve que el uso sin resolver diga qué tipo espera. El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
   spec faltan annotate, delegate y delegates, generate-constructor, make-final, make-static, rename-with-delegate,
   use-supertype-where-possible, extract-interface-and-use, fold-constructors y delete-tree.
 
@@ -474,7 +477,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   un efecto necesita (`needs`) vale por un `fact` o lo hace antes otro efecto, deducido igual, con los topes de la
   spec (planes de hasta 4 efectos, 8 niveles de pregunta y respuesta, los 12 más baratos). El `why` anida cada
   necesidad bajo la respuesta que la tiene. El fix de import necesita que el archivo alcance el tipo: uno
-  package-private de otro paquete se abre antes de importarlo; antes se importaba solo y quedaba un error.
+  package-private de otro paquete se abre antes de importarlo; antes se importaba solo y quedaba un error. Desde los
+  usos de miembros sin resolver, cada fix parte del uso y no del nombre: import, de un tipo; create-field, de un
+  valor, y crea el campo en el tipo donde se busca (`create field size in V` para `v.size`); y use-similar y
+  call-similar cambian un nombre mal escrito por un miembro accesible de ese tipo cuyo nombre está a una o dos letras
+  (`change to count`, `change to size(..)`).
 - **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 
@@ -645,6 +652,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 23 | Posiciones               | el contrato de la proyección dice dónde está declarado un elemento y qué elemento hay en una posición; el grafo sigue sin posiciones | tomada, 2026-11-01 (3223bf9) |
 | 24 | Adaptadores              | un módulo cada uno, que declara `session` y `core` y usa solo eso (`AdapterTest`); hablan con el IDE solo por capacidades, en JSON; lo que un adaptador necesita y no es capacidad entra a `session` como capacidad | tomada, 2026-11-01 (cedbd23, 763d4e6, 8b760b3) |
 | 25 | Classpath                | las bibliotecas de un proyecto se le preguntan a Maven, en un producto propio (`maven`), y se recuerdan mientras sus POMs no cambien; el driver las lee de los jars sin cargar clases, y javac compila siempre contra el classpath del proyecto, nunca contra el del IDE | tomada, 2026-11-01 (817a548, 854df27) |
+| 26 | Usos de miembros sin resolver | un campo o método que no liga nada es un uso del programa solo si el resolvedor lo asegura (para una llamada: ningún método con ese nombre donde se busca); en la duda no es nada, como un local. El uso dice en qué tipo se busca, y los fixes parten de él | tomada, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -670,7 +678,7 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge (resuelto en 6911992) | `ide.session`, `ide.knowledge` | 5 |
 | Valores de scripts como strings; id o dirección resuelto en cada función (resuelto en fb7e3e9) | `ide.refactoring.script` | 5 |
 | Plantillas de cuerpo en Java dentro del catálogo e `initializer` en el conocimiento (marcadas en fb7e3e9; `set import` se fue en 0a738bf; resuelto en 37c903e y 77e0742) | `standard.ref`, `knowledge.ref` | etapa 2 |
-| Convenciones de Java fuera de los drivers: `is-type-name` y el `int` que propone create-field | `ScriptFunctions`, `knowledge.ref` | etapa 2, ítem 1 |
+| Convenciones de Java fuera de los drivers: `is-type-name` (resuelto con los usos de miembros sin resolver) y el `int` que propone create-field | `ScriptFunctions`, `knowledge.ref` | etapa 2, ítem 1 |
 | Los usos de bibliotecas no se verificaban: un rename podía capturar los usos de un import con comodín (resuelto en a5fdf89) | `ide.java`, `ide.engine` | etapa 2 |
 | El reparador entra dos veces en el código que coordina (decisión 17; resuelto en 85bb676) | `ide.engine`, `ide.session` | 6 |
 | La sesión carga `knowledge.ref` por su ruta y arma los hechos de un diagnóstico (resuelto en a288c2e) | `ide.session` | 6 |
@@ -817,10 +825,17 @@ etapa 2, por valor.
    - 0b40a6c: los usos que no ligan nada son parte del programa, y un retarget los liga.
    - 0a738bf: el fix de import es un retarget; se van `set import` y los candidatos de import de las reglas.
 
-   Abierto: los campos y métodos que no ligan nada todavía no son usos del programa (el Reader no distingue sin
-   riesgo un nombre sin resolver de una variable local). Cuando lo sean, el fix de create-field partirá del uso y no
-   del nombre en mayúscula del diagnóstico, y la completion y los fixes compartirán una sola pregunta: qué puede
-   ligar este uso desde su sitio.
+   - Usos de miembros: un campo leído o escrito, o un método llamado, que no liga nada es un uso sin resolver, con
+     el tipo donde se busca. Solo cuando es seguro (decisión 26): de un valor, cuando el resolvedor dice que no hay
+     campo, local ni parámetro con ese nombre; de una llamada, cuando ningún método tiene ese nombre donde se busca.
+     Nunca lo que va antes de un punto o de `::` (puede ser un paquete o un tipo), una etiqueta de `case` ni un nombre
+     dentro de una anotación. Sobre una copia del emulador del usuario (229 archivos sin errores) no aparece ninguno;
+     la primera versión daba falsos en llamadas con lambdas sobre `Stream` y en receptores de `::`. Un retarget lo
+     liga renombrando el uso, si el destino es lo que el uso pide. El símbolo de un diagnóstico sobre `v.size` es
+     `size`.
+
+   Abierto: la completion y los fixes todavía no comparten una sola pregunta (qué puede ligar este uso desde su
+   sitio); falta create-method para una llamada sin resolver; un nombre sin resolver antes de un punto no es uso.
 2. Reconciliación estructural de identidad en ediciones manuales (hoy un rename a mano equivale a borrar y crear).
    Hecho en dos ciclos:
    - afd56af: lo que una edición a mano renombra, cambia de firma o mueve de paquete conserva su id, y lo que quita
@@ -829,8 +844,8 @@ etapa 2, por valor.
 
    Abierto: con la identidad estable, una edición a mano se puede verificar contra lo que dejó roto en otros
    archivos y ofrecer seguir el rename. No se hizo todavía: verificar también el archivo editado marcaría como
-   violaciones los cambios hechos a propósito, y ofrecer seguir el rename necesita los usos de miembros sin resolver
-   (lo abierto del ítem 1). Tampoco se reconoce un miembro llevado de un tipo o de un archivo a otro.
+   violaciones los cambios hechos a propósito; ofrecer seguir el rename ya tiene los usos de miembros sin resolver
+   que necesitaba. Tampoco se reconoce un miembro llevado de un tipo o de un archivo a otro.
 3. Invalidación selectiva del grafo. Hecho en d97d73b. En el sample grande (101 archivos, unas 10.000 referencias),
    la relectura después de un rename de campo resuelve 2 archivos y tarda unos 20 ms en vez de unos 190; un rename
    con el programa ya leído tarda la mitad. Lo que queda del costo es javac. Las pruebas de que una lectura parcial

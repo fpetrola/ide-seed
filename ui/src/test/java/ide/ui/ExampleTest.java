@@ -53,9 +53,16 @@ class ExampleTest {
     void theQuickFixesItLeavesFixWhatTheySay() {
         var ws = example();
 
-        assertThat(ws.fixes("shop/fixes/Broken.java", 10)).contains("import java.util.List");
-        assertThat(ws.fixes("shop/fixes/Broken.java", 11)).contains("open-visibility shop.secret.Vault package -> public, then import shop.secret.Vault");
-        assertThat(ws.fixes("shop/fixes/Broken.java", 14)).contains("create field count");
+        assertThat(ws.fixes("shop/fixes/Broken.java", 11)).contains("import java.util.List");
+        assertThat(ws.fixes("shop/fixes/Broken.java", 12)).contains("open-visibility shop.secret.Vault package -> public, then import shop.secret.Vault");
+        assertThat(ws.fixes("shop/fixes/Broken.java", 15)).contains("create field count in Broken");
+        assertThat(ws.fixes("shop/fixes/Broken.java", 21)).contains("change to items", "change to size(..)");
         assertThat(ws.fixes("shop/fixes/Unset.java", 8)).contains("initialize limit in its declaration", "make limit not final");
+
+        ws.fix("shop/fixes/Broken.java", 21, "change to items");
+        ws.fix("shop/fixes/Broken.java", 21, "change to size(..)");
+
+        assertThat(ws.diagnostics()).extracting(Diagnostic::line).doesNotContain(21);
+        assertThat(ws.source("shop/fixes/Broken.java")).contains("return items + size();");
     }
 }
