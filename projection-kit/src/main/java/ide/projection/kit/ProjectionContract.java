@@ -159,6 +159,22 @@ public abstract class ProjectionContract {
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
+    /** Obligation 8 too: a body that starts with {@code ...} keeps what the method does, and adds what follows at its end. */
+    @Test
+    void aBodyThatKeepsWhatTheMethodDoesAddsToIt() {
+        var projection = fixture();
+        var p = projection.program();
+        var m = id(p, "a.A#m(int)");
+
+        var change = projection.apply(new Primitive.Set(m, "body", "...\n" + Body.name(id(p, "a.A#x")) + " = " + Body.name(id(p, "a.A#m(int)/p"))));
+
+        var after = projection.program();
+        assertThat(change.expectations()).containsExactly(new Change.Added(m, id(p, "a.A#x"), "x", Mode.WRITE));
+        assertThat(after.referencesFrom(m)).extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactly("a.A#x read", "a.A#x write");
+        assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+    }
+
     /** Obligation 8, for a field: its start said in no language makes the uses it names, from the field. */
     @Test
     void aFieldsStartSaidInNoLanguageMakesTheUsesItNames() {

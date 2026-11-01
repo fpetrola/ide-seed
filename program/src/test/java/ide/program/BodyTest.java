@@ -90,6 +90,16 @@ class BodyTest {
     }
 
     @Test
+    void whatItDoesNowComesFirstAndWhatIsSaidAfterIsAdded() {
+        var body = Body.parse("...; #{field:2} = #{param:5}", program(), SET);
+
+        assertThat(body.statements()).containsExactly(new Body.Kept(), new Body.Assign(X, new Body.Parameter(VALUE)));
+        assertThat(body.keeps()).isTrue();
+        assertThat(body.uses()).containsExactly(new Body.Use(X, Mode.WRITE));
+        assertThatThrownBy(() -> Body.parse("#{field:2} = #{param:5}; ...", program(), SET)).hasMessageContaining("'...' comes first");
+    }
+
+    @Test
     void anythingElseIsNotABody() {
         var program = program();
 

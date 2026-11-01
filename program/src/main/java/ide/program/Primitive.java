@@ -70,13 +70,17 @@ public sealed interface Primitive {
         };
     }
 
-    /** A new body ({@link Body}): the uses of the old one are gone, and the method makes the ones the new one names. */
+    /**
+     * A new body ({@link Body}): the uses of the old one are gone, unless it keeps it, and the method makes the ones the
+     * new one names.
+     */
     private static Change body(Program before, ElementId method, String text) {
         var change = Change.NONE;
-        for (var use : before.referencesFrom(method)) {
+        var body = Body.parse(text, before, method);
+        for (var use : body.keeps() ? List.<Reference>of() : before.referencesFrom(method)) {
             if (!use.mode().isLink()) change = change.expect(new Change.Dropped(method, use.target()));
         }
-        for (var use : Body.parse(text, before, method).uses()) {
+        for (var use : body.uses()) {
             change = change.expect(new Change.Added(method, use.element(), before.element(use.element()).name(), use.mode()));
         }
         return change;

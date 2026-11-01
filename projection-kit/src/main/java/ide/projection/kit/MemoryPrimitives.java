@@ -198,14 +198,19 @@ final class MemoryPrimitives {
         if (fact == Fact.TYPE && node.kind() == Kind.PARAM) graph.resign(node.parent());
     }
 
-    /** A body in no language is its own text, and the uses it makes take the place of the old body's. */
+    /**
+     * A body in no language is its own text, and the uses it makes take the place of the old body's; one that keeps
+     * the old body ({@code ...}) is the old text followed by what it adds, and its uses are added.
+     */
     private static void body(MemoryGraph graph, ElementId method, String text) {
         var body = Body.parse(text, graph.read(), method);
-        graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
+        if (!body.keeps()) graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
         for (var use : body.uses()) {
             graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode()));
         }
-        graph.nodes.put(method, graph.nodes.get(method).with(Fact.BODY, text));
+        var old = graph.nodes.get(method).facts().get(Fact.BODY);
+        var said = body.keeps() && old != null ? old + "\n" + text.strip().substring(3).replaceFirst("^[;\\s]+", "") : text;
+        graph.nodes.put(method, graph.nodes.get(method).with(Fact.BODY, said));
     }
 
     private static void link(MemoryGraph graph, ElementId element, Mode mode, ElementId target) {

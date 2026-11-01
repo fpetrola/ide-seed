@@ -14,6 +14,7 @@ import java.util.List;
  * return default                                 answers what its type starts with; nothing, if it answers nothing
  * return #{field:2}.#{method:4}(#{param:7})      answers what a call answers: on what a field or a parameter holds,
  * return #{method:4}(#{param:7})                 or on the object itself; a method that answers nothing just calls
+ * ...                                            what the method does now, as it is: first, and what follows is added
  * </pre>
  * A body is the body of one method: its parameters are values the body has, not uses between elements. Like
  * {@link Fact}, it grows only when a template needs to say something it cannot.
@@ -25,6 +26,10 @@ public record Body(List<Statement> statements) {
     }
 
     public sealed interface Statement {
+    }
+
+    /** What the method does now, kept as it is written: what the body says after it is added at its end. */
+    public record Kept() implements Statement {
     }
 
     /** Answers {@code value}. */
@@ -81,9 +86,19 @@ public record Body(List<Statement> statements) {
     public static Body parse(String text, Program program, ElementId method) {
         var statements = new ArrayList<Statement>();
         for (var line : text.lines().flatMap(line -> java.util.Arrays.stream(line.split(";"))).map(String::strip).filter(line -> !line.isEmpty()).toList()) {
-            statements.add(new Parser(line, program, method).statement());
+            if (line.equals("...")) {
+                if (!statements.isEmpty()) throw new IllegalArgumentException("body: '...' comes first, in: " + text);
+                statements.add(new Kept());
+            } else {
+                statements.add(new Parser(line, program, method).statement());
+            }
         }
         return new Body(statements);
+    }
+
+    /** Whether it keeps what the method does now and adds to it, instead of taking its place. */
+    public boolean keeps() {
+        return !statements.isEmpty() && statements.getFirst() instanceof Kept;
     }
 
     /**
@@ -112,6 +127,9 @@ public record Body(List<Statement> statements) {
         var uses = new ArrayList<Use>();
         for (var statement : statements) {
             switch (statement) {
+                case Kept k -> {
+                    // the uses the method already makes
+                }
                 case Return r -> uses(r.value(), uses);
                 case Assign a -> {
                     uses.add(new Use(a.field(), Mode.WRITE));

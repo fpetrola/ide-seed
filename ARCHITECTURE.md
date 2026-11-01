@@ -297,6 +297,7 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba. En la etapa 2 el
   fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7. El ítem 4 suma
   la obligación 8 y dos escenarios para las obligaciones 2 y 3: escribir un cuerpo, y reemplazar uno que tenía usos.
+  La obligación 8 pide también el cuerpo que empieza con `...`: conserva lo que el método hace y agrega lo que sigue.
   La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
@@ -523,6 +524,16 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   trae lo que el compilador nombra en él (`arguments`, escritos como el archivo los escribe), y el contrato responde
   en qué elemento cae una posición (`inside`, en la obligación 9): con eso, cambiar el tipo de retorno de un método o
   el tipo de un campo al del valor que recibe.
+  Un `final` sin inicializar se inicializa también en los constructores, deducido de lo que el lenguaje dice: un campo
+  final vale por su declaración o por cada constructor de su tipo, y un tipo que no declara constructores tiene el
+  que da el lenguaje, que no asigna nada. Son dos reglas: `initialize-in-constructors` necesita
+  `constructed-explicitly(tipo)`, un `fact` que vale si el tipo declara constructores, y si no vale lo hace antes
+  `declare-constructor`. El planificador encadena solo: sin constructor ofrece `create constructor Q(), then
+  initialize limit in the constructors`; con constructores, `initialize limit in the constructors` a secas. Cada
+  constructor toma el valor (`create PARAM` con el argumento que pasan los `new`, el valor inicial del tipo según las
+  reglas) y lo asigna después de lo que ya hacía: el lenguaje de cuerpos ganó `...`, primero, que conserva el cuerpo
+  y agrega al final (sus usos se suman, no reemplazan a los viejos). Eclipse dice el problema en el constructor que no
+  asigna, nombrando el campo en sus argumentos: la meta es `initialized(first(arguments))`.
 - **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 

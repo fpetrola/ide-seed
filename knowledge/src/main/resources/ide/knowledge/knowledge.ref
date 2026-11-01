@@ -98,21 +98,48 @@ effect create-method "create method ${symbol} in ${name(scope(unresolved-in(path
   end
 end
 
-goal ecj.UninitializedBlankFinalField needs initialized(symbol)
+# A blank final field has its value where it is declared or from every constructor of its type; Eclipse says so at
+# the field, or at a constructor that does not give it one, naming the field.
+goal ecj.UninitializedBlankFinalField needs initialized(first(arguments))
 
-effect initialize-in-declaration "initialize ${symbol} in its declaration"
-  makes initialized(symbol)
-  ask value "initial value" "${default-value(type(field-in(path, symbol)))}"
+effect initialize-in-declaration "initialize ${field} in its declaration"
+  makes initialized(field)
+  ask value "initial value" "${default-value(type(field-in(path, field)))}"
   do
-    set ${field-in(path, symbol)} initializer ${value}
+    set ${field-in(path, field)} initializer ${value}
   end
 end
 
-effect drop-final "make ${symbol} not final"
-  makes initialized(symbol)
+# Every constructor takes the value, and the calls pass what its type starts with. A type that declares no
+# constructor has the one the language gives, which assigns nothing: one is declared first.
+fact constructed-explicitly(type) when nonempty(constructors(type))
+
+effect declare-constructor "create constructor ${name(type)}()"
+  makes constructed-explicitly(type)
+  do
+    c := create CONSTRUCTOR ${type} ${name(type)}
+  end
+end
+
+effect initialize-in-constructors "initialize ${field} in the constructors"
+  makes initialized(field)
+  needs constructed-explicitly(owner(field-in(path, field)))
   cost 2
   do
-    set ${field-in(path, symbol)} final false
+    let f = field-in(path, field)
+    for c in constructors(owner(f))
+      p := create PARAM ${c} ${field} argument=${default-value(type(f))}
+      set ${p} type ${type(f)}
+      set ${c} body "...; ${said(f)} = ${said(p)}"
+    end
+  end
+end
+
+effect drop-final "make ${field} not final"
+  makes initialized(field)
+  cost 2
+  do
+    set ${field-in(path, field)} final false
   end
 end
 

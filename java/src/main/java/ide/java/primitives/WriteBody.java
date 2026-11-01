@@ -19,7 +19,8 @@ import java.util.stream.Collectors;
  * A body in no language ({@link Body}) written in Java, in place of a method's: a field or a parameter by its name, a
  * field through {@code this} (or through its type, if static) where a parameter of the same name hides it, and a new
  * object by its type's simple name, imported if the file cannot name it yet. The default is the one of the method's
- * type, as a field would start with it; a void method answers nothing, and a call it would answer is a statement.
+ * type, as a field would start with it; a void method answers nothing, and a call it would answer is a statement. A
+ * body that keeps what the method does is written after its last statement.
  */
 final class WriteBody {
 
@@ -51,7 +52,12 @@ final class WriteBody {
         var indent = unit.indentation(callable.getBegin().orElseThrow().line);
         var block = callable instanceof MethodDeclaration m ? m.getBody().orElseThrow()
                 : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
-        edits.replace(unit, block, Render.block(statements, indent));
+        if (body.keeps() && block.getStatements().isNonEmpty()) { // after what it does, as it is written
+            edits.insertAfter(unit, block.getStatements().getLast().orElseThrow(),
+                    statements.lines().map(line -> "\n" + indent + "    " + line).collect(Collectors.joining()));
+        } else {
+            edits.replace(unit, block, Render.block(statements, indent));
+        }
         c.sources().apply(edits);
     }
 
@@ -66,6 +72,7 @@ final class WriteBody {
             case Body.Return r when r.value() instanceof Body.Call && type.equals("void") -> value(r.value()) + ";";
             case Body.Return r -> Render.returning(value(r.value()));
             case Body.Assign a -> Render.assignment(field(a.field()), value(a.value()));
+            case Body.Kept k -> "";
         };
     }
 
