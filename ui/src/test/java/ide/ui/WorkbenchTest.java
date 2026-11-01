@@ -208,6 +208,19 @@ class WorkbenchTest {
     }
 
     @Test
+    void aClickOnTheBulbOffersWhatAltEnterOffers() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/B.java", 5, 16);
+        workbench.type("a/B.java", B.replace("return a.m(1);", "return total;"));
+        workbench.act("apply-edit");
+        assertThat(workbench.bulbShown()).contains("FIX");
+
+        workbench.editors().clickBulb();
+
+        assertThat(dialogs.offered).singleElement().asList().contains("create field total in B");
+    }
+
+    @Test
     void theSelectedStatementsAreExtractedIntoAMethodNamedAsSuggested() throws IOException {
         var workbench = workbench();
         workbench.open("a/A.java", 7, 9);

@@ -15,7 +15,6 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
-import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.UIManager;
@@ -31,7 +30,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Point;
-import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -57,47 +55,103 @@ final class SwingDialogs implements Dialogs {
         this.owner = owner;
     }
 
+    /**
+     * A list to choose from, as IntelliJ's popups are. At the caret (Alt+Enter, Refactor This) the list has the keys:
+     * its first item is selected, the arrows move it, typing filters it (said in the title) and Backspace takes a letter
+     * back. As a search (Find Action, Go to Class) a field has the keys, and the arrows still move the list. Enter or a
+     * click chooses; the pointer selects what it is over.
+     */
     @Override
     public Optional<String> choose(String title, List<Option> options, Point at) {
+        var search = at == null;
         var model = new DefaultListModel<Option>();
         model.addAll(options);
-        var list = new JList<>(model);
+        var list = new JList<>(model) {
+            @Override
+            public int getNextMatch(String prefix, int startIndex, javax.swing.text.Position.Bias bias) {
+                return -1; // typing filters, it does not jump
+            }
+        };
         list.setCellRenderer(new OptionRenderer());
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setVisibleRowCount(Math.max(1, Math.min(options.size(), 14)));
         list.setSelectedIndex(0);
         var query = new JTextField();
+        var heading = label(title);
         var texts = options.stream().map(Option::text).toList();
-        query.getDocument().addDocumentListener(changes(() -> {
+        Runnable filter = () -> {
             model.clear();
             var matching = Filter.matching(query.getText(), texts);
             options.stream().filter(option -> matching.contains(option.text())).forEach(model::addElement);
             list.setSelectedIndex(0);
-        }));
-        var popup = new Popup(at == null);
-        bind(query, "DOWN", () -> list.setSelectedIndex(Math.min(list.getSelectedIndex() + 1, model.size() - 1)));
-        bind(query, "UP", () -> list.setSelectedIndex(Math.max(list.getSelectedIndex() - 1, 0)));
-        query.addActionListener(event -> popup.close(list.getSelectedValue() == null ? null : list.getSelectedValue().text()));
-        list.addMouseListener(new MouseAdapter() {
+            if (!search) heading.setText(query.getText().isEmpty() ? title : title + ":  " + query.getText());
+        };
+        query.getDocument().addDocumentListener(changes(filter));
+        var popup = new Popup();
+        Runnable choose = () -> popup.close(list.getSelectedValue() == null ? null : list.getSelectedValue().text());
+        JComponent keys = search ? query : list;
+        bind(keys, "ENTER", choose);
+        bind(keys, "DOWN", () -> move(list, 1));
+        bind(keys, "UP", () -> move(list, -1));
+        bind(keys, "PAGE_DOWN", () -> move(list, list.getVisibleRowCount()));
+        bind(keys, "PAGE_UP", () -> move(list, -list.getVisibleRowCount()));
+        if (!search) {
+            list.addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override
+                public void keyTyped(java.awt.event.KeyEvent event) {
+                    var c = event.getKeyChar();
+                    if (c == '\b') {
+                        var text = query.getText();
+                        if (!text.isEmpty()) query.setText(text.substring(0, text.length() - 1));
+                    } else if (!Character.isISOControl(c)) {
+                        query.setText(query.getText() + c);
+                    }
+                    event.consume();
+                }
+            });
+        }
+        var mouse = new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent event) {
-                if (event.getClickCount() == 2 && list.getSelectedValue() != null) popup.close(list.getSelectedValue().text());
+            public void mouseMoved(MouseEvent event) {
+                var index = list.locationToIndex(event.getPoint());
+                if (index >= 0 && index != list.getSelectedIndex()) list.setSelectedIndex(index);
             }
-        });
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                if (list.locationToIndex(event.getPoint()) >= 0) choose.run();
+            }
+        };
+        list.addMouseListener(mouse);
+        list.addMouseMotionListener(mouse);
         var scroll = new JScrollPane(list);
         scroll.setBorder(BorderFactory.createEmptyBorder());
-        if (at == null) scroll.setPreferredSize(new Dimension(620, scroll.getPreferredSize().height));
+        if (search) scroll.setPreferredSize(new Dimension(620, scroll.getPreferredSize().height));
         var content = new JPanel(new BorderLayout());
-        content.add(heading(title, query, at == null), BorderLayout.PAGE_START);
+        if (search) {
+            content.add(heading(title, query), BorderLayout.PAGE_START);
+        } else {
+            heading.setPreferredSize(new Dimension(Math.max(heading.getPreferredSize().width, 220), heading.getPreferredSize().height));
+            content.add(heading, BorderLayout.PAGE_START);
+        }
         content.add(scroll, BorderLayout.CENTER);
-        return popup.show(content, query, at);
+        return popup.show(content, keys, at);
+    }
+
+    /** Moves the selection by {@code by}, within the list, keeping it in sight. */
+    private static void move(JList<?> list, int by) {
+        var size = list.getModel().getSize();
+        if (size == 0) return;
+        var index = Math.max(0, Math.min(size - 1, list.getSelectedIndex() + by));
+        list.setSelectedIndex(index);
+        list.ensureIndexIsVisible(index);
     }
 
     @Override
     public Optional<String> line(String title, String initial, Point at) {
         var field = new JTextField(initial, Math.max(16, initial.length() + 4));
         field.selectAll();
-        var popup = new Popup(at == null);
+        var popup = new Popup();
         field.addActionListener(event -> popup.close(field.getText()));
         var content = new JPanel(new BorderLayout());
         content.add(label(title), BorderLayout.PAGE_START);
@@ -113,7 +167,7 @@ final class SwingDialogs implements Dialogs {
         var content = new JPanel(new BorderLayout());
         content.add(label(title), BorderLayout.PAGE_START);
         content.add(new JScrollPane(list), BorderLayout.CENTER);
-        new Popup(at == null).show(content, list, at);
+        new Popup().show(content, list, at);
     }
 
     @Override
@@ -268,38 +322,41 @@ final class SwingDialogs implements Dialogs {
     }
 
     /** A window with no frame that waits, as a menu does, until it answers or goes away. */
+    /**
+     * A popup with no frame: a modal dialog, so that it has the keys (a plain window often does not get them), gone with
+     * Escape, with a choice, or when people click elsewhere.
+     */
     private final class Popup {
 
-        private final boolean search;
-        private final JWindow window = new JWindow(owner);
-        private final java.awt.SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+        private final JDialog dialog = new JDialog(owner, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
         private String answer;
         private boolean closed;
 
-        Popup(boolean search) {
-            this.search = search;
-        }
-
         Optional<String> show(JComponent content, JComponent focus, Point at) {
             content.setBorder(BorderFactory.createLineBorder(border()));
-            bind(content, "ESCAPE", () -> close(null));
-            window.setContentPane(content);
-            window.setFocusableWindowState(true);
-            window.pack();
+            dialog.setUndecorated(true);
+            dialog.setContentPane(content);
+            var escape = dialog.getRootPane();
+            escape.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "close");
+            escape.getActionMap().put("close", action(() -> close(null)));
+            dialog.pack();
             if (at != null) {
-                window.setLocation(at);
+                dialog.setLocation(at);
             } else {
-                window.setLocation(owner.getX() + (owner.getWidth() - window.getWidth()) / 2, owner.getY() + owner.getHeight() / 6);
+                dialog.setLocation(owner.getX() + (owner.getWidth() - dialog.getWidth()) / 2, owner.getY() + owner.getHeight() / 6);
             }
-            window.addWindowFocusListener(new WindowAdapter() {
+            dialog.addWindowListener(new WindowAdapter() {
                 @Override
-                public void windowLostFocus(WindowEvent event) {
+                public void windowOpened(WindowEvent event) {
+                    focus.requestFocusInWindow();
+                }
+
+                @Override
+                public void windowDeactivated(WindowEvent event) {
                     close(null);
                 }
             });
-            window.setVisible(true);
-            focus.requestFocusInWindow();
-            loop.enter();
+            dialog.setVisible(true); // returns once it is closed
             return Optional.ofNullable(answer);
         }
 
@@ -307,18 +364,17 @@ final class SwingDialogs implements Dialogs {
             if (closed) return;
             closed = true;
             this.answer = answer;
-            window.dispose();
-            loop.exit();
+            dialog.dispose();
         }
     }
 
-    /** The heading of a list: a search field for a search, a title over a field for a popup at the caret. */
-    private static JComponent heading(String title, JTextField query, boolean search) {
+    /** The heading of a search: its title over the field people type in. */
+    private static JComponent heading(String title, JTextField query) {
         var heading = new JPanel(new BorderLayout());
         heading.add(label(title), BorderLayout.PAGE_START);
         query.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, border()),
-                BorderFactory.createEmptyBorder(search ? 6 : 2, 8, search ? 6 : 2, 8)));
-        if (search) query.setFont(query.getFont().deriveFont(query.getFont().getSize2D() * 1.15f));
+                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+        query.setFont(query.getFont().deriveFont(query.getFont().getSize2D() * 1.15f));
         heading.add(query, BorderLayout.CENTER);
         return heading;
     }
@@ -357,6 +413,10 @@ final class SwingDialogs implements Dialogs {
             }
             var html = "<html>" + escape(name) + (where.isEmpty() ? "" : "&nbsp;&nbsp;<font color='#808080'>" + escape(where) + "</font>") + "</html>";
             super.getListCellRendererComponent(list, html, index, selected, focus);
+            if (selected) { // as selected as if the list had the keys: in a search, the field has them
+                setBackground(UIManager.getColor("List.selectionBackground"));
+                setForeground(UIManager.getColor("List.selectionForeground"));
+            }
             setIcon(Icons.of(option.kind()));
             setIconTextGap(6);
             setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 10));

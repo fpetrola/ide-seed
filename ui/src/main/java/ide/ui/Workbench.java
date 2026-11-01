@@ -272,7 +272,7 @@ final class Workbench extends JPanel {
         say("zoom " + Math.round(Zoom.of(100)) + "%");
     }
 
-    private Editors editors() {
+    Editors editors() {
         return editors;
     }
 

@@ -203,18 +203,22 @@ final class Editors extends JTabbedPane {
             editor.scroll.getGutter().setLineNumberFont(Zoom.code(13));
             editor.scroll.setBorder(BorderFactory.createEmptyBorder());
             var shown = editor;
-            editor.scroll.getGutter().addMouseListener(new java.awt.event.MouseAdapter() {
+            var clicks = new java.awt.event.MouseAdapter() {
                 @Override
-                public void mouseClicked(java.awt.event.MouseEvent event) {
-                    if (shown.bulb == null) return;
+                public void mousePressed(java.awt.event.MouseEvent event) {
+                    if (shown.bulb == null || !javax.swing.SwingUtilities.isLeftMouseButton(event)) return;
                     try {
-                        var line = area.getLineOfOffset(area.viewToModel2D(new Point(0, event.getY())));
+                        var y = javax.swing.SwingUtilities.convertPoint(event.getComponent(), event.getPoint(), area).y;
+                        var line = area.getLineOfOffset(area.viewToModel2D(new Point(0, y)));
                         if (line == area.getLineOfOffset(shown.bulb.getMarkedOffset())) help.bulb();
                     } catch (BadLocationException outside) {
                         // no line there
                     }
                 }
-            });
+            };
+            // the margin is made of parts (line numbers, the icons' row): a click lands on one of them, not on it
+            editor.scroll.getGutter().addMouseListener(clicks);
+            for (var part : editor.scroll.getGutter().getComponents()) part.addMouseListener(clicks);
             var panel = new JPanel(new BorderLayout());
             panel.add(editor.scroll, BorderLayout.CENTER);
             panel.add(new ErrorStrip(area), BorderLayout.LINE_END);
@@ -315,6 +319,24 @@ final class Editors extends JTabbedPane {
                 // no line there
             }
         });
+    }
+
+    /** Clicks the bulb as people do, on the margin's row of icons at its line. */
+    void clickBulb() {
+        var editor = editor(current().orElseThrow());
+        var gutter = editor.scroll.getGutter();
+        editor.area.setSize(editor.area.getPreferredSize()); // laid out as on a screen, if there is none
+        gutter.setSize(gutter.getPreferredSize());
+        gutter.doLayout();
+        var icons = java.util.Arrays.stream(gutter.getComponents())
+                .filter(part -> part.getClass().getSimpleName().contains("IconRow")).findFirst().orElseThrow();
+        try {
+            var y = (int) editor.area.modelToView2D(editor.bulb.getMarkedOffset()).getCenterY();
+            icons.dispatchEvent(new java.awt.event.MouseEvent(icons, java.awt.event.MouseEvent.MOUSE_PRESSED, 0, 0, 4, y, 1, false,
+                    java.awt.event.MouseEvent.BUTTON1));
+        } catch (BadLocationException outside) {
+            throw new IllegalStateException(outside);
+        }
     }
 
     /** Which bulb the current editor shows: FIX, INTENTION, or nothing. */
