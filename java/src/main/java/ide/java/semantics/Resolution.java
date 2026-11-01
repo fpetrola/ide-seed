@@ -180,10 +180,15 @@ public final class Resolution {
         }
     }
 
-    /** The types of a unit, outermost first: classes and records, interfaces and annotation types, enums. */
+    /**
+     * The types of a unit, outermost first: classes and records, interfaces and annotation types, enums. A type declared
+     * inside a method belongs to the method, as its locals do: it has no qualified name, and is no type of the program.
+     */
     public static List<TypeDeclaration<?>> types(CompilationUnit cu) {
         var types = new ArrayList<TypeDeclaration<?>>();
-        cu.findAll(TypeDeclaration.class).forEach(types::add);
+        cu.findAll(TypeDeclaration.class).forEach(type -> {
+            if (type.getFullyQualifiedName().isPresent()) types.add(type);
+        });
         return types;
     }
 

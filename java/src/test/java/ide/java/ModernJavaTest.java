@@ -60,6 +60,15 @@ class ModernJavaTest {
                         Circle unit() {
                             return Circle.UNIT;
                         }
+
+                        int count() {
+                            record Pair(int a, int b) {
+                            }
+                            class Counter {
+                                int n = Circle.UNIT.hashCode();
+                            }
+                            return new Pair(1, 2).a() + new Counter().n;
+                        }
                     }
                     """);
 
@@ -74,5 +83,14 @@ class ModernJavaTest {
                 "a.Report#unit() -> a.Circle#UNIT (read)");
         assertThat(program.unresolved()).isEmpty();
         assertThat(projection.diagnostics()).isEmpty();
+    }
+
+    /** A type declared inside a method is the method's, as its locals are: no element of the program. */
+    @Test
+    void aTypeDeclaredInAMethodIsNoElement() {
+        var program = JavaProjection.of(SOURCES).program();
+
+        assertThat(program.outline()).contains("METHOD a.Report#count()", "a.Report#count() -> a.Circle#UNIT (read)")
+                .noneMatch(line -> line.contains("Pair") || line.contains("Counter"));
     }
 }

@@ -345,6 +345,7 @@ public final class Reader {
         if (type == null) return null;
         var workspace = ids.get(new Address.Type(type.getQualifiedName()));
         if (workspace != null) return workspace;
+        if (type.toAst().isPresent()) return null; // declared in the sources, inside a method: as untracked as a local
         var qualified = library(type.getQualifiedName(), type.getPackageName(), type.getName(), kindOf(type));
         named.add(qualified);
         return library.get(qualified).id();
@@ -450,12 +451,15 @@ public final class Reader {
         }
     }
 
-    /** The innermost element containing the node: a parameter (its declared type), a method or field, else its type. */
+    /**
+     * The innermost element containing the node: a parameter (its declared type), a method or field, else its type.
+     * A type declared inside a method is no element: what is inside it is inside the method.
+     */
     public ElementId siteOf(Node node) {
-        var type = node.findAncestor(TypeDeclaration.class).orElseThrow();
+        var type = node.findAncestor(TypeDeclaration.class, t -> t.getFullyQualifiedName().isPresent()).orElseThrow();
         var owner = ids.get(new Address.Type(qualifiedOf(type)));
-        var method = node.findAncestor(CallableDeclaration.class);
-        if (method.isPresent() && method.get().findAncestor(TypeDeclaration.class).orElse(null) == type) {
+        var method = node.findAncestor(CallableDeclaration.class, c -> c.findAncestor(TypeDeclaration.class).orElse(null) == type);
+        if (method.isPresent()) {
             var callable = ids.get(new Address.Callable(owner, nameOf(method.get()), keys.of(method.get())));
             var param = node.findAncestor(Parameter.class).filter(p -> p.getParentNode().orElse(null) == method.get());
             return param.map(p -> ids.get(new Address.Param(callable, p.getNameAsString()))).orElse(callable);
