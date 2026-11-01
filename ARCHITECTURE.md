@@ -357,8 +357,16 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   anotación una interfaz, para el lector y para el type solver del workspace; un tipo declarado dentro de un método es
   del método, como sus variables locales, y no un tipo del programa. Sus bibliotecas son el JDK y los jars
   del classpath que le dan (`JavaProjection.of(sources, classpath)`): los tipos de un jar ligan como los del JDK, leídos
-  sin cargar una clase, y javac compila siempre contra ese classpath; antes, sin classpath, javac leía el del IDE y el
-  código analizado compilaba contra JavaParser y Guava aunque su proyecto no los tuviera.
+  sin cargar una clase, y el compilador compila siempre contra ese classpath; antes, sin classpath, javac leía el del
+  IDE y el código analizado compilaba contra JavaParser y Guava aunque su proyecto no los tuviera.
+  Desde el 2026-11-01 compila con ECJ, incremental como el builder de Eclipse (`semantics.EcjCheck`, decisión 28):
+  errores y warnings con línea, columna, largo y lo que el compilador nombra en ellos; un texto que el editor dice y
+  el programa no, se compila sin tocar el programa (`diagnostics(path, text)`). Un campo, una llamada o un `new` que
+  no ligan nada son usos sin resolver cuando el resolvedor lo asegura, y lo que cada uno necesita lo responde
+  `semantics.UseNeeds` cuando se lo preguntan. Responde también en qué elemento cae una posición (`inside`) y qué
+  construcciones la rodean (`around`, para agrandar la selección). Crea constructores, y extract toma, además de
+  líneas enteras, el tramo exacto de una expresión (`línea:columna-línea:columna`) o un fragmento que termina el
+  método con su return.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
