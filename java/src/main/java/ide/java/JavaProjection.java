@@ -5,7 +5,6 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import ide.java.primitives.Context;
 import ide.java.primitives.JavaPrimitives;
 import ide.java.semantics.Completion;
@@ -29,6 +28,7 @@ import ide.projection.LanguageRules;
 import ide.projection.Location;
 import ide.projection.Projection;
 
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -57,14 +57,16 @@ public final class JavaProjection implements Projection {
     private final Reader reader;
     private final Sources sources;
     private final Context context;
+    private final List<Path> classpath;
     private Set<String> emptyPackages = new TreeSet<>();
     private final Set<String> changed = new TreeSet<>(); // files changed since the last reading
     private boolean afresh = true; // read every file anew: at first, and after identity changed without the text
     private Reader.Reading reading;
     private List<Diagnostic> diagnostics;
 
-    private JavaProjection() {
-        typeSolver = new WorkspaceTypeSolver(this::trees, new ReflectionTypeSolver());
+    private JavaProjection(List<Path> classpath) {
+        this.classpath = List.copyOf(classpath);
+        typeSolver = new WorkspaceTypeSolver(this::trees, WorkspaceTypeSolver.libraries(classpath));
         reader = new Reader(ids, keys, typeSolver);
         sources = new Sources(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
                 .setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
@@ -113,7 +115,12 @@ public final class JavaProjection implements Projection {
     }
 
     public static JavaProjection of(Map<String, String> sources) {
-        var projection = new JavaProjection();
+        return of(sources, List.of());
+    }
+
+    /** A projection over these sources, whose libraries, besides the JDK, are the jars and class folders of a classpath. */
+    public static JavaProjection of(Map<String, String> sources, List<Path> classpath) {
+        var projection = new JavaProjection(classpath);
         projection.sources.put(sources);
         return projection;
     }
@@ -191,7 +198,7 @@ public final class JavaProjection implements Projection {
 
     @Override
     public List<Diagnostic> diagnostics() {
-        if (diagnostics == null) diagnostics = JavacCheck.errors(sources.texts());
+        if (diagnostics == null) diagnostics = JavacCheck.errors(sources.texts(), classpath);
         return diagnostics;
     }
 

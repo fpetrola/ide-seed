@@ -7,25 +7,33 @@ import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.ToolProvider;
+import javax.tools.StandardLocation;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** Runs javac over in-memory sources (attribution only, nothing written) and reports errors as {@code javac.<code>}. */
+/**
+ * Runs javac over in-memory sources (attribution only, nothing written) against a classpath, and reports errors as
+ * {@code javac.<code>}.
+ */
 public final class JavacCheck {
 
     private JavacCheck() {
     }
 
-    public static List<Diagnostic> errors(Map<String, String> sources) {
+    public static List<Diagnostic> errors(Map<String, String> sources, List<Path> classpath) {
         var compiler = ToolProvider.getSystemJavaCompiler();
         var collector = new DiagnosticCollector<JavaFileObject>();
         var files = sources.entrySet().stream().map(e -> source(e.getKey(), e.getValue())).toList();
         var fileManager = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8);
-        var task = (JavacTask) compiler.getTask(null, fileManager, collector, List.of("-proc:none", "-Xlint:none"), null, files);
         try {
+            // always the project's classpath, even none: by default javac would read the IDE's own
+            fileManager.setLocationFromPaths(StandardLocation.CLASS_PATH, classpath.stream().filter(Files::exists).toList());
+            var task = (JavacTask) compiler.getTask(null, fileManager, collector, List.of("-proc:none", "-Xlint:none"), null, files);
             task.analyze();
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
