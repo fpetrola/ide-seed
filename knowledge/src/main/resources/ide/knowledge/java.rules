@@ -53,3 +53,10 @@ def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "t
   and named(t, symbol) and site(u, s) and top(s, here) and accessible(here, t) and target(u, t)
 
 say target for resolves "import ${qualified(value)}"
+
+# A class or an enum that declares no constructor has one with no parameters (JLS 8.8.9, 8.9.2): writing it changes
+# nothing, and then the type declares one.
+def constructed-explicitly(t) when kind(t, "class") and constructor(k, t)
+def constructed-explicitly(t) when kind(t, "enum") and constructor(k, t)
+
+say constructor for constructed-explicitly "create constructor ${name(value)}()"

@@ -88,17 +88,7 @@ effect initialize-in-declaration "initialize ${field} in its declaration"
 end
 
 # Every constructor takes the value, and the calls pass what its type starts with. A type that declares no
-# constructor has the one the language gives, which assigns nothing: one is declared first.
-fact constructed-explicitly(type) when nonempty(constructors(type))
-
-effect declare-constructor "create constructor ${name(type)}()"
-  keeps meaning
-  makes constructed-explicitly(type)
-  do
-    c := create CONSTRUCTOR ${type} ${name(type)}
-  end
-end
-
+# constructor has the one the language gives, which assigns nothing: one is declared first (java.rules says how).
 effect initialize-in-constructors "initialize ${field} in the constructors"
   makes initialized(field)
   needs constructed-explicitly(owner(field-in(path, field)))
