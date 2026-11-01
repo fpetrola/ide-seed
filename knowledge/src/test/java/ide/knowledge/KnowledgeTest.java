@@ -155,6 +155,89 @@ class KnowledgeTest {
                 .containsExactly("java.util.List");
     }
 
+    /** Sealing a field needs it visible: either it is already, or showing it comes first. */
+    private static final String CHAIN = """
+            goal field.loose needs sealed(target)
+
+            fact visible(target) when eq(attr(target, "visibility"), "public")
+
+            effect seal "seal ${qualified(target)}"
+              makes sealed(target)
+              needs visible(target)
+              do
+                set ${target} final true
+              end
+            end
+
+            effect show "show ${qualified(target)}"
+              makes visible(target)
+              do
+                set ${target} visibility public
+              end
+            end
+            """;
+
+    @Test
+    void whatAnEffectNeedsHoldsAlreadyOrIsMadeFirst() {
+        var projection = program();
+        var x = id(projection.program(), "a.A#x");
+        var knowledge = Knowledge.parse(CHAIN, Library.standard());
+
+        var search = knowledge.search("field.loose", Map.of("target", x), projection);
+
+        assertThat(search.plans()).extracting(Plan::title).containsExactly("show a.A#x, then seal a.A#x");
+        assertThat(search.trace().lines()).containsExactly(
+                "? sealed(a.A#x)",
+                "  ! seal a.A#x",
+                "    ? visible(a.A#x)",
+                "      ! show a.A#x");
+
+        search.plans().getFirst().apply(projection);
+
+        assertThat(projection.program().element(x).fact(Fact.VISIBILITY)).isEqualTo("public");
+        assertThat(projection.program().element(x).fact(Fact.FINAL)).isEqualTo("true");
+        assertThat(knowledge.search("field.loose", Map.of("target", x), projection).plans()).extracting(Plan::title)
+                .containsExactly("seal a.A#x"); // visible now: nothing comes first
+    }
+
+    /** A chain p1 &lt;- p2 &lt;- ... &lt;- p{@code length}, each made by one effect that needs the next. */
+    private static String chain(int length) {
+        var text = new StringBuilder("goal deep needs p1(target)\n");
+        for (var i = 1; i <= length; i++) {
+            text.append("effect e").append(i).append(" \"e").append(i).append("\"\n  makes p").append(i).append("(target)\n");
+            if (i < length) text.append("  needs p").append(i + 1).append("(target)\n");
+            text.append("  do\n    fail \"not in this test\"\n  end\nend\n");
+        }
+        return text.toString();
+    }
+
+    @Test
+    void aPlanIsAtMostFourEffectsAndASearchAnswersTheTwelveCheapest() {
+        var projection = program();
+        var x = Map.of("target", id(projection.program(), "a.A#x"));
+
+        assertThat(Knowledge.parse(chain(4), Library.standard()).search("deep", x, projection).plans())
+                .extracting(Plan::title).containsExactly("e4, then e3, then e2, then e1");
+        assertThat(Knowledge.parse(chain(5), Library.standard()).search("deep", x, projection).plans()).isEmpty();
+
+        var many = MemoryProjection.builder().type("a.A");
+        for (var i = 0; i < 13; i++) many.field("a.A", "f" + i, "int");
+        var fields = Knowledge.parse("""
+                goal type.many needs touched(type)
+
+                effect touch "touch ${name(f)}"
+                  makes touched(type)
+                  for f in fields(type)
+                  do
+                    fail "not in this test"
+                  end
+                end
+                """, Library.standard());
+        var a = many.build();
+
+        assertThat(fields.search("type.many", Map.of("type", id(a.program(), "a.A")), a).plans()).hasSize(12);
+    }
+
     /** Accessors for every field, all or nothing per field; or assuming none are needed. */
     private static final String ACCESSORS = """
             goal type.bare needs accessors(type)

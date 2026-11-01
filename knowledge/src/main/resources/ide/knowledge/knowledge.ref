@@ -1,10 +1,13 @@
-# What must hold for each violation or diagnostic to go away, and what makes it hold.
+# What must hold for each violation or diagnostic to go away, when a predicate holds, and what makes it hold.
 # No remedy is written in Java: repairs and quick fixes are deduced from here, and the verifier judges them.
+# What an effect needs holds already or is made first, deduced backward the same way.
 
 goal access.insufficient needs accessible(site, target)
 goal binding.unresolved needs in-scope(site, target)
 goal javac.cant.resolve.location needs resolves(symbol)
 goal javac.cant.resolve needs resolves(symbol)
+
+fact accessible(site, target) when can-access(site, target)
 
 effect open-visibility "open-visibility ${qualified(target)} ${attr(target, "visibility")} -> ${v}"
   makes accessible(site, target)
@@ -30,6 +33,7 @@ effect import "import ${qualified(t)}"
   makes resolves(symbol)
   when nonempty(unresolved-in(path, symbol))
   for t in types-named(symbol)
+  needs accessible(top-in(path), t)
   do
     retarget ${unresolved-in(path, symbol)} ${t}
   end

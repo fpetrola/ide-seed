@@ -80,6 +80,40 @@ class ImportQuickFixTest {
                 """);
     }
 
+    /** Importing a type the file cannot access would leave an error: the fix opens it first, deduced backward. */
+    @Test
+    void aTypeTheFileCannotAccessIsOpenedBeforeItIsImported() {
+        var ws = Workspace.of(Map.of(
+                "b/Money.java", """
+                        package b;
+
+                        class Money {
+                        }
+                        """,
+                "a/U.java", """
+                        package a;
+
+                        class U {
+                            Money price;
+                        }
+                        """));
+
+        assertThat(ws.fixes("a/U.java", 4)).containsExactly("open-visibility b.Money package -> public, then import b.Money");
+        assertThat(ws.why("a/U.java", 4).lines()).containsExactly(
+                "javac.cant.resolve.location Money",
+                "? resolves(Money)",
+                "  ! import b.Money",
+                "    ? accessible(a.U, b.Money)",
+                "      ! open-visibility b.Money package -> public",
+                "  X create-field: not(is-type-name(symbol))");
+
+        ws.fix("a/U.java", 4, "open-visibility b.Money package -> public, then import b.Money");
+
+        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.source("b/Money.java")).contains("public class Money {");
+        assertThat(ws.source("a/U.java")).contains("import b.Money;");
+    }
+
     @Test
     void whyShowsHowTheFixWasDeduced() {
         var ws = Workspace.of(Map.of("a/U.java", """

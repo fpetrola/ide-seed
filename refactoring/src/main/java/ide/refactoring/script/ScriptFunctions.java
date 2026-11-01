@@ -50,6 +50,7 @@ final class ScriptFunctions {
             case "top-in" -> elem(graph.typesIn(text(args, 0)).getFirst().id());
             // language
             case "default-value" -> text(rules.defaultValue(text(args, 0)));
+            case "can-access" -> bool(rules.accessible(graph, element(args, 0).id(), element(args, 1).id()));
             case "wider" -> {
                 var all = rules.visibilities(graph, element(args, 0).id());
                 yield texts(all.subList(all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1, all.size()));
