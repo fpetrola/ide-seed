@@ -64,6 +64,22 @@ final class WriteBody {
         if (!body.keeps()) Shared.forgetBody(c, program, method);
     }
 
+    /** One statement said in no language, written at the end of a method's or constructor's body. */
+    static void append(Context c, ElementId method, Body.Statement said) {
+        var program = c.program();
+        var declaration = c.declaration(program.element(method));
+        com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
+        var unit = declaration.unit();
+        var edits = new EditSet();
+        var type = callable instanceof MethodDeclaration m ? m.getType().asString() : "void";
+        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, type, program.element(method).parent());
+        var statements = ide.java.semantics.Bodies.statements(callable);
+        var indent = statements.isEmpty() ? unit.indentation(callable.getBegin().orElseThrow().line) + "    "
+                : unit.indentation(statements.getFirst().getBegin().orElseThrow().line);
+        ide.java.syntax.Statements.append(edits, unit, ide.java.semantics.Bodies.body(callable), indent, writer.statement(said));
+        c.sources().apply(edits);
+    }
+
     /** A value said in no language, as the file of {@code site} writes it: a field's start. */
     static String value(Context c, ElementId site, EditSet edits, Unit unit, String text) {
         return new WriteBody(c.program(), List.of(), edits, unit, "void", c.program().element(site).parent()).value(Body.value(text, c.program(), site));

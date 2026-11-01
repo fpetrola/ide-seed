@@ -20,7 +20,7 @@ class MemoryProjectionContractTest extends ProjectionContract {
                 .library("java.lang.String", Kind.CLASS)
                 .type("b.C").field("b.C", "a", "a.A").field("b.C", "label", "String").field("b.C", "price", "Money")
                 .method("b.C", "use", "int", "a.A other").type("b.C.Note")
-                .statement("a.A#m(int)").statement("a.A#k(int)").statement("a.A#total()").statement("a.A#total()")
+                .statement("a.A#m(int)").statement("a.A#k(int)", "return #{a.A#k(int)/p}").statement("a.A#total()").statement("a.A#total()")
                 .statement("a.A#total()").statement("a.B#n()").statement("b.C#use(A)")
                 .use("a.A#m(int)[1]", "a.A#x", Mode.READ)
                 .use("a.A#total()[1]", "a.A#x", Mode.READ).use("a.A#total()[2]", "a.A#m(int)", Mode.CALL)

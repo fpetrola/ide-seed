@@ -317,8 +317,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7. El ítem 4 suma
   la obligación 8 y dos escenarios para las obligaciones 2 y 3: escribir un cuerpo, y reemplazar uno que tenía usos.
   La obligación 8 pide también el cuerpo que empieza con `...`: conserva lo que el método hace y agrega lo que sigue.
-  La obligación 11 (`said`): la proyección dice el cuerpo de un método o constructor en el lenguaje de cuerpos cuando
-  todo él se puede decir así (asignar un campo, responder un valor, hacer el objeto con otro constructor primero, sobre
+  La obligación 11 (`said`), desde la fase 3 de la etapa 3 también por sentencia: la proyección dice el cuerpo de un
+  método o constructor, o una sentencia, en el lenguaje de cuerpos cuando todo se puede decir así (asignar un campo, responder un valor, hacer el objeto con otro constructor primero, sobre
   campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
   La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. La obligación 13 (etapa 3,
   fase 1): un local es un elemento de su método, con su tipo, y cada uso suyo es una referencia desde el método,
@@ -1333,6 +1333,15 @@ que esto no escala solo:
      escrituras). Pasa lo mismo que con un cuerpo escrito de nuevo: esos primitivos cambian lo que un refactoring o un
      fix quiere cambiar, y quien sabe si se conserva el sentido es el conocimiento (`keeps meaning`), no el primitivo.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
+
+   **Ciclo 1 hecho el 2026-11-01**: cada sentencia dice lo que hace en el lenguaje de cuerpos cuando todo en ella se
+   puede decir, y si no, es opaca (un local, un operador, un literal).
+   - No es un hecho del grafo, como proponía la etapa. Es una pregunta al driver, `said(sentencia)` (la obligación
+     11, ahora por sentencia), igual que `needs` e `inside`: lo que dice depende de a qué liga cada nombre, que se
+     resuelve al leer los usos, y guardarlo en el elemento lo dejaría viejo cuando cambie un vínculo.
+   - Java dice una sentencia con lo mismo que decía un cuerpo entero (`SaidBody`), y escribe una al final de un cuerpo
+     sin pasar por `...` (`WriteBody.append`).
+   - En la memoria, una sentencia dice lo que se le dio al crearla, y las de un cuerpo escrito de nuevo dicen la suya.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.

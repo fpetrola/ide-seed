@@ -407,6 +407,24 @@ public abstract class ProjectionContract {
     }
 
     /**
+     * Obligation 11, for a statement: it says what it does in no language when all of it can be said so; nothing when
+     * something in it cannot (a local, an operator), and then it is opaque.
+     */
+    @Test
+    void aStatementSaysWhatItDoesWhenItCan() {
+        var projection = fixture();
+        var p = projection.program();
+
+        assertThat(projection.said(id(p, "a.A#k(int)[1]"))).contains("return " + Body.name(id(p, "a.A#k(int)/p")));
+        assertThat(projection.said(id(p, "a.A#total()[1]"))).isEmpty();
+        assertThat(projection.said(id(p, "a.A#m(int)[1]"))).isEmpty();
+        var base = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(p, "a.A"), "A")).produced();
+        var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.B"), "B")).produced();
+        var first = projection.apply(new Primitive.Create(Kind.STATEMENT, made, "", Map.of(Fact.BODY, Body.name(base) + "()"), null)).produced();
+        assertThat(projection.said(first)).contains(Body.name(base) + "()");
+    }
+
+    /**
      * Obligation 1: an element keeps its id through rename, move, set, link and retarget, also when what it does
      * changes its address: a method whose parameter is declared with another type is the same method.
      */

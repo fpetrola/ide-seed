@@ -83,9 +83,17 @@ public final class ProgramBuilder {
         return this;
     }
 
-    /** One more statement at the end of a method's body. */
+    /** One more statement at the end of a method's body, one that cannot be said in no language. */
     public ProgramBuilder statement(String method) {
         projection.apply(new Primitive.Create(Kind.STATEMENT, id(method), ""));
+        return this;
+    }
+
+    /** One more statement at the end of a method's body, said in no language with addresses: {@code return #{a.A#x}}. */
+    public ProgramBuilder statement(String method, String said) {
+        var named = java.util.regex.Pattern.compile("#\\{([^}]*)}").matcher(said).replaceAll(m -> java.util.regex.Matcher.quoteReplacement(
+                ide.program.Body.name(id(m.group(1)))));
+        projection.apply(new Primitive.Create(Kind.STATEMENT, id(method), "", java.util.Map.of(ide.program.Fact.BODY, named), null));
         return this;
     }
 

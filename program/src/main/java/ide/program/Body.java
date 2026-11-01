@@ -134,12 +134,17 @@ public record Body(List<Statement> statements) {
 
     /** The body as it is said: a statement a line, each element named by id. */
     public String text() {
-        return String.join("\n", statements.stream().map(statement -> switch (statement) {
+        return String.join("\n", statements.stream().map(Body::text).toList());
+    }
+
+    /** A statement as it is said. */
+    public static String text(Statement statement) {
+        return switch (statement) {
             case Kept k -> "...";
             case Construct c -> name(c.constructor()) + "(" + text(c.arguments()) + ")";
             case Return r -> "return " + text(r.value());
             case Assign a -> name(a.field()) + " = " + text(a.value());
-        }).toList());
+        };
     }
 
     /** A value as it is said. */

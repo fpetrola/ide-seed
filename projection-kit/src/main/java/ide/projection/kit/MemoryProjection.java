@@ -159,9 +159,9 @@ public final class MemoryProjection implements Projection {
 
     /** A body here is its text in no language: one that was set, as it was set. */
     @Override
-    public Optional<String> said(ElementId callable) {
+    public Optional<String> said(ElementId element) {
         var program = program();
-        return program.contains(callable) ? Optional.ofNullable(program.element(callable).fact(Fact.BODY)) : Optional.empty();
+        return program.contains(element) ? Optional.ofNullable(program.element(element).fact(Fact.BODY)) : Optional.empty();
     }
 
     @Override

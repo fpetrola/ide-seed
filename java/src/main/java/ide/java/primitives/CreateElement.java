@@ -35,7 +35,7 @@ final class CreateElement {
         return create.intent(before, created);
     }
 
-    /** A statement at the end of a body, said in no language: written in Java as a body that keeps what the method does. */
+    /** A statement at the end of a body, said in no language, written in Java. */
     private static ElementId statement(Context c, Program before, ElementId method, String said) {
         if (said == null) throw new PrimitiveRejected("create.statement", "a statement is said in no language, as its body");
         var body = ide.program.Body.parse(said, before, method);
@@ -45,7 +45,7 @@ final class CreateElement {
                 && (callable.kind() == Kind.CONSTRUCTOR || "void".equals(callable.fact(ide.program.Fact.TYPE))); // Java writes nothing for it
         if (body.statements().size() != 1 || body.keeps() || nothing) throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
         var count = (int) before.children(method).stream().filter(e -> e.kind() == Kind.STATEMENT).count();
-        WriteBody.apply(c, method, "...\n" + said);
+        WriteBody.append(c, method, body.statements().getFirst());
         return c.ids().of(new Address.Statement(method, count), Kind.STATEMENT);
     }
 

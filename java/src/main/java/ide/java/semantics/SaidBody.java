@@ -42,9 +42,12 @@ public final class SaidBody {
         this.parameters = parameters;
     }
 
-    public static Optional<String> of(Reader.Reading reading, ElementId callable) {
+    /** What a method's or constructor's body does, or one statement of it, said in no language when all of it can be. */
+    public static Optional<String> of(Reader.Reading reading, ElementId element) {
         var program = reading.program();
-        if (!program.contains(callable)) return Optional.empty();
+        if (!program.contains(element)) return Optional.empty();
+        var statement = program.element(element).kind() == Kind.STATEMENT ? (Statement) reading.declaration(element).node() : null;
+        var callable = statement == null ? element : program.element(element).parent();
         var kind = program.element(callable).kind();
         if (kind != Kind.METHOD && kind != Kind.CONSTRUCTOR) return Optional.empty();
         var block = switch (reading.declaration(callable).node()) {
@@ -61,7 +64,8 @@ public final class SaidBody {
         }
         var parameters = new java.util.HashMap<String, ElementId>();
         program.children(callable).stream().filter(e -> e.kind() == Kind.PARAM).forEach(p -> parameters.put(p.name(), p.id()));
-        return new SaidBody(targets, fields, parameters).body(block);
+        var saying = new SaidBody(targets, fields, parameters);
+        return statement == null ? saying.body(block) : Optional.ofNullable(saying.statement(statement));
     }
 
     private Optional<String> body(BlockStmt block) {

@@ -246,6 +246,7 @@ final class MemoryPrimitives {
         for (var statement : body.statements()) {
             if (statement instanceof Body.Kept) continue;
             var made = create(graph, Kind.STATEMENT, method, "", null);
+            graph.nodes.put(made, graph.nodes.get(made).with(Fact.BODY, Body.text(statement))); // what it says
             for (var use : Body.uses(statement)) {
                 graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()).in(made));
             }
