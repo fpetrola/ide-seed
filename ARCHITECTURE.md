@@ -216,8 +216,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     - `Move(element, parent, before)`: también reordena parámetros, y lleva una sentencia antes de otra o al final de
       un cuerpo, en su método o en otro; entre métodos, los usos hechos en ella pasan a ser del otro.
     - `Rename(element, name)`.
-    - `Set(element, fact, value)`: hechos cerrados y hechos textuales (type textual, initializer). Un cuerpo se
-      dice en el lenguaje de cuerpos.
+    - `Set(element, fact, value)`: hechos cerrados y hechos textuales (type textual, initializer). Hasta la fase 3 de
+      la etapa 3 también el cuerpo entero de un método; desde entonces un cuerpo son sus sentencias, que se crean,
+      mueven y borran.
     - `Link(element, mode, target)`: extends, implements, declared hacia un tipo del workspace. Reemplaza
       `set superclass`, `set implements` y `set type` con tipo del workspace.
     - `Retarget(reference, target)`.
@@ -1356,6 +1357,19 @@ que esto no escala solo:
      primero, y Java no puede leer un `super(...)` en otro lugar (el plan fallaba con un error de sintaxis).
    - `ScriptFunctions` cambió tres funciones angostas por tres sobre sentencias (`statements`, `giving`, `value`).
      Un valor dado por nombre entre comillas (`facts="..."`) se lee sin ellas, como uno dado por posición.
+
+   **Ciclo 3 hecho el 2026-11-01, y con él la fase 3**: un cuerpo son sus sentencias, y `Set` de cuerpo se fue.
+   - El catálogo llena los métodos que crea (getter, setter, factory, delegados) creando sentencias. Un método creado
+     tiene el cuerpo vacío.
+   - El conocimiento hace que un método creado responda el valor inicial de su tipo con una sentencia (`return
+     default`); uno `void` no responde nada, y crear `return default` en él se rechaza, porque en Java no dice nada.
+   - En los dos drivers se fueron el cuerpo entero de `Set`, su intención (`Dropped` de lo viejo, `Added` de lo
+     nuevo) y el código que lo escribía. Lo que un cuerpo escrito de nuevo hacía es borrar sus sentencias y crear
+     otras.
+   - El rastro de un paso dice lo que dice una sentencia creada (`create STATEMENT a.P#getX()[1] = return
+     #{field:2}`), como antes decía el cuerpo que se escribía.
+   - Lo que queda del lenguaje de cuerpos dice una sentencia a la vez. Sigue siendo una lista, la de una sentencia,
+     por si una regla necesita decir varias juntas.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.

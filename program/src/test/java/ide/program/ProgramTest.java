@@ -221,15 +221,14 @@ class ProgramTest {
     }
 
     @Test
-    void aBodyExpectsTheUsesItNamesInPlaceOfTheOldOnes() {
+    void aStatementCreatedExpectsTheUsesItNames() {
         var p = program();
 
-        var change = new Primitive.Set(B_NAME, "body", "return " + Body.name(B_X)).intent(p, null);
+        var change = new Primitive.Create(Kind.STATEMENT, B_NAME, "", Map.of(Fact.BODY, "return " + Body.name(B_X)), null)
+                .intent(p, new ElementId("statement:9"));
 
-        assertThat(change.expectations()).containsExactly(new Change.Dropped(B_NAME, B_X), new Change.Dropped(B_NAME, A_NAME),
-                new Change.Added(B_NAME, B_X, "x", Mode.READ));
-        assertThat(p.expecting(change).referencesFrom(B_NAME)).extracting(r -> r.target() + " " + r.name() + " " + r.mode())
-                .containsExactly(B_X + " x READ");
+        assertThat(change.expectations()).containsExactly(new Change.Added(B_NAME, B_X, "x", Mode.READ));
+        assertThat(p.expecting(change).referencesFrom(B_NAME)).hasSize(p.referencesFrom(B_NAME).size() + 1);
     }
 
     @Test

@@ -58,7 +58,7 @@ class ViewsTest {
         // the bodies named A's x and the new y; what was written binds B's x, and nothing
         var meant = before.expecting(new Change.Added(m, id(before, "a.A#x"), "x", Mode.READ))
                 .expecting(new Change.Added(n, y, "y", Mode.READ));
-        projection.apply(new Primitive.Set(m, "body", "return " + Body.name(id(before, "a.B#x"))));
+        projection.apply(new Primitive.Create(Kind.STATEMENT, m, "", java.util.Map.of(Fact.BODY, "return " + Body.name(id(before, "a.B#x"))), null));
 
         assertThat(new BindingView().check(new Comparison(meant, projection)))
                 .extracting(Violation::code, Violation::detail).containsExactlyInAnyOrder(

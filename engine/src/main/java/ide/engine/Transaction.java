@@ -174,7 +174,8 @@ public final class Transaction implements Projection {
     /** A primitive as the steps show it: elements by their address before it, and what it produced after. */
     private static String describe(Primitive primitive, Program before, Program after, Change change) {
         return switch (primitive) {
-            case Primitive.Create c -> "create " + c.kind() + " " + after.element(change.produced()).qualified();
+            case Primitive.Create c -> "create " + c.kind() + " " + after.element(change.produced()).qualified()
+                    + (c.kind() == ide.program.Kind.STATEMENT && c.facts().containsKey(ide.program.Fact.BODY) ? " = " + c.facts().get(ide.program.Fact.BODY) : "");
             case Primitive.Delete d -> "delete " + before.element(d.element()).qualified()
                     + (d.into() == null ? "" : " into " + before.element(d.into()).qualified());
             case Primitive.Move m -> "move " + before.element(m.element()).qualified() + " -> " + after.element(m.parent()).qualified();

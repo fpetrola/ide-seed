@@ -109,11 +109,7 @@ public abstract class ProjectionContract {
                 new Scenario("delete a statement", p -> new Primitive.Delete(id(p, "a.A#total()[2]"))),
                 new Scenario("rename a type", p -> new Primitive.Rename(id(p, "a.A"), "Base")),
                 new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)),
-                new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))),
-                new Scenario("write a body", p -> new Primitive.Set(id(p, "a.A#k(int)"), "body",
-                        "return " + Body.name(id(p, "a.A#x")))),
-                new Scenario("replace a body", p -> new Primitive.Set(id(p, "a.A#total()"), "body",
-                        "return " + Body.name(id(p, "a.A#x")))));
+                new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))));
     }
 
     @Test
@@ -156,17 +152,18 @@ public abstract class ProjectionContract {
     }
 
     /**
-     * Obligation 8: a body is said in no language ({@link Body}); the projection writes it in its own, and the method
-     * makes the uses the body names, in the order it names them. Its parameters are values, not uses.
+     * Obligation 8: a statement is said in no language ({@link Body}); the projection writes it in its own, and the
+     * method makes the uses the statements name, in the order they name them. Its parameters are values, not uses.
      */
     @Test
-    void aBodySaidInNoLanguageMakesTheUsesItNames() {
+    void aStatementSaidInNoLanguageMakesTheUsesItNames() {
         var projection = fixture();
         var p = projection.program();
         var k = id(p, "a.A#k(int)");
         var x = Body.name(id(p, "a.A#x"));
 
-        projection.apply(new Primitive.Set(k, "body", x + " = " + Body.name(id(p, "a.A#k(int)/p")) + "\nreturn " + x));
+        projection.apply(new Primitive.Create(Kind.STATEMENT, k, "", Map.of(Fact.BODY, x + " = " + Body.name(id(p, "a.A#k(int)/p"))), null));
+        projection.apply(new Primitive.Create(Kind.STATEMENT, k, "", Map.of(Fact.BODY, "return " + x), null));
 
         var after = projection.program();
         assertThat(after.referencesFrom(k)).extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label())
@@ -174,14 +171,14 @@ public abstract class ProjectionContract {
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
-    /** Obligation 8 too: a constructor's body may have its object made first by its superclass's constructor. */
+    /** Obligation 8 too: a constructor may have its object made first by its superclass's constructor. */
     @Test
-    void aConstructorsBodyMayHaveItsObjectMadeByTheSuperclasssConstructor() {
+    void aConstructorMayHaveItsObjectMadeByTheSuperclasssConstructor() {
         var projection = fixture();
         var base = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.A"), "A")).produced();
         var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.B"), "B")).produced();
 
-        var change = projection.apply(new Primitive.Set(made, "body", Body.name(base) + "()"));
+        var change = projection.apply(new Primitive.Create(Kind.STATEMENT, made, "", Map.of(Fact.BODY, Body.name(base) + "()"), null));
 
         var after = projection.program();
         assertThat(change.expectations()).containsExactly(new Change.Added(made, base, "A", Mode.CALL));
@@ -193,7 +190,7 @@ public abstract class ProjectionContract {
     /**
      * Obligation 14: the statements of a body are elements of its method or constructor, in the order they are written;
      * what one holds, a block too, is part of it, and a use made in it says so. A statement created at the end of a
-     * body leaves the method's own as they were; a body written anew brings new ones.
+     * body leaves the method's own as they were.
      */
     @Test
     void theStatementsOfABodyAreElementsOfItsMethodInOrder() {
@@ -202,21 +199,17 @@ public abstract class ProjectionContract {
         var m = id(p, "a.A#m(int)");
         var total = id(p, "a.A#total()");
         var own = id(p, "a.A#m(int)[1]");
-        var replaced = id(p, "a.A#total()[1]");
         assertThat(p.referencesIn(id(p, "a.A#total()[2]"))).extracting(r -> p.element(r.target()).qualified() + " " + r.mode().label())
                 .containsExactlyInAnyOrder("a.A#total()/sum write", "a.A#total()/sum read", "a.A#m(int) call");
         assertThat(p.referencesIn(id(p, "a.A#total()[2]"))).allMatch(r -> r.site().equals(total));
 
         projection.apply(new Primitive.Create(Kind.STATEMENT, m, "", Map.of(Fact.BODY, Body.name(id(p, "a.A#x")) + " = "
                 + Body.name(id(p, "a.A#m(int)/p"))), null));
-        projection.apply(new Primitive.Set(total, "body", "return " + Body.name(id(p, "a.A#x"))));
 
         var after = projection.program();
         assertThat(p.children(total)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::qualified)
                 .containsExactly("a.A#total()[1]", "a.A#total()[2]", "a.A#total()[3]");
         assertThat(after.children(m)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id).hasSize(2).startsWith(own);
-        assertThat(after.children(total)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id)
-                .hasSize(1).doesNotContain(replaced);
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
@@ -382,8 +375,7 @@ public abstract class ProjectionContract {
 
     /**
      * Obligation 11: a statement says what it does in no language ({@link Body}) when all of it can be said so; nothing
-     * when something in it cannot (a local, an operator), and then it is opaque. A body written anew says itself back,
-     * a statement a line.
+     * when something in it cannot (a local, an operator), and then it is opaque. Statements created say themselves back.
      */
     @Test
     void aStatementSaysWhatItDoesWhenItCan() {
@@ -397,9 +389,9 @@ public abstract class ProjectionContract {
         var k = id(p, "a.A#k(int)");
         var x = Body.name(id(p, "a.A#x"));
         var written = List.of(x + " = " + Body.name(id(p, "a.A#k(int)/p")), "return " + x);
-        projection.apply(new Primitive.Set(k, "body", String.join("\n", written)));
+        for (var said : written) projection.apply(new Primitive.Create(Kind.STATEMENT, k, "", Map.of(Fact.BODY, said), null));
         var rewritten = projection.program();
-        assertThat(rewritten.children(k).stream().filter(e -> e.kind() == Kind.STATEMENT).map(e -> projection.said(e.id()).orElse("?")))
+        assertThat(rewritten.children(k).stream().filter(e -> e.kind() == Kind.STATEMENT).skip(1).map(e -> projection.said(e.id()).orElse("?")))
                 .containsExactlyElementsOf(written);
         var base = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(p, "a.A"), "A")).produced();
         var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, id(projection.program(), "a.B"), "B")).produced();

@@ -46,8 +46,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with the uses made in it, and deleted with them; one that calls a constructor goes first), Change (produced element,
   expectations, pins: what a repair may not take back) and Body (what a method does in no language, a statement a
   line: return, assign a field, new, a call, the type's default, a constructor called first, over elements named
-  `#{id}`; its parameters are values, not uses; a Set of a body expects the old body's uses Dropped and the ones it
-  names Added).
+  `#{id}`; its parameters are values, not uses; a created statement expects the uses it names Added; a body is its
+  statements: there is no Set of a whole body).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
   is declared and what the name at a line and column means, `needs`: what a use that binds nothing needs, asked for
@@ -64,7 +64,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
   `ide.java.semantics` (Reader: program + declarations + use nodes; Resolution, Keys, WorkspaceTypeSolver,
   EcjCheck: Eclipse's compiler, incremental, errors and warnings with their range; Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a
-  Body in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
+  statement in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. A field or call that surely binds nothing (for a call: no method of that
@@ -156,9 +156,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - Product tests live in each module and use the product alone, in its own vocabulary; acceptance scenarios live in
   `acceptance`. The proposed double loop is in ARCHITECTURE.md, section "Cómo se testea".
 - A new dependency between products is a pom change, made in the same commit and reflected in ARCHITECTURE.md.
-- Catalog scripts stay within 20 statements and write no code of any language: a body is said in the body language
-  (`ide.program.Body`), and what only a language can write is asked of its rules (CatalogTest runs the bodies on the
-  memory projection).
+- Catalog scripts stay within 20 statements and write no code of any language: a statement is said in the body
+  language (`ide.program.Body`, `create STATEMENT ${m} "" facts="body=return #{field}"`), and what only a language
+  can write is asked of its rules (CatalogTest runs the bodies on the memory projection).
 - Adapters have no logic: when one needs something about the domain, it becomes a capability in `session`.
 
 ## Architecture and migration

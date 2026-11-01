@@ -498,7 +498,7 @@ public final class Knowledge implements Remedy, QuickFix {
             var id = target.apply(primitive).produced();
             done.put(made, id);
             for (var set : sets) set.apply(answers, id).forEach(target::apply);
-            if (method) target.apply(new Primitive.Set(id, "body", "return default"));
+            if (method) answeringItsDefault(target, id);
         });
     }
 
@@ -522,9 +522,15 @@ public final class Knowledge implements Remedy, QuickFix {
                 for (var param : program.children(shape.id()).stream().filter(e -> e.kind() == Kind.PARAM).toList()) {
                     target.apply(new Primitive.Create(Kind.PARAM, id, param.name(), Map.of(ide.program.Fact.TYPE, param.fact(ide.program.Fact.TYPE)), null));
                 }
-                target.apply(new Primitive.Set(id, "body", "return default"));
+                answeringItsDefault(target, id);
             }
         });
+    }
+
+    /** A method made answers what its type starts with until it is written; one that answers nothing says nothing. */
+    private static void answeringItsDefault(Projection target, ElementId method) {
+        if ("void".equals(target.program().element(method).fact(ide.program.Fact.TYPE))) return;
+        target.apply(new Primitive.Create(Kind.STATEMENT, method, "", Map.of(ide.program.Fact.BODY, "return default"), null));
     }
 
     /** A value given where a field is declared: asked, with what the knowledge proposes ({@code ask ... default}). */

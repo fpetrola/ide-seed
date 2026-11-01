@@ -58,7 +58,6 @@ public sealed interface Primitive {
             }
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
             case Set s -> {
-                if (Fact.BODY.label().equals(s.attribute())) yield body(before, s.element(), s.value());
                 if ("initializer".equals(s.attribute()) && Body.names(s.value())) yield initializer(before, s.element(), s.value());
                 yield java.util.Arrays.stream(Fact.values()).filter(f -> f.label().equals(s.attribute())).findFirst()
                         .flatMap(Change.Aspect::of).map(aspect -> Change.NONE.pin(s.element(), aspect)).orElse(Change.NONE);
@@ -80,19 +79,6 @@ public sealed interface Primitive {
                 yield Change.NONE.expect(new Change.Dropped(reference.site(), reference.target()));
             }
         };
-    }
-
-    /** A new body ({@link Body}): the uses of the old one are gone, and the method makes the ones the new one names. */
-    private static Change body(Program before, ElementId method, String text) {
-        var change = Change.NONE;
-        var body = Body.parse(text, before, method);
-        for (var use : before.referencesFrom(method)) {
-            if (!use.mode().isLink()) change = change.expect(new Change.Dropped(method, use.target()));
-        }
-        for (var use : body.uses()) {
-            change = change.expect(new Change.Added(method, use.element(), before.element(use.element()).name(), use.mode()));
-        }
-        return change;
     }
 
     /** A field's start said in no language: its uses take the place of the old start's. */

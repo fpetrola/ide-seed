@@ -2,17 +2,21 @@ package ide.java;
 
 import ide.program.Body;
 import ide.program.ElementId;
+import ide.program.Fact;
+import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
+import ide.projection.PrimitiveRejected;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * A body in no language, written in Java: fields and parameters by name, a field qualified where a parameter of the
- * same name hides it, and a new object by its type's simple name, imported where it must be.
+ * Statements in no language, written in Java: fields and parameters by name, a field qualified where a parameter of
+ * the same name hides it, and a new object by its type's simple name, imported where it must be.
  */
 class BodyTest {
 
@@ -47,22 +51,27 @@ class BodyTest {
         return program.find(address).orElseThrow(() -> new AssertionError("no element " + address)).id();
     }
 
+    /** A statement said in no language, at the end of a method's body, in place of the one it has if {@code instead}. */
+    private static void say(JavaProjection projection, String method, String said, boolean instead) {
+        var p = projection.program();
+        if (instead) projection.apply(new Primitive.Delete(id(p, method + "[1]")));
+        projection.apply(new Primitive.Create(Kind.STATEMENT, id(projection.program(), method), "", Map.of(Fact.BODY, said), null));
+    }
+
     @Test
-    void theDefaultIsWhatItsTypeStartsWithAndNothingForVoid() {
+    void theDefaultIsWhatItsTypeStartsWithAndAVoidMethodHasNoneToAnswer() {
         var projection = JavaProjection.of(Map.of("a/P.java", P));
         var p = projection.program();
 
-        projection.apply(new Primitive.Set(id(p, "a.P#get()"), "body", "return default"));
-        projection.apply(new Primitive.Set(id(p, "a.P#setX(int)"), "body", "return default"));
+        say(projection, "a.P#get()", "return default", true);
 
         assertThat(projection.source("a/P.java")).contains("""
-                    void setX(int x) {
-                    }
-                """, """
                     int get() {
                         return 0;
                     }
                 """);
+        assertThatThrownBy(() -> projection.apply(new Primitive.Create(Kind.STATEMENT, id(p, "a.P#setX(int)"), "",
+                Map.of(Fact.BODY, "return default"), null))).isInstanceOf(PrimitiveRejected.class);
     }
 
     @Test
@@ -70,10 +79,9 @@ class BodyTest {
         var projection = JavaProjection.of(Map.of("a/P.java", P));
         var p = projection.program();
 
-        projection.apply(new Primitive.Set(id(p, "a.P#setX(int)"), "body", name(p, "a.P#x") + " = " + name(p, "a.P#setX(int)/x")));
-        projection.apply(new Primitive.Set(id(p, "a.P#setCount(int)"), "body",
-                name(p, "a.P#count") + " = " + name(p, "a.P#setCount(int)/count")));
-        projection.apply(new Primitive.Set(id(p, "a.P#get()"), "body", "return " + name(p, "a.P#x")));
+        say(projection, "a.P#setX(int)", name(p, "a.P#x") + " = " + name(p, "a.P#setX(int)/x"), false);
+        say(projection, "a.P#setCount(int)", name(p, "a.P#count") + " = " + name(p, "a.P#setCount(int)/count"), false);
+        say(projection, "a.P#get()", "return " + name(p, "a.P#x"), true);
 
         assertThat(projection.source("a/P.java")).contains("""
                     void setX(int x) {
@@ -103,8 +111,7 @@ class BodyTest {
                 """));
         var p = projection.program();
 
-        projection.apply(new Primitive.Set(id(p, "b.Shop#make(int)"), "body",
-                "return new " + name(p, "a.P#new(int)") + "(" + name(p, "b.Shop#make(int)/size") + ")"));
+        say(projection, "b.Shop#make(int)", "return new " + name(p, "a.P#new(int)") + "(" + name(p, "b.Shop#make(int)/size") + ")", true);
 
         assertThat(projection.source("b/Shop.java")).isEqualTo("""
                 package b;

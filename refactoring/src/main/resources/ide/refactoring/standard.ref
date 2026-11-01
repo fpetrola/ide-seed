@@ -9,7 +9,7 @@ refactoring generate-getter "A public method getX that answers the value of a fi
   set ${getter} visibility public
   set ${getter} static ${attr(field, "static")}
   set ${getter} type ${type(field)}
-  set ${getter} body "return #{field}"
+  create STATEMENT ${getter} "" facts="body=return #{field}"
   return ${getter}
 end
 
@@ -20,7 +20,7 @@ refactoring generate-setter "A public method setX(x) that gives a field x a valu
   set ${setter} static ${attr(field, "static")}
   p := create PARAM ${setter} ${name(field)}
   set ${p} type ${type(field)}
-  set ${setter} body "#{field} = #{p}"
+  create STATEMENT ${setter} "" facts="body=#{field} = #{p}"
   return ${setter}
 end
 
@@ -100,7 +100,7 @@ refactoring introduce-factory "Static factory for a constructor; every new outsi
     q := create PARAM ${f} ${name(p)}
     set ${q} type ${type(p)}
   end
-  set ${f} body "return new #{constructor}(#{params(f)})"
+  create STATEMENT ${f} "" facts="body=return new #{constructor}(#{params(f)})"
   for r in refs(constructor) | not-within f
     retarget ${r} ${f}
   end
@@ -303,7 +303,7 @@ refactoring generate-delegates "Methods that hand each call on to what a field h
       q := create PARAM ${d} ${name(p)}
       set ${q} type ${type(p)}
     end
-    set ${d} body "return #{field}.#{m}(#{params(d)})"
+    create STATEMENT ${d} "" facts="body=return #{field}.#{m}(#{params(d)})"
   end
   return ${field}
 end
@@ -321,7 +321,7 @@ refactoring rename-with-delegate "Renames a method and keeps its old name as a m
     q := create PARAM ${d} ${name(p)}
     set ${q} type ${type(p)}
   end
-  set ${d} body "return #{method}(#{params(d)})"
+  create STATEMENT ${d} "" facts="body=return #{method}(#{params(d)})"
   return ${d}
 end
 

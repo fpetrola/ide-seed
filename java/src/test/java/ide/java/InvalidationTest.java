@@ -41,7 +41,8 @@ class InvalidationTest {
         var projection = JavaProjection.of(SOURCES);
 
         var p = projection.program();
-        projection.apply(new Primitive.Set(id(p, "a.A#twice()"), "body", "return " + Body.name(id(p, "a.A#x"))));
+        projection.apply(new Primitive.Create(ide.program.Kind.STATEMENT, id(p, "a.A#twice()"), "",
+                Map.of(ide.program.Fact.BODY, "return " + Body.name(id(p, "a.A#x"))), null));
         projection.program();
 
         assertThat(projection.resolvedLastTime()).containsExactly("a/A.java");

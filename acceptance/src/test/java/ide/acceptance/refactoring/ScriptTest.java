@@ -53,9 +53,9 @@ class ScriptTest {
                 "    ' move a.B#y -> a.A");
     }
 
-    /** A body names elements; the engine checks that what the language wrote binds them, and nothing else. */
+    /** A statement names elements; the engine checks that what the language wrote binds them, and nothing else. */
     @Test
-    void aBodyWrittenSoThatItBindsSomethingElseIsNotKept() {
+    void aStatementWrittenSoThatItBindsSomethingElseIsNotKept() {
         var outer = """
                 package a;
 
@@ -76,7 +76,8 @@ class ScriptTest {
                 refactoring answer-field "Makes a method answer the value of a field"
                   param method : element(METHOD) "the method"
                   param field : element(FIELD) "the field it answers"
-                  set ${method} body "return #{field}"
+                  delete ${first(statements(method))}
+                  create STATEMENT ${method} "" facts="body=return #{field}"
                   return ${method}
                 end
                 """);

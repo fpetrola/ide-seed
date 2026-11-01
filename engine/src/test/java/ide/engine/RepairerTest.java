@@ -31,7 +31,7 @@ class RepairerTest {
                 .type("a.A").type("a.B")
                 .field("a.B", "x", "int").fact("a.B#x", Fact.VISIBILITY, "private")
                 .field("a.B", "z", "int").fact("a.B#z", Fact.VISIBILITY, "private")
-                .method("a.B", "n", "int").use("a.B#n()", "a.B#x", Mode.READ).use("a.B#n()", "a.B#z", Mode.READ)
+                .method("a.B", "n", "int").statement("a.B#n()").use("a.B#n()[1]", "a.B#x", Mode.READ).use("a.B#n()[1]", "a.B#z", Mode.READ)
                 .build();
         before = projection.program();
         projection.apply(new Primitive.Move(id(before, "a.B#n()"), id(before, "a.A"), null));
@@ -48,9 +48,10 @@ class RepairerTest {
 
     @Test
     void aRepairIsJudgedByWhatItsChangesMean() {
-        // n() is said anew, reading neither field: what it no longer reads is what the repair meant, not a lost binding
+        // n()'s statement goes, and with it its reads of both fields: what it no longer reads is what the repair meant,
+        // not a lost binding
         Remedy rewrite = (violation, p) -> List.of(new Plan("say n anew", List.of(),
-                (target, answers) -> target.apply(new Primitive.Set(id(target.program(), "a.A#n()"), "body", "return default"))));
+                (target, answers) -> target.apply(new Primitive.Delete(id(target.program(), "a.A#n()[1]")))));
 
         var outcome = new Repairer(List.of(rewrite)).stabilize(before, List.of(), projection);
 

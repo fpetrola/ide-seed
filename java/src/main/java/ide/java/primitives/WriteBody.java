@@ -16,11 +16,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * A body in no language ({@link Body}) written in Java, in place of a method's: a field or a parameter by its name, a
- * field through {@code this} (or through its type, if static) where a parameter of the same name hides it, and a new
- * object by its type's simple name, imported if the file cannot name it yet. The default is the one of the method's
- * type, as a field would start with it; a void method answers nothing, and a call it would answer is a statement. A
- * body that keeps what the method does is written after its last statement.
+ * A statement in no language ({@link Body}) written in Java, at the end of a method's body or, calling a constructor,
+ * at its start; and a field's start. A field or a parameter by its name, a field through {@code this} (or through its
+ * type, if static) where a parameter of the same name hides it, and a new object by its type's simple name, imported
+ * if the file cannot name it yet. The default is the one of the method's type, as a field would start with it; a void
+ * method answers nothing, and a call it would answer is a statement.
  */
 final class WriteBody {
 
@@ -39,24 +39,6 @@ final class WriteBody {
         this.unit = unit;
         this.type = type;
         this.owner = owner;
-    }
-
-    static void apply(Context c, ElementId method, String text) {
-        var program = c.program();
-        var body = Body.parse(text, program, method);
-        var declaration = c.declaration(program.element(method));
-        com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
-        var unit = declaration.unit();
-        var edits = new EditSet();
-        var type = callable instanceof MethodDeclaration m ? m.getType().asString() : "void";
-        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, type, program.element(method).parent());
-        var statements = body.statements().stream().map(writer::statement).filter(s -> !s.isEmpty()).collect(Collectors.joining("\n"));
-        var indent = unit.indentation(callable.getBegin().orElseThrow().line);
-        var block = callable instanceof MethodDeclaration m ? m.getBody().orElseThrow()
-                : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
-        edits.replace(unit, block, Render.block(statements, indent));
-        c.sources().apply(edits);
-        Shared.forgetBody(c, program, method);
     }
 
     /** One statement said in no language, written at the end of a method's or constructor's body, or at its start. */

@@ -43,7 +43,6 @@ final class SetAttribute {
             case "abstract" -> setAbstract(c, id, Boolean.parseBoolean(value));
             case "superclass" -> superclass(c, id, value);
             case "type" -> type(c, id, value);
-            case "body" -> WriteBody.apply(c, id, value);
             case "initializer" -> initializer(c, id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }

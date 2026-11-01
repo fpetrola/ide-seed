@@ -211,10 +211,6 @@ final class MemoryPrimitives {
     }
 
     private static void set(MemoryGraph graph, ElementId element, String attribute, String value) {
-        if (attribute.equals(Fact.BODY.label())) {
-            body(graph, element, value);
-            return;
-        }
         if (attribute.equals("initializer") && Body.names(value)) { // a start said in no language: its uses are the field's
             var start = Body.value(value, graph.read(), element);
             graph.uses.removeIf(use -> use.site().equals(element) && !use.mode().isLink());
@@ -233,25 +229,6 @@ final class MemoryPrimitives {
         if (fact == Fact.TYPE) graph.relink(element, Mode.DECLARED, graph.typeNamed(value)); // the text decides what it links to
         if (fact == Fact.SUPERCLASS) graph.relink(element, Mode.EXTENDS, graph.typeNamed(value));
         if (fact == Fact.TYPE && node.kind() == Kind.PARAM) graph.resign(node.parent());
-    }
-
-    /** A body in no language is its own text, and the uses and statements it makes take the place of the old body's. */
-    private static void body(MemoryGraph graph, ElementId method, String text) {
-        var body = Body.parse(text, graph.read(), method);
-        graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
-        for (var statement : graph.statements(method)) {
-            graph.order.remove(statement);
-            graph.nodes.remove(statement);
-            graph.ids.forget(statement);
-        }
-        for (var statement : body.statements()) {
-            var made = create(graph, Kind.STATEMENT, method, "", null);
-            graph.nodes.put(made, graph.nodes.get(made).with(Fact.BODY, Body.text(statement))); // what it says
-            for (var use : Body.uses(statement)) {
-                graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()).in(made));
-            }
-        }
-        graph.nodes.put(method, graph.nodes.get(method).with(Fact.BODY, text));
     }
 
     private static void link(MemoryGraph graph, ElementId element, Mode mode, ElementId target) {

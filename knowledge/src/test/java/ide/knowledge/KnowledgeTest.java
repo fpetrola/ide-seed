@@ -330,7 +330,8 @@ class KnowledgeTest {
         var p = projection.program();
         var measure = p.find("a.U#measure(List<String>,int)").orElseThrow();
         assertThat(measure.fact(Fact.TYPE)).isEqualTo("long");
-        assertThat(measure.fact(Fact.BODY)).isEqualTo("return default");
+        assertThat(p.children(measure.id()).stream().filter(e -> e.kind() == Kind.STATEMENT).map(e -> projection.said(e.id()).orElse("?")))
+                .containsExactly("return default");
         assertThat(p.children(measure.id())).filteredOn(e -> e.kind() == Kind.PARAM).extracting(e -> e.name() + " " + e.fact(Fact.TYPE))
                 .containsExactly("names List<String>", "i int");
     }
