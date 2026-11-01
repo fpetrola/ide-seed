@@ -19,7 +19,9 @@ One Maven module per product; each pom declares only the products it uses, so th
 the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package `ide.<product>`.
 
 - `core` — Capability, CapabilityRegistry, Param, Json, EventLog (JSONL), TextDiff. Knows nothing else.
-- `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts), Reference (id `site@ordinal`, Mode:
+- `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts; LIBRARY marks a library type the
+  workspace names: never changed, its name is its id, out of the workspace hierarchy), Unresolved (a use that binds
+  nothing, same id space as references; a Retarget binds it), Reference (id `site@ordinal`, Mode:
   uses read|write|update|call|new|type and links extends|implements|declared), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
   parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
@@ -27,7 +29,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   its `intent`) and Change (produced element, expectations, pins).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`), LanguageRules, Diagnostic,
-  CompletionContext, PrimitiveRejected.
+  CompletionContext, PrimitiveRejected (and the rule every driver applies: nothing changes a library element).
 - `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
   with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,
@@ -37,7 +39,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
   `ide.java.semantics` (Reader: program + declarations + use nodes; Resolution, Keys, WorkspaceTypeSolver,
   JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
-  `ide.java.JavaProjection` (sources, identity, reading, invalidation). The AST is never edited. Other modules use
+  `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
+  names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
+  binding one writes the name and imports it. The AST is never edited. Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
 - `engine` (projection) — Transaction (born with its Repairer; intercepts `apply`, folds each declared Change into
   the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins

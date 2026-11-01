@@ -162,6 +162,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     TYPE. Modos de vínculo: EXTENDS, IMPLEMENTS, DECLARED (el tipo declarado de un campo, parámetro o retorno). Un
     vínculo es una referencia porque la jerarquía y el verificador lo tratan igual que a un uso: hoy son strings
     duplicados en atributos y eso obliga a re-resolver nombres en todos lados.
+  - `Unresolved`: un uso cuyo nombre no liga nada (site, nombre, modo). Su id está en el mismo espacio que el de
+    las referencias (`site@ordinal`), así un primitivo puede nombrarlo. Vive aparte de las referencias, que siempre
+    ligan algo: nada de lo que lee referencias tiene que preguntar si tienen destino.
+  - Elementos de biblioteca: los tipos de una biblioteca que el workspace nombra, con su paquete, marcados con el
+    hecho `LIBRARY`. El programa los nombra y nada los cambia; su identidad es su nombre. La jerarquía
+    (`superclass`, `supertypes`, `declaredType`) es la del workspace; `link(element, mode)` responde un vínculo
+    adonde sea que ligue.
   - `Facts`: conjunto cerrado y tipado: `visibility` (valores que da el lenguaje, ordenados), `static`, `abstract`,
     `final`. Se amplía solo cuando un refactoring o una vista lo necesita para decidir.
   - `Address`: dirección tipada. Paquete por nombre; tipo por nombre calificado; miembro por id del dueño, nombre y
@@ -202,7 +209,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   los overriders; `Address` e `Identity` tipadas, con las claves de tipo de parámetro por id; cada `Element` lleva
   su dirección, y la sobrescritura compara nombre y claves, no texto. Desde la fase 6 responde también la jerarquía
   entera: `ancestors`, `subtypes` (por el índice de referencias) y `overriddenTransitively`, que antes calculaba la
-  navegación de la sesión recorriendo el grafo a mano.
+  navegación de la sesión recorriendo el grafo a mano. Desde la etapa 2 tiene usos sin resolver y elementos de
+  biblioteca; `Retarget` liga un uso sin resolver (`Change.Bound`); `Primitive.changed()` dice qué elementos cambia
+  cada primitivo; el outline muestra `site -> ? nombre (modo)` y marca los tipos `(library)`.
 - **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
   enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
 
@@ -219,7 +228,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `edit(path, text)`: edición manual; el texto del usuario es la autoridad; rechaza lo que no parsea.
   - `List<Diagnostic> diagnostics()`: la vista del compilador.
   - `Optional<CompletionContext> completion(path, text, offset)`.
-  - `LanguageRules rules()`: accesibilidad, visibilidades posibles de un elemento, candidatos de import.
+  - `LanguageRules rules()`: accesibilidad y visibilidades posibles de un elemento. Ya no ofrece candidatos de
+    import: el programa tiene los tipos que un uso podría nombrar.
 - **Obligaciones del driver**, que el kit de conformidad (un test abstracto que corre contra cada implementación)
   verifica:
   1. Identidad: un elemento conserva su id a través de rename, move, set y link; lo creado recibe un id nuevo; lo
@@ -229,6 +239,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
      texto, salvo los ids.
   4. `snapshot` y `restore` devuelven texto, identidad y grafo idénticos.
   5. Un primitivo rechazado no deja ningún cambio.
+  6. Un elemento de biblioteca nunca cambia: todo primitivo que lo cambiaría se rechaza (`projection.library`, la
+     regla vive en `PrimitiveRejected.unlessInWorkspace` y la usan los dos drivers).
+  7. Un retarget de un uso sin resolver lo liga: desde ahí es una referencia.
 - **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
   el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
   mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo
@@ -239,7 +252,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   tipados, `rules`, `diagnostics` y `completionContext`. El texto (`files`, `sources`) queda en el driver de Java:
   lo usa la sesión, que lo conoce. El contrato verifica las cinco obligaciones más los parámetros (se crean con el
   argumento que pasan las llamadas y se mueven dentro de su método). Corre contra `MemoryProjection` y contra el
-  driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba.
+  driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba. En la etapa 2 el
+  fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
   hasta que estorbe.
 
@@ -272,8 +286,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Estado actual** (fase 3 cerrada, 2026-10-31). Las cinco capas existen y ningún archivo pasa de 275 líneas.
   Cada capa tiene tests propios: `SourcesTest` (texto), `SyntaxTest` (sintaxis), el contrato (el driver entero) y
   `LayersTest`. Un miembro movido lleva su comentario. Un texto que no parsea se rechaza como
-  `projection.unparsable`, en vez de romper. `set` todavía tiene dos casos que solo entiende Java: `import` e
-  `initializer`.
+  `projection.unparsable`, en vez de romper. `set` todavía tiene un caso que solo entiende Java: `initializer`. Desde
+  la etapa 2 el Reader suma los tipos de biblioteca que el código nombra (con id `lib:` y su nombre, fuera de la
+  tabla de identidad, donde cambiarían las claves de los miembros) y los tipos escritos que no ligan nada, con los
+  tipos del JDK que podrían nombrar. Ligar uno escribe el nombre del destino y lo importa si hace falta. Reemplazar
+  un tipo vinculado declara que los usos dentro de él, como sus argumentos de tipo, se van con él.
 - **Abierto.** Invalidación selectiva: se reparsea solo lo tocado, pero el grafo se relee entero. Borrado de tipos
   anidados. Reconciliación estructural de identidad en `edit`. Renombrar un parámetro no renombra sus usos en el
   cuerpo, porque esos usos no son referencias del grafo.
@@ -348,7 +365,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Estado actual** (fase 5 cerrada, 2026-10-31). `ide.refactoring` (`Refactoring`, `Library`, `Run`, `Args`,
   `Value`, `Primitives`, `ChangeSignature`) e `ide.refactoring.script`. Los primitivos se leen del vocabulario:
   nada se registra a mano. Fugas de Java, marcadas donde están: las plantillas de cuerpo de generate-getter,
-  generate-setter e introduce-factory en el catálogo, y `import` e `initializer` en el conocimiento.
+  generate-setter e introduce-factory en el catálogo, e `initializer` en el conocimiento. `import` dejó de ser una
+  fuga en la etapa 2: es un retarget (funciones `unresolved-in` y `types-named`).
 - **Abierto.** Un lenguaje neutral de cuerpos para las plantillas (`return field`, `assign field param`,
   `return new owner(params)`) que la proyección renderice (decisión 12, etapa 2).
 
@@ -368,7 +386,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   hechos entran tipados (site y target son elementos) y sus preguntas muestran los elementos por dirección. Tests
   propios (`KnowledgeTest`) con metas y efectos escritos en el test. Desde la fase 6 trae su base estándar
   (`Knowledge.standard`) y sabe qué hechos da una violación o un diagnóstico (`search(Violation)`,
-  `search(Diagnostic)`); antes la sesión cargaba la base por su ruta y armaba esos hechos.
+  `search(Diagnostic)`); antes la sesión cargaba la base por su ruta y armaba esos hechos. Desde la etapa 2 el fix de
+  import liga el uso sin resolver al que apunta el diagnóstico con un tipo de ese nombre: un retarget, sin Java.
 - **Abierto.** Encadenamiento hacia atrás en varios niveles (la spec pedía 8 niveles, 4 pasos y 12 planes; hoy hay
   un nivel); `fact` e `invariant` del lenguaje de conocimiento.
 
@@ -446,17 +465,17 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 |
-|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|
-| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  |
-| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  |
-| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  |
-| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  |
-| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   |
-| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   |
-| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  |
-| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítem 1 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|-----------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 15              |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10              |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 26              |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19              |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11              |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6               |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0               |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22              |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 105             |
 
 ## 7. Decisiones
 
@@ -472,13 +491,14 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 8  | Creación                 | `Create` recibe los hechos con que nace y, para un parámetro, el argumento de las llamadas  | tomada, 2026-10-31 (8f0ed6a) |
 | 9  | Rastro                   | `Trace` como árbol de datos; un único render a líneas                                      | tomada, 2026-10-31 (34a3b0e) |
 | 10 | Conformidad              | `projection-kit`: `MemoryProjection` y `ProjectionContract`, que corre contra cada driver   | tomada, 2026-10-31 (f64f7dd) |
-| 11 | Referencias no resueltas | entran al grafo con destino desconocido; import pasa a ser retarget                        | diferida, etapa 2 |
+| 11 | Referencias no resueltas | entran al programa como usos sin resolver, aparte de las referencias; import pasa a ser retarget | tomada, 2026-10-31 (0b40a6c, 0a738bf) |
 | 12 | Cuerpos en plantillas    | lenguaje neutral de cuerpos renderizado por la proyección                                  | diferida, etapa 2 |
 | 13 | Módulos Maven            | un módulo por producto, más `acceptance` para los escenarios transversales                  | tomada, 2026-10-31 (5d641a2) |
 | 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | tomada, 2026-10-31 |
 | 15 | Ejecución                | un único `Run`, dentro de una transacción o directo sobre una proyección; reemplaza a `Ctx` | tomada, 2026-10-31 (6911992) |
 | 16 | Valores de scripts       | `Value` tipado (`Elem`, `Ref`, `Text`, `Bool`, `Items`); id o dirección se resuelve en `Args` | tomada, 2026-10-31 (fb7e3e9) |
 | 17 | Transacción y reparador  | la transacción nace con su reparador; `attempt(label, body)`, `commit()`, `Run.in(tx, library)` | tomada, 2026-10-31 (85bb676) |
+| 18 | Tipos de biblioteca      | los que el workspace nombra son elementos `LIBRARY`, con su nombre como identidad; nada los cambia y la jerarquía es la del workspace | tomada, 2026-10-31 (a5fdf89) |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -496,14 +516,15 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | La Transaction interpreta atributos para deducir la intención (resuelto en 1524f0c y 5cceb1a) | `ide.engine`    | 2    |
 | Registro manual de los primitivos como refactorings (resuelto en 351d5c2)          | `ide.refactoring`      | 2    |
 | Dos mecanismos de edición; `changed()` reimprime todas las unidades (resuelto en 3f994c2) | `ide.java` | 3 |
-| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; quedan `import` e `initializer`) | `ide.java.primitives.SetAttribute` | etapa 2 |
+| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; `import` en 0a738bf; queda `initializer`) | `ide.java.primitives.SetAttribute` | etapa 2 |
 | `MemoryProjection` en un solo archivo grande (resuelto en 9c507a0)                  | `projection-kit`       | 3    |
 | Búsqueda de declaración, unidad y ruta repetida por primitivo (resuelto en 646c9bc) | `ide.java`             | 3    |
 | Vistas no enchufables; vista del compilador dentro del reparador (resuelto en 6bbf600) | `ide.engine`       | 4    |
 | Rastro como strings con sigilos (resuelto en 34a3b0e)                              | `ide.engine`           | 4    |
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge (resuelto en 6911992) | `ide.session`, `ide.knowledge` | 5 |
 | Valores de scripts como strings; id o dirección resuelto en cada función (resuelto en fb7e3e9) | `ide.refactoring.script` | 5 |
-| Plantillas de cuerpo en Java dentro del catálogo; `set import` e `initializer` (marcadas donde están en fb7e3e9; `CatalogTest` las cuida) | `standard.ref`, `knowledge.ref` | etapa 2 |
+| Plantillas de cuerpo en Java dentro del catálogo e `initializer` en el conocimiento (marcadas donde están en fb7e3e9; `CatalogTest` las cuida; `set import` se fue en 0a738bf) | `standard.ref`, `knowledge.ref` | etapa 2 |
+| Los usos de bibliotecas no se verificaban: un rename podía capturar los usos de un import con comodín (resuelto en a5fdf89) | `ide.java`, `ide.engine` | etapa 2 |
 | El reparador entra dos veces en el código que coordina (decisión 17; resuelto en 85bb676) | `ide.engine`, `ide.session` | 6 |
 | La sesión carga `knowledge.ref` por su ruta y arma los hechos de un diagnóstico (resuelto en a288c2e) | `ide.session` | 6 |
 | La navegación recorre el grafo a mano: overrides transitivos, supertipos, subtipos (resuelto en 39f5dda) | `ide.session` | 6 |
@@ -642,7 +663,17 @@ etapa 2, por valor.
 ### Etapa 2, por valor
 
 1. Referencias no resueltas en el grafo: el quick fix de import se vuelve un retarget, `binding.unresolved` y
-   completion comparten modelo.
+   completion comparten modelo. Hecho para los tipos escritos, en tres ciclos:
+   - a5fdf89: los tipos de biblioteca que el workspace nombra son elementos, y sus usos, referencias verificadas.
+     Ganancia directa: un rename que capturaba los usos de `java.util.*` ahora es `binding.rebound`. Destapó que
+     reemplazar un tipo vinculado no declaraba la ida de sus argumentos de tipo.
+   - 0b40a6c: los usos que no ligan nada son parte del programa, y un retarget los liga.
+   - 0a738bf: el fix de import es un retarget; se van `set import` y los candidatos de import de las reglas.
+
+   Abierto: los campos y métodos que no ligan nada todavía no son usos del programa (el Reader no distingue sin
+   riesgo un nombre sin resolver de una variable local). Cuando lo sean, el fix de create-field partirá del uso y no
+   del nombre en mayúscula del diagnóstico, y la completion y los fixes compartirán una sola pregunta: qué puede
+   ligar este uso desde su sitio.
 2. Reconciliación estructural de identidad en ediciones manuales (hoy un rename a mano equivale a borrar y crear).
 3. Invalidación selectiva del grafo.
 4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo.
@@ -655,6 +686,8 @@ etapa 2, por valor.
 - **Elemento**: algo con identidad en el programa: paquete, tipo, campo, constructor, método, parámetro.
 - **Referencia**: un uso o un vínculo de un elemento (site) a otro (target), con un modo.
 - **Vínculo**: una referencia de declaración: extends, implements, declared.
+- **Uso sin resolver**: un uso cuyo nombre no liga nada; un retarget lo liga.
+- **Tipo de biblioteca**: un tipo de fuera del workspace que el programa nombra; nada lo cambia.
 - **Hecho**: un valor tipado sobre un elemento: visibilidad, estático, abstracto, final.
 - **Dirección**: cómo se nombra un elemento desde el texto; cambia con rename y move. El id no.
 - **Identidad**: la tabla dirección → id; solo los primitivos la transfieren.
