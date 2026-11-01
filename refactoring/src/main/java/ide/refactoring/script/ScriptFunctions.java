@@ -123,6 +123,7 @@ final class ScriptFunctions {
             case "count" -> text(String.valueOf(Value.items(args.get(0)).size())); // numbers are text; eq compares them so
             case "first" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getFirst();
             case "last" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getLast();
+            case "reversed" -> new Value.Items(Value.items(args.get(0)).reversed());
             default -> throw new IllegalArgumentException("unknown script function: " + name);
         };
     }

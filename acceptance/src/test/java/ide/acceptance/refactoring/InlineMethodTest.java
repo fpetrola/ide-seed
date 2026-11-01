@@ -46,6 +46,32 @@ class InlineMethodTest {
     }
 
     @Test
+    void twoCallsInOneMethodAreInlinedAlthoughTheBodyUsesMoreThanOneThing() {
+        var ws = Workspace.of(Map.of("a/P.java", """
+                package a;
+
+                class P {
+                    int base;
+                    int step;
+
+                    int next(int k) {
+                        return base + step * k;
+                    }
+
+                    int use(int v) {
+                        return next(v) - next(2);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-method", Map.of("method", "a.P#next(int)"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/P.java")).contains("return base + step * v - (base + step * 2);");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    @Test
     void anArgumentThatWouldBeEvaluatedTwiceIsRefused() {
         var p = """
                 package a;
