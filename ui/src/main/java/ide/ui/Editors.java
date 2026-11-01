@@ -13,6 +13,7 @@ import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rsyntaxtextarea.parser.AbstractParser;
 import org.fife.ui.rsyntaxtextarea.parser.DefaultParseResult;
 import org.fife.ui.rsyntaxtextarea.parser.DefaultParserNotice;
+import org.fife.ui.rsyntaxtextarea.parser.ParserNotice;
 import org.fife.ui.rsyntaxtextarea.parser.ParseResult;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
@@ -75,7 +76,11 @@ final class Editors extends JTabbedPane {
         }
     }
 
-    /** The problems of a file, as notices the editor underlines. */
+    /** IntelliJ's colors for an error's wave and a warning's. */
+    static final java.awt.Color ERROR = new java.awt.Color(0xF75464);
+    static final java.awt.Color WARNING = new java.awt.Color(0xD9A343);
+
+    /** The problems of a file, as notices the editor underlines where they are, red or yellow. */
     private static final class Problems extends AbstractParser {
 
         private List<Map<String, Object>> problems = List.of();
@@ -83,15 +88,36 @@ final class Editors extends JTabbedPane {
         @Override
         public ParseResult parse(RSyntaxDocument document, String style) {
             var result = new DefaultParseResult(this);
+            var root = document.getDefaultRootElement();
             for (var problem : problems) {
                 var message = String.valueOf(problem.get("message")).lines().findFirst().orElse("");
-                result.addNotice(new DefaultParserNotice(this, message, ((Number) problem.get("line")).intValue() - 1));
+                var line = ((Number) problem.get("line")).intValue() - 1;
+                var column = number(problem.get("column"));
+                var length = number(problem.get("length"));
+                DefaultParserNotice notice;
+                if (line < root.getElementCount() && column > 0 && length > 0) {
+                    var start = root.getElement(line).getStartOffset() + column - 1;
+                    notice = new DefaultParserNotice(this, message, line, start, Math.min(length, document.getLength() - start));
+                } else {
+                    notice = new DefaultParserNotice(this, message, line);
+                }
+                var warning = "WARNING".equals(problem.get("severity"));
+                notice.setLevel(warning ? ParserNotice.Level.WARNING : ParserNotice.Level.ERROR);
+                notice.setColor(warning ? WARNING : ERROR);
+                notice.setShowInEditor(true);
+                result.addNotice(notice);
             }
             return result;
+        }
+
+        private static int number(Object value) {
+            return value instanceof Number n ? n.intValue() : 0;
         }
     }
 
     private final Map<String, Editor> editors = new LinkedHashMap<>();
+    /** The last problems the IDE said, which a file opened later shows too. */
+    private List<Map<String, Object>> problems = List.of();
     private final List<KeyStroke> keys;
     private final Help help;
 
@@ -143,6 +169,7 @@ final class Editors extends JTabbedPane {
             panel.add(new ErrorStrip(area), BorderLayout.LINE_END);
             editors.put(path, editor);
             addTab(path.substring(path.lastIndexOf('/') + 1), Icons.of("CLASS"), panel, path);
+            problems(problems);
         }
         setSelectedIndex(List.copyOf(editors.keySet()).indexOf(path));
     }
@@ -187,6 +214,7 @@ final class Editors extends JTabbedPane {
 
     /** The problems of the files, as the IDE lists them (path, line and message each): underlined, and in the margin. */
     void problems(List<Map<String, Object>> problems) {
+        this.problems = problems;
         for (var editor : editors.values()) {
             editor.problems.problems = problems.stream().filter(p -> editor.path.equals(p.get("path"))).toList();
             editor.area.forceReparsing(editor.problems);
@@ -194,7 +222,8 @@ final class Editors extends JTabbedPane {
             gutter.removeAllTrackingIcons();
             for (var problem : editor.problems.problems) {
                 try {
-                    gutter.addLineTrackingIcon(((Number) problem.get("line")).intValue() - 1, Icons.of("ERROR"),
+                    gutter.addLineTrackingIcon(((Number) problem.get("line")).intValue() - 1,
+                            Icons.of("WARNING".equals(problem.get("severity")) ? "WARNING" : "ERROR"),
                             String.valueOf(problem.get("message")).lines().findFirst().orElse(""));
                 } catch (BadLocationException outside) {
                     // a line the text no longer has

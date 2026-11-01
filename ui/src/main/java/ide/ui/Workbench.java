@@ -34,31 +34,35 @@ import java.util.Optional;
  */
 final class Workbench extends JPanel {
 
-    /** A file in the project's tree, with how many problems it has. */
-    private record File(String path, long problems) {
+    /**
+     * A file or a package in the project's tree, with the worst of what is wrong in it (ERROR, WARNING, or null), as
+     * Eclipse marks it.
+     */
+    record Node(String path, String name, boolean file, String severity) {
         @Override
         public String toString() {
-            return path.substring(path.lastIndexOf('/') + 1, path.length() - (path.endsWith(".java") ? 5 : 0));
+            return name;
         }
     }
 
-    /** A package or a file, with its icon; a file with problems in red, with how many. */
+    /** A package or a file, with its icon, marked at its bottom left with what is wrong in it. */
     private static final class FileRenderer extends DefaultTreeCellRenderer {
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded,
                                                       boolean leaf, int row, boolean focus) {
-            var object = ((DefaultMutableTreeNode) value).getUserObject();
-            if (object instanceof File file) {
-                var text = file.problems() == 0 ? file.toString()
-                        : "<html><font color='#E05555'><u>" + file + "</u></font>&nbsp;&nbsp;<font color='#808080'>" + file.problems() + "</font></html>";
-                super.getTreeCellRendererComponent(tree, text, selected, expanded, leaf, row, focus);
-                setIcon(Icons.of("CLASS"));
-            } else {
-                super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
-                setIcon(Icons.of("PACKAGE"));
+            super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
+            if (((DefaultMutableTreeNode) value).getUserObject() instanceof Node node) {
+                setIcon(Icons.marked(Icons.of(node.file() ? "CLASS" : "PACKAGE"), node.severity()));
+                setToolTipText(node.severity() == null ? null : node.path() + (node.severity().equals("ERROR") ? " has errors" : " has warnings"));
             }
             return this;
         }
+    }
+
+    /** The worst of the problems' severities: ERROR over WARNING over none. */
+    private static String worst(java.util.stream.Stream<Map<String, Object>> problems) {
+        var severities = problems.map(p -> String.valueOf(p.get("severity"))).collect(java.util.stream.Collectors.toSet());
+        return severities.contains("ERROR") ? "ERROR" : severities.contains("WARNING") ? "WARNING" : null;
     }
 
     private final Ide ide;
@@ -123,12 +127,13 @@ final class Workbench extends JPanel {
         project.setRootVisible(false);
         project.setShowsRootHandles(true);
         project.setCellRenderer(new FileRenderer());
+        javax.swing.ToolTipManager.sharedInstance().registerComponent(project);
         project.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
                 var path = project.getPathForLocation(event.getX(), event.getY());
                 if (event.getClickCount() == 2 && path != null
-                        && ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject() instanceof File file) {
+                        && ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject() instanceof Node file && file.file()) {
                     remember();
                     open(file.path(), 1, 1);
                 }
@@ -247,18 +252,20 @@ final class Workbench extends JPanel {
         for (var path : files) {
             var slash = path.lastIndexOf('/');
             var folder = slash < 0 ? root : folders.computeIfAbsent(path.substring(0, slash), name -> {
-                var node = new DefaultMutableTreeNode(name.replace('/', '.'));
+                var inside = name + "/";
+                var node = new DefaultMutableTreeNode(new Node(name, name.replace('/', '.'), false,
+                        worst(problems.stream().filter(p -> String.valueOf(p.get("path")).startsWith(inside)))));
                 root.add(node);
                 return node;
             });
-            folder.add(new DefaultMutableTreeNode(new File(path, problems.stream().filter(p -> path.equals(p.get("path"))).count())));
+            var name = path.substring(slash + 1, path.length() - (path.endsWith(".java") ? 5 : 0));
+            folder.add(new DefaultMutableTreeNode(new Node(path, name, true, worst(problems.stream().filter(p -> path.equals(p.get("path")))))));
         }
         tree.setRoot(root);
         for (var row = 0; row < project.getRowCount(); row++) project.expandRow(row);
         for (var path : editors.open()) if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
         editors.problems(problems);
-        views.problems(problems.stream().map(p -> p.get("path") + ":" + p.get("line") + ": "
-                + String.valueOf(p.get("message")).lines().findFirst().orElse("")).toList());
+        views.problems(problems);
         views.changes(ide.text("diff", Map.of()));
     }
 
@@ -282,6 +289,18 @@ final class Workbench extends JPanel {
 
     List<String> files() {
         return files;
+    }
+
+    /** What the project's tree marks: each file or package with what is wrong in it, by its path. */
+    Map<String, String> marks() {
+        var marks = new java.util.TreeMap<String, String>();
+        var all = ((DefaultMutableTreeNode) tree.getRoot()).depthFirstEnumeration();
+        while (all.hasMoreElements()) {
+            if (((DefaultMutableTreeNode) all.nextElement()).getUserObject() instanceof Node node && node.severity() != null) {
+                marks.put(node.path(), node.severity());
+            }
+        }
+        return marks;
     }
 
     String text(String path) {
@@ -439,10 +458,9 @@ final class Workbench extends JPanel {
         say(title + ": " + lines.size());
     }
 
-    private void openProblem(String problem) {
-        var parts = problem.split(":", 3);
+    private void openProblem(Views.Problem problem) {
         remember();
-        open(parts[0], Integer.parseInt(parts[1]), 1);
+        open(problem.path(), problem.line(), problem.column());
     }
 
     /** A result names an element, maybe indented or marked as the focus ({@code > }). */

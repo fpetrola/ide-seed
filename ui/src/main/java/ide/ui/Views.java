@@ -32,18 +32,33 @@ final class Views extends JTabbedPane {
     private static final Map<String, String> SIGILS = Map.of(".", "STEP", "'", "PRIMITIVE", "?", "QUESTION", "!", "ANSWER",
             "X", "DROPPED", ":", "ASSUMED");
 
-    private final DefaultListModel<String> problems = new DefaultListModel<>();
+    /** A problem as the list shows it: where it is, what it says, and whether it is only a warning. */
+    record Problem(String path, int line, int column, String message, boolean warning) {
+
+        static Problem of(Map<String, Object> found) {
+            return new Problem(String.valueOf(found.get("path")), ((Number) found.get("line")).intValue(),
+                    found.get("column") instanceof Number n ? Math.max(1, n.intValue()) : 1,
+                    String.valueOf(found.get("message")).lines().findFirst().orElse(""), "WARNING".equals(found.get("severity")));
+        }
+
+        @Override
+        public String toString() {
+            return path + ":" + line + ": " + message;
+        }
+    }
+
+    private final DefaultListModel<Problem> problems = new DefaultListModel<>();
     private final DefaultListModel<String> results = new DefaultListModel<>();
     private final DiffPane changes = new DiffPane();
     private final DefaultTreeModel steps = new DefaultTreeModel(new DefaultMutableTreeNode("steps"));
     private final JTree stepsTree = new JTree(steps);
     private final JTextArea output = new JTextArea();
     private final List<String> stepLines = new ArrayList<>();
-    private final Consumer<String> openProblem;
+    private final Consumer<Problem> openProblem;
     private final Consumer<String> openResult;
 
     /** A problem opens where it is ({@code path:line: message}); a result, where the element it names is. */
-    Views(Consumer<String> openProblem, Consumer<String> openResult) {
+    Views(Consumer<Problem> openProblem, Consumer<String> openResult) {
         this.openProblem = openProblem;
         this.openResult = openResult;
         putClientProperty("JTabbedPane.showContentSeparator", true);
@@ -69,14 +84,18 @@ final class Views extends JTabbedPane {
         changes.setFont(Zoom.code(13));
     }
 
-    void problems(List<String> lines) {
+    /** The problems as IDEs list them, errors first: each with its icon, message, and where it is. */
+    void problems(List<Map<String, Object>> found) {
+        var listed = found.stream().map(Problem::of).sorted(java.util.Comparator.comparing(Problem::warning)).toList();
         problems.clear();
-        problems.addAll(lines);
-        setTitleAt(0, lines.isEmpty() ? "Problems" : "Problems  " + lines.size());
+        problems.addAll(listed);
+        var errors = listed.stream().filter(p -> !p.warning()).count();
+        setTitleAt(0, listed.isEmpty() ? "Problems" : "Problems  " + errors + " errors, " + (listed.size() - errors) + " warnings");
     }
 
+    /** The problems listed, errors first, as {@code path:line: message}. */
     List<String> problems() {
-        return Collections.list(problems.elements());
+        return Collections.list(problems.elements()).stream().map(Problem::toString).toList();
     }
 
     void changes(String diff) {
@@ -144,7 +163,7 @@ final class Views extends JTabbedPane {
         return scroll;
     }
 
-    private static JList<String> list(DefaultListModel<String> model, Consumer<Integer> open) {
+    private static <T> JList<T> list(DefaultListModel<T> model, Consumer<Integer> open) {
         var list = new JList<>(model);
         list.addMouseListener(new MouseAdapter() {
             @Override
@@ -163,11 +182,10 @@ final class Views extends JTabbedPane {
     private static final class ProblemRenderer extends DefaultListCellRenderer {
         @Override
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
-            var parts = String.valueOf(value).split(":", 3);
-            var html = parts.length < 3 ? String.valueOf(value)
-                    : "<html>" + parts[2].strip().replace("<", "&lt;") + "&nbsp;&nbsp;" + gray(parts[0] + ":" + parts[1]) + "</html>";
+            var problem = (Problem) value;
+            var html = "<html>" + problem.message().replace("<", "&lt;") + "&nbsp;&nbsp;" + gray(problem.path() + ":" + problem.line()) + "</html>";
             super.getListCellRendererComponent(list, html, index, selected, focus);
-            setIcon(Icons.of("ERROR"));
+            setIcon(Icons.of(problem.warning() ? "WARNING" : "ERROR"));
             setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
             return this;
         }

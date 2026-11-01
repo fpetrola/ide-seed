@@ -35,6 +35,7 @@ final class Icons {
             Map.entry("FIX", bulb()),
             Map.entry("REFACTORING", wrench()),
             Map.entry("ERROR", mark(new Color(0xE05555), "!")),
+            Map.entry("WARNING", warning()),
             Map.entry("STEP", dot(new Color(0x6A9FD8))),
             Map.entry("PRIMITIVE", dot(new Color(0x5FB865))),
             Map.entry("QUESTION", mark(new Color(0x6A9FD8), "?")),
@@ -44,6 +45,60 @@ final class Icons {
             Map.entry("NOTE", dot(new Color(0x8C8C8C))));
 
     private Icons() {
+    }
+
+    /**
+     * An icon with what is wrong in it marked as Eclipse marks it, small at its bottom left: a red cross for an error,
+     * a yellow triangle for a warning; the icon alone for {@code null}.
+     */
+    static Icon marked(Icon base, String severity) {
+        if (severity == null) return base;
+        return new Icon() {
+            @Override
+            public void paintIcon(Component c, Graphics g, int x, int y) {
+                base.paintIcon(c, g, x, y);
+                var g2 = (Graphics2D) g.create();
+                g2.translate(x, y);
+                g2.scale(size() / 16.0, size() / 16.0);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (severity.equals("ERROR")) {
+                    g2.setColor(new Color(0x2B2B2B));
+                    g2.fillOval(-1, 8, 9, 9);
+                    g2.setColor(new Color(0xE05555));
+                    g2.fillOval(0, 9, 7, 7);
+                    g2.setColor(Color.WHITE);
+                    g2.setStroke(new BasicStroke(1.3f));
+                    g2.drawLine(2, 11, 5, 14);
+                    g2.drawLine(5, 11, 2, 14);
+                } else {
+                    var triangle = new Path2D.Double();
+                    triangle.moveTo(3.5, 8.5);
+                    triangle.lineTo(8, 16);
+                    triangle.lineTo(-1, 16);
+                    triangle.closePath();
+                    g2.setColor(new Color(0x2B2B2B));
+                    g2.fill(triangle);
+                    var inner = new Path2D.Double();
+                    inner.moveTo(3.5, 10);
+                    inner.lineTo(7, 15.3);
+                    inner.lineTo(0, 15.3);
+                    inner.closePath();
+                    g2.setColor(new Color(0xE2B33C));
+                    g2.fill(inner);
+                }
+                g2.dispose();
+            }
+
+            @Override
+            public int getIconWidth() {
+                return base.getIconWidth();
+            }
+
+            @Override
+            public int getIconHeight() {
+                return base.getIconHeight();
+            }
+        };
     }
 
     /** The icon of a kind of element, or of a thing the window shows; a gray dot for what it does not know. */
@@ -99,6 +154,21 @@ final class Icons {
             g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
             var metrics = g.getFontMetrics();
             g.drawString(sign, 8 - metrics.stringWidth(sign) / 2, 12);
+        });
+    }
+
+    private static Icon warning() {
+        return icon(g -> {
+            var triangle = new Path2D.Double();
+            triangle.moveTo(8, 2);
+            triangle.lineTo(15, 14);
+            triangle.lineTo(1, 14);
+            triangle.closePath();
+            g.setColor(new Color(0xE2B33C));
+            g.fill(triangle);
+            g.setColor(new Color(0x2B2B2B));
+            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
+            g.drawString("!", 7, 13);
         });
     }
 

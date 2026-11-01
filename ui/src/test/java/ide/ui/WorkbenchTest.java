@@ -84,11 +84,13 @@ class WorkbenchTest {
         workbench.act("apply-edit");
 
         assertThat(workbench.views().problems()).singleElement().asString().startsWith("a/B.java:5: total cannot be resolved");
+        assertThat(workbench.marks()).containsExactly(java.util.Map.entry("a", "ERROR"), java.util.Map.entry("a/B.java", "ERROR"));
         dialogs.choose("create field total in B").line("int");
 
         workbench.act("quick-fix");
 
         assertThat(workbench.views().problems()).isEmpty();
+        assertThat(workbench.marks()).isEmpty();
         assertThat(workbench.text("a/B.java")).contains("int total;");
     }
 
