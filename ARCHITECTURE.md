@@ -590,7 +590,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   delega con `this(...)` o de un inicializador (JLS 8.3.1.2, 16.9): `drop-final` se fue. Hizo falta un hecho nuevo
   del driver, `INITIALIZED` (el campo recibe su valor donde se declara; la obligación 8 lo pide). Y enseñó que una
   regla tiene que nombrar solo lo que la viola: la de un `final` es del campo, no del constructor que le falta, así
-  declarar el constructor que el lenguaje ya daba no cuenta como una violación nueva. Y que un tipo escrito en un archivo nombra un tipo
+  declarar el constructor que el lenguaje ya daba no cuenta como una violación nueva.
+  Crear con forma: hay relaciones que se crean cuando no hay nada (`member(e, dueño, nombre, tipo)`, `parameter(p,
+  callable, nombre, lo que pasan)`, `constructor-for(k, tipo, uso)`), y lo creado trae al estado supuesto lo que es
+  (tipo, padre, nombre); `takes-arguments(m, uso)` da un parámetro por argumento. Lo que una definición pide de lo que
+  se está creando se deduce en la misma suposición; lo que pide de lo que existe sigue siendo una pregunta aparte.
+  Lo creado y lo que se le fija son un paso, con un título; un marcador lo nombra hasta que existe. `ask nombre
+  "pregunta" for relación of new tipo` declara lo que solo la persona sabe: lo deducido queda como respuesta
+  propuesta. Así un nombre usado como valor es un campo del tipo donde se busca, o un parámetro del método donde se
+  usa (JLS 6.5.6.1): se fueron `create-field` y `create-parameter`. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).

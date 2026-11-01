@@ -40,8 +40,17 @@ final class Abduction {
     static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before", "type");
     /** Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)}. */
     static final Set<String> TOGGLED = Set.of("static", "final", "abstract");
-    /** Relations whose first argument a primitive creates: a constructor nobody has. */
-    static final Set<String> CREATED = Set.of("constructor");
+    /**
+     * Relations whose first argument a primitive creates, when nothing is there: {@code constructor(k, t)} (one with no
+     * parameters), {@code member(e, owner, name, kind)}, {@code parameter(p, callable, name, what calls pass)} and
+     * {@code constructor-for(k, type, use)} (one taking what a use passes).
+     */
+    static final Set<String> CREATED = Set.of("constructor", "member", "parameter", "constructor-for");
+    /** Relations made to hold by several primitives at once: {@code takes-arguments(m, use)}, a parameter for each argument. */
+    static final Set<String> COMPOSED = Set.of("takes-arguments");
+    /** What a created element is called until it is: {@code new:<relation>:<n>}. */
+    static final String NEW = "new:";
+    private static final java.util.concurrent.atomic.AtomicInteger CREATIONS = new java.util.concurrent.atomic.AtomicInteger();
 
     /** A tuple made to hold, and the one it takes the place of; or one taken away; for what; the promise it breaks. */
     record Change(String relation, List<String> added, List<String> removed, String forWhat, String promise) {
@@ -88,7 +97,6 @@ final class Abduction {
     private final Map<String, String> promises;
     private final Map<String, Integer> violations = new HashMap<>();
     private final Shown shown;
-    private int created;
 
     /** How an atom is shown in a reason: elements by their address. */
     interface Shown {
@@ -142,6 +150,24 @@ final class Abduction {
                 var known = ground(atom);
                 if (known && state.holds(atom)) {
                     explore(forWhat, rest, binding, changes, needs, state, found, stuck);
+                } else if (known && rules.defines(atom.relation()) && created(atom)) {
+                    // what is being created is made to hold in the same supposition, by the relation's definitions
+                    var tried = false;
+                    for (var clause : rules.defining(atom.relation())) {
+                        var renamed = renamed(clause);
+                        var head = bind(renamed.head(), values(atom));
+                        if (head == null) continue;
+                        tried = true;
+                        var extended = new HashMap<>(binding);
+                        extended.putAll(head);
+                        var body = new ArrayList<Literal>(renamed.body());
+                        body.addAll(rest);
+                        explore(forWhat, body, extended, changes, needs, state, found, stuck);
+                    }
+                    if (!tried) stuck(stuck, new Literal.Positive(atom));
+                } else if (known && COMPOSED.contains(atom.relation())) {
+                    var change = new Change(atom.relation(), values(atom), null, forWhat);
+                    explore(forWhat, rest, binding, plus(changes, change), needs, suppose(state, change), found, stuck);
                 } else if (known && rules.defines(atom.relation())) {
                     explore(forWhat, rest, binding, changes, plus(needs, new Need(atom, true)), state, found, stuck);
                 } else if (known && (CHANGED.contains(atom.relation()) || TOGGLED.contains(atom.relation()))) {
@@ -161,7 +187,7 @@ final class Abduction {
                         explore(forWhat, rest, extended, changes, needs, state, found, stuck);
                     }
                     if (answers.isEmpty() && CREATED.contains(atom.relation()) && creatable(atom)) {
-                        var made = "new:" + atom.relation() + ":" + ++created;
+                        var made = NEW + atom.relation() + ":" + CREATIONS.incrementAndGet();
                         var values = new ArrayList<String>();
                         values.add(made);
                         for (var term : atom.terms().subList(1, atom.terms().size())) values.add(((Term.Constant) term).value());
@@ -356,6 +382,7 @@ final class Abduction {
                 return new Verdict(false, null, UNDO + earlier.relation() + " of " + shown.of(change.element()));
             }
         }
+        if (change.element().startsWith(NEW)) return new Verdict(true, null, null); // what is new promises nothing yet
         for (var kind : base.answers(Atom.of("kind", Term.constant(change.element()), Term.variable("K")))) {
             var why = promises.get(change.relation() + " of " + kind.get("K"));
             if (why == null) continue;
@@ -379,10 +406,59 @@ final class Abduction {
                 && atom.terms().stream().skip(1).allMatch(t -> t instanceof Term.Constant);
     }
 
+    /** The state after {@code change}; a creation brings what the created element is: its kind, its parent, its name. */
     private static Evaluation suppose(Evaluation state, Change change) {
-        List<Tuple> added = change.added() == null ? List.of() : List.of(new Tuple(change.relation(), change.added()));
+        var added = new ArrayList<Tuple>();
+        if (change.added() != null) added.add(new Tuple(change.relation(), change.added()));
+        var values = change.added();
+        if (values != null && values.getFirst().startsWith(NEW)) {
+            var made = values.getFirst();
+            switch (change.relation()) {
+                case "member" -> {
+                    added.add(new Tuple("kind", List.of(made, values.get(3))));
+                    added.add(new Tuple("parent", List.of(made, values.get(1))));
+                    added.add(new Tuple("name", List.of(made, values.get(2))));
+                }
+                case "parameter" -> {
+                    added.add(new Tuple("kind", List.of(made, "param")));
+                    added.add(new Tuple("parent", List.of(made, values.get(1))));
+                    added.add(new Tuple("name", List.of(made, values.get(2))));
+                }
+                case "constructor", "constructor-for" -> {
+                    added.add(new Tuple("kind", List.of(made, "constructor")));
+                    added.add(new Tuple("parent", List.of(made, values.get(1))));
+                    if (change.relation().equals("constructor-for")) added.add(new Tuple("constructor", List.of(made, values.get(1))));
+                }
+                default -> {
+                    // nothing more is known of it
+                }
+            }
+        }
         List<Tuple> removed = change.removed() == null ? List.of() : List.of(new Tuple(change.relation(), change.removed()));
         return state.suppose(added, removed);
+    }
+
+    /** Whether an atom speaks of an element a plan creates. */
+    private static boolean created(Atom atom) {
+        return atom.terms().stream().anyMatch(t -> t instanceof Term.Constant c && c.value().startsWith(NEW));
+    }
+
+    /** A clause with its variables renamed apart, to be read inside another body. */
+    private static Clause renamed(Clause clause) {
+        var suffix = "~" + CREATIONS.incrementAndGet();
+        java.util.function.Function<Atom, Atom> rename = atom -> new Atom(atom.relation(), atom.terms().stream()
+                .map(t -> t instanceof Term.Variable v ? (Term) Term.variable(v.name() + suffix) : t).toList());
+        var body = new ArrayList<Literal>();
+        for (var literal : clause.body()) {
+            body.add(switch (literal) {
+                case Literal.Positive p -> new Literal.Positive(rename.apply(p.atom()));
+                case Literal.Negative n -> new Literal.Negative(rename.apply(n.atom()));
+                case Literal.Comparison c -> new Literal.Comparison(
+                        c.left() instanceof Term.Variable v ? Term.variable(v.name() + suffix) : c.left(), c.equal(),
+                        c.right() instanceof Term.Variable v ? Term.variable(v.name() + suffix) : c.right());
+            });
+        }
+        return new Clause(rename.apply(clause.head()), body);
     }
 
     // ---- terms

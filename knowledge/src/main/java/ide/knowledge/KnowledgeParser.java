@@ -27,7 +27,8 @@ import java.util.List;
  *   must s(v) or not t(w)
  * end
  * problem &lt;code&gt; is name(expr, expr)    (the code is the rule broken there: the plans make it hold)
- * promise relation of kind "why"         (no change of relation on an element of that kind is ever deduced)
+ * promise relation of kind "why"         (a change of relation on an element of that kind is made only on purpose)
+ * ask name "question" for relation of new kind   (what is set of an element created is asked, the deduced proposed)
  * fact p(x, y) when expr
  * effect &lt;name&gt; "title with ${expr}"
  *   makes p(x, y)
@@ -55,6 +56,7 @@ final class KnowledgeParser {
         var clauses = new ArrayList<Clause>();
         var says = new HashMap<String, String>();
         var promises = new HashMap<String, String>();
+        var questions = new HashMap<String, List<String>>();
         for (var i = 0; i < lines.size(); i++) {
             var line = lines.get(i).strip();
             if (line.isEmpty() || line.startsWith("# ")) continue;
@@ -80,6 +82,10 @@ final class KnowledgeParser {
                 var promised = java.util.regex.Pattern.compile("promise (\\S+) of (\\S+) \"(.*)\"").matcher(line);
                 if (!promised.matches()) throw new IllegalArgumentException("knowledge: expected promise <relation> of <kind> \"why\": " + line);
                 promises.put(promised.group(1) + " of " + promised.group(2), promised.group(3));
+            } else if (line.startsWith("ask ")) {
+                var asked = java.util.regex.Pattern.compile("ask (\\S+) \"(.*)\" for (\\S+) of new (\\S+)").matcher(line);
+                if (!asked.matches()) throw new IllegalArgumentException("knowledge: expected ask <name> \"question\" for <relation> of new <kind>: " + line);
+                questions.put(asked.group(3) + " of new " + asked.group(4), List.of(asked.group(1), asked.group(2)));
             } else if (line.startsWith("problem ")) {
                 var is = line.indexOf(" is ");
                 var broken = predicate(line.substring(is + 4));
@@ -162,7 +168,7 @@ final class KnowledgeParser {
                 throw new IllegalArgumentException("knowledge: unexpected line: " + line);
             }
         }
-        return new Knowledge(goals, facts, effects, Rules.of(clauses), says, promises, library);
+        return new Knowledge(goals, facts, effects, Rules.of(clauses), says, promises, questions, library);
     }
 
     /** {@code def head when literal and literal ...}: one clause of Datalog. */

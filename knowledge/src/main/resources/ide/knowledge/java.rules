@@ -155,3 +155,16 @@ end
 problem ecj.UninitializedBlankFinalField is final-once(field-in(path, first(arguments)))
 
 say not final for final-once "make ${called} not final"
+
+# A name used as a value (JLS 6.5.6.1) is a field of the type it is looked up in, of the type its place expects; or,
+# used inside a method, one of its parameters, which every call passes what that type starts with.
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "value") and scope(u, t)
+  and not library(t) and expected(u, ty) and member(f, t, symbol, "field") and type(f, ty)
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "value") and site(u, m)
+  and kind(m, "method") and expected(u, ty) and start-value(ty, v) and parameter(p, m, symbol, v) and type(p, ty)
+
+say member for resolves "create ${kind} ${named} in ${name(owner)}"
+say parameter for resolves "create parameter ${named} in ${name(owner)}()"
+
+# What only the person knows of what is created: asked, with what the rules deduce proposed.
+ask type "type of the new field" for type of new field

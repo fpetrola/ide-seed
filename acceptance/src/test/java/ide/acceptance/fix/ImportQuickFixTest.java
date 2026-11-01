@@ -105,11 +105,11 @@ class ImportQuickFixTest {
                 "  ! import b.Money",
                 "    ? accessible(a.U, b.Money)",
                 "      ! open-visibility b.Money package -> public",
+                "  X resolves: unresolved(u, a/U.java, Money, value)",
+                "  X resolves: unresolved(u, a/U.java, Money, value)",
                 "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",
-                "  X create-field: nonempty(scope(unresolved-in(path, symbol, \"value\")))",
-                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))",
-                "  X create-parameter: nonempty(unresolved-in(path, symbol, \"value\"))");
+                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))");
 
         ws.fix("a/U.java", 4, "open-visibility b.Money package -> public, then import b.Money");
 
@@ -133,10 +133,10 @@ class ImportQuickFixTest {
                 "ecj.UndefinedType List",
                 "? resolves(List)",
                 "  ! import java.util.List",
+                "  X resolves: unresolved(u, a/U.java, List, value)",
+                "  X resolves: unresolved(u, a/U.java, List, value)",
                 "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",
-                "  X create-field: nonempty(scope(unresolved-in(path, symbol, \"value\")))",
-                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))",
-                "  X create-parameter: nonempty(unresolved-in(path, symbol, \"value\"))");
+                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))");
     }
 }

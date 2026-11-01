@@ -31,7 +31,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiConsumer;
 
 /**
  * Declarative knowledge: goals say what must hold for a violation or diagnostic to go away; definitions ({@code def},
@@ -72,8 +71,13 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     /** A step of a plan, ready to run: its title, its questions with their defaults, what it costs, and how it runs. */
-    private record Step(String title, List<Plan.Ask> asks, int cost, boolean keepsMeaning,
-                        BiConsumer<Projection, Map<String, String>> run) {
+    private record Step(String title, List<Plan.Ask> asks, int cost, boolean keepsMeaning, Runner run) {
+    }
+
+    /** How a step runs: on a projection, with the answers given, and the elements the plan created so far by placeholder. */
+    @FunctionalInterface
+    private interface Runner {
+        void run(Projection projection, Map<String, String> answers, Map<String, ElementId> created);
     }
 
     /** A way to make a predicate hold: steps in the order they run, what they cost, and the rank of the last. */
@@ -96,17 +100,19 @@ public final class Knowledge implements Remedy, QuickFix {
     private final Rules rules;
     private final Map<String, String> says;
     private final Map<String, String> promises;
+    private final Map<String, List<String>> questions;
     private final Library library;
     private final Engine engine = Engine.standard();
 
     Knowledge(List<Goal> goals, List<Fact> facts, List<Effect> effects, Rules rules, Map<String, String> says,
-              Map<String, String> promises, Library library) {
+              Map<String, String> promises, Map<String, List<String>> questions, Library library) {
         this.goals = List.copyOf(goals);
         this.facts = List.copyOf(facts);
         this.effects = List.copyOf(effects);
         this.rules = rules;
         this.says = Map.copyOf(says);
         this.promises = Map.copyOf(promises);
+        this.questions = Map.copyOf(questions);
         this.library = library;
     }
 
@@ -214,7 +220,7 @@ public final class Knowledge implements Remedy, QuickFix {
                     var asks = effect.asks().stream().map(a -> new Plan.Ask(a.name(), a.question(),
                             Script.render(a.defaultAnswer(), run, variables))).toList();
                     var step = new Step(Script.render(effect.title(), run, variables), asks, effect.cost(), effect.keepsMeaning(),
-                            (target, answers) -> run(effect, variables, asks, target, answers));
+                            (target, answers, made) -> run(effect, variables, asks, target, answers));
                     ways.addAll(after(effect.name(), needs(effect, variables, run), step, rank++, known, projection, trace, level));
                 }
             } catch (RuntimeException inapplicable) { // e.g. the facts name elements that no longer exist
@@ -276,7 +282,7 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     private Abduction abduction(Map<String, Value> known, Projection projection) {
-        return new Abduction(rules, engine.evaluate(rules, new GraphFacts(projection.program(), known)), promises, new Abduction.Shown() {
+        return new Abduction(rules, engine.evaluate(rules, new GraphFacts(projection, known)), promises, new Abduction.Shown() {
             @Override
             public String of(Atom atom) {
                 return shown(atom, projection);
@@ -347,7 +353,7 @@ public final class Knowledge implements Remedy, QuickFix {
                 if (constant(arg) == null) return false;
                 terms.add(Term.constant(constant(arg)));
             }
-            return engine.evaluate(rules, new GraphFacts(projection.program(), known)).holds(new Atom(predicate, terms));
+            return engine.evaluate(rules, new GraphFacts(projection, known)).holds(new Atom(predicate, terms));
         }
         var run = Run.on(projection, library);
         for (var fact : facts) {
@@ -361,15 +367,31 @@ public final class Knowledge implements Remedy, QuickFix {
 
     /**
      * The changes a way asks for, as the primitives that make them, in the order they were found. A move and a place
-     * before another member are one move; a toggled relation is set to true or false. Each step is said as
-     * {@code say [not] <relation> for <what it was done for>} says.
+     * before another member are one move; a toggled relation is set to true or false; an element created and what is
+     * set of it are one step, a method created answering what its type starts with. Each step is said as
+     * {@code say [not] <relation> for <what it was done for>} says, and what {@code ask} declares of an element created
+     * is asked, with what the rules deduced as the answer proposed.
      */
     private List<Step> steps(List<Abduction.Change> changes, Projection projection) {
         var steps = new ArrayList<Step>();
         var moved = new HashMap<String, Abduction.Change>();
         for (var change : changes) if (change.relation().equals("parent")) moved.put(change.element(), change);
+        var groups = new LinkedHashMap<String, List<Abduction.Change>>();
         for (var change : changes) {
             var key = change.element();
+            if (change.added() != null && key.startsWith(Abduction.NEW) && Abduction.CREATED.contains(change.relation())) {
+                groups.put(key, new ArrayList<>(List.of(change)));
+            } else if (groups.containsKey(key)) {
+                groups.get(key).add(change);
+            }
+        }
+        var asked = new java.util.HashSet<String>();
+        for (var change : changes) {
+            var key = change.element();
+            if (groups.containsKey(key)) {
+                if (groups.get(key).getFirst() == change) steps.add(created(groups.get(key), projection, asked));
+                continue;
+            }
             var on = change.added() != null;
             var value = on && change.added().size() > 1 ? change.added().get(1) : null;
             Primitive primitive = switch (change.relation()) {
@@ -382,23 +404,93 @@ public final class Knowledge implements Remedy, QuickFix {
                 case "before" -> moved.containsKey(key) ? null
                         : new Primitive.Move(new ElementId(key), projection.program().element(new ElementId(key)).parent(), new ElementId(value));
                 case "target" -> new Primitive.Retarget(key, new ElementId(value));
-                case "constructor" -> new Primitive.Create(Kind.CONSTRUCTOR, new ElementId(value),
-                        projection.program().element(new ElementId(value)).name());
                 default -> throw new IllegalStateException("no primitive changes " + change.relation());
             };
             if (primitive == null) continue;
             var variables = new LinkedHashMap<String, Value>();
-            variables.put("element", change.relation().equals("constructor") ? null : value(key, projection));
-            variables.put("called", change.relation().equals("constructor") ? null : new Value.Text(called(key, projection)));
+            variables.put("element", value(key, projection));
+            variables.put("called", new Value.Text(called(key, projection)));
             variables.put("value", value == null ? null : value(value, projection));
             variables.put("was", change.removed() == null || change.removed().size() < 2 ? null : value(change.removed().get(1), projection));
-            var said = (on ? "" : "not ") + change.relation() + " for " + change.forWhat();
-            var template = says.getOrDefault(said, (on ? "" : "not ") + change.relation() + " ${element} ${was} -> ${value}");
-            var title = Script.render(template, Run.on(projection, library), variables);
+            var title = title((on ? "" : "not ") + change.relation(), change.forWhat(), variables, projection);
             var promised = change.promise() != null; // broken on purpose: it changes meaning, and costs more
-            steps.add(new Step(title, List.of(), promised ? 2 : 1, !promised, (target, answers) -> target.apply(primitive)));
+            steps.add(new Step(title, List.of(), promised ? 2 : 1, !promised, (target, answers, made) -> target.apply(primitive)));
         }
         return steps;
+    }
+
+    /**
+     * An element created, with what the way sets of it, as one step: the creation, each change in turn (an asked one
+     * with the answer given, or the one proposed), a parameter for each argument a use passes, and, for a method, the
+     * body that answers what its type starts with.
+     */
+    private Step created(List<Abduction.Change> group, Projection projection, java.util.Set<String> asked) {
+        var creation = group.getFirst();
+        var values = creation.added();
+        var made = values.getFirst();
+        var owner = new ElementId(values.get(1));
+        var kind = switch (creation.relation()) {
+            case "member" -> values.get(3);
+            case "parameter" -> "param";
+            default -> "constructor";
+        };
+        var named = switch (creation.relation()) {
+            case "member", "parameter" -> values.get(2);
+            default -> projection.program().element(owner).name();
+        };
+        var asks = new ArrayList<Plan.Ask>();
+        var sets = new ArrayList<java.util.function.BiFunction<Map<String, String>, ElementId, List<Primitive>>>();
+        for (var change : group.subList(1, group.size())) {
+            var on = change.added() != null;
+            var value = on && change.added().size() > 1 ? change.added().get(1) : null;
+            switch (change.relation()) {
+                case "takes-arguments" -> {
+                    var arguments = projection.needs(change.added().get(1)).map(n -> n.arguments()).orElse(List.of());
+                    sets.add((answers, id) -> {
+                        var made2 = new ArrayList<Primitive>();
+                        for (var argument : arguments) made2.add(new Primitive.Create(Kind.PARAM, id, argument.name(), Map.of(ide.program.Fact.TYPE, argument.type()), null));
+                        return made2;
+                    });
+                }
+                case "static", "final", "abstract" -> sets.add((answers, id) -> List.of(new Primitive.Set(id, change.relation(), String.valueOf(on))));
+                default -> {
+                    var question = questions.get(change.relation() + " of new " + kind);
+                    if (question != null) {
+                        var name = question.getFirst();
+                        while (!asked.add(name)) name = name + "'";
+                        var answer = name;
+                        asks.add(new Plan.Ask(answer, question.get(1), value));
+                        sets.add((answers, id) -> List.of(new Primitive.Set(id, change.relation(), answers.getOrDefault(answer, value))));
+                    } else {
+                        sets.add((answers, id) -> List.of(new Primitive.Set(id, change.relation(), value)));
+                    }
+                }
+            }
+        }
+        var primitive = switch (creation.relation()) {
+            case "member" -> new Primitive.Create(Kind.valueOf(kind.toUpperCase(java.util.Locale.ROOT)), owner, named);
+            case "parameter" -> new Primitive.Create(Kind.PARAM, owner, named, Map.of(), values.get(3));
+            default -> new Primitive.Create(Kind.CONSTRUCTOR, owner, named);
+        };
+        var variables = new LinkedHashMap<String, Value>();
+        variables.put("kind", new Value.Text(kind));
+        variables.put("named", new Value.Text(named));
+        variables.put("owner", value(owner.value(), projection));
+        variables.put("value", value(owner.value(), projection));
+        var title = title(creation.relation(), creation.forWhat(), variables, projection);
+        var method = kind.equals("method");
+        return new Step(title, List.copyOf(asks), 2, true, (target, answers, done) -> {
+            var id = target.apply(primitive).produced();
+            done.put(made, id);
+            for (var set : sets) set.apply(answers, id).forEach(target::apply);
+            if (method) target.apply(new Primitive.Set(id, "body", "return default"));
+        });
+    }
+
+    /** A step's title, as {@code say <relation> for <what>} says it; with nothing said, the change as it is. */
+    private String title(String relation, String forWhat, Map<String, Value> variables, Projection projection) {
+        var template = says.getOrDefault(relation + " for " + forWhat, relation + " ${element} ${was} -> ${value}");
+        return Script.render(template, Run.on(projection, library), variables);
     }
 
     /** A way as a plan: its steps' titles in the order they run, their questions, and running them in that order. */
@@ -406,7 +498,10 @@ public final class Knowledge implements Remedy, QuickFix {
         var title = String.join(", then ", way.steps().stream().map(Step::title).toList());
         var asks = way.steps().stream().flatMap(step -> step.asks().stream()).toList();
         var changesMeaning = way.steps().stream().anyMatch(step -> !step.keepsMeaning());
-        return new Plan(title, asks, changesMeaning, (projection, answers) -> way.steps().forEach(step -> step.run().accept(projection, answers)));
+        return new Plan(title, asks, changesMeaning, (projection, answers) -> {
+            var created = new HashMap<String, ElementId>();
+            way.steps().forEach(step -> step.run().run(projection, answers, created));
+        });
     }
 
     /** How an element is called in a title: a method or a constructor with {@code ()}, anything else by its name. */

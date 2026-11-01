@@ -19,7 +19,7 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 
 # in-scope(site, target): where a member can be used without saying whose is in java.rules.
 
-# resolves(symbol) by a type of that name: java.rules says it, and binding the use imports it.
+# resolves(symbol) by a type of that name, or by a field or a parameter created for it: java.rules says it.
 
 # A name misspelled: the members of the type it is looked up in whose names are almost it.
 effect use-similar "change to ${name(f)}"
@@ -39,17 +39,6 @@ effect call-similar "change to ${name(m)}(..)"
   needs accessible(site(unresolved-in(path, symbol, "call")), m)
   do
     retarget ${unresolved-in(path, symbol, "call")} ${m}
-  end
-end
-
-effect create-field "create field ${symbol} in ${name(scope(unresolved-in(path, symbol, "value")))}"
-  makes resolves(symbol)
-  when nonempty(scope(unresolved-in(path, symbol, "value")))
-  ask type "type of the new field" "${expected(unresolved-in(path, symbol, "value"))}"
-  cost 2
-  do
-    f := create FIELD ${scope(unresolved-in(path, symbol, "value"))} ${symbol}
-    set ${f} type ${type}
   end
 end
 
@@ -168,20 +157,6 @@ goal ecj.NotVisibleConstructor needs accessible(top-in(path), element-at(path, l
 goal ecj.NotVisibleType needs accessible(top-in(path), element-at(path, line, column))
 
 # A value of another type than its place takes: java.rules says the place takes the value's type.
-
-# A name nothing declares, used inside a method: the method takes it, of the type its place expects; its calls pass
-# what that type starts with.
-effect create-parameter "create parameter ${symbol} in ${name(m)}()"
-  makes resolves(symbol)
-  for m in inside(path, line, column) | of-kind "METHOD"
-  when nonempty(unresolved-in(path, symbol, "value"))
-  cost 3
-  do
-    let t = expected(unresolved-in(path, symbol, "value"))
-    p := create PARAM ${m} ${symbol} argument=${default-value(t)}
-    set ${p} type ${t}
-  end
-end
 
 # A method that says it overrides and overrides nothing: its superclass declares it, abstract.
 goal ecj.MethodMustOverrideOrImplement needs overrides(symbol)

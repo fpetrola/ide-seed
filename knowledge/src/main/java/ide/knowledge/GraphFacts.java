@@ -8,6 +8,7 @@ import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Program;
 import ide.program.Reference;
+import ide.projection.Projection;
 import ide.refactoring.Value;
 import ide.rules.Facts;
 
@@ -32,15 +33,21 @@ import java.util.stream.Stream;
  * initialized(f)    (a field given its value where it is declared)
  * unimplemented(t, m)                 (an abstract method t inherits and nothing it has or inherits implements)
  * argument(i, v)    (what the problem names, by place: 0, 1...)
+ * library(e)        scope(u, t)       expected(u, type)  start-value(type, v)   (what a use binds nothing in, what its
+ *                                     place expects, and how the language writes what a type starts with)
+ * member(e, owner, name, kind)        parameter(p, callable, name, passed)     constructor-for(k, type, use)
+ * takes-arguments(m, use)             (m's parameters are of the types of what the use passes)
  * </pre>
  */
 final class GraphFacts implements Facts {
 
+    private final Projection projection;
     private final Program program;
     private final Map<String, Value> known;
 
-    GraphFacts(Program program, Map<String, Value> known) {
-        this.program = program;
+    GraphFacts(Projection projection, Map<String, Value> known) {
+        this.projection = projection;
+        this.program = projection.program();
         this.known = known;
     }
 
@@ -67,6 +74,20 @@ final class GraphFacts implements Facts {
                 var arguments = Value.items(known.get("arguments"));
                 yield java.util.stream.IntStream.range(0, arguments.size()).mapToObj(i -> List.of(String.valueOf(i), Value.asText(arguments.get(i))));
             }
+            case "library" -> elements(first).filter(Element::inLibrary).map(e -> List.of(id(e)));
+            case "scope" -> program.unresolved().stream().filter(u -> (first == null || first.equals(u.id())) && u.scope() != null)
+                    .map(u -> List.of(u.id(), u.scope().value()));
+            case "expected" -> holes(first).flatMap(u -> projection.needs(u.id()).stream()
+                    .filter(n -> n.expected() != null).map(n -> List.of(u.id(), n.expected())));
+            case "start-value" -> first == null ? Stream.empty() : Stream.of(List.of(first, projection.rules().defaultValue(first)));
+            case "member" -> elements(first).filter(e -> e.parent() != null)
+                    .map(e -> List.of(id(e), e.parent().value(), e.name(), e.kind().name().toLowerCase(Locale.ROOT)));
+            case "parameter" -> elements(first).filter(e -> e.kind() == Kind.PARAM).map(p -> List.of(id(p), p.parent().value(), p.name(),
+                    pattern.size() > 3 && pattern.get(3) != null ? pattern.get(3) : ""));
+            case "constructor-for" -> holes(pattern.size() > 2 ? pattern.get(2) : null).flatMap(u -> program.elements().stream()
+                    .filter(k -> k.kind() == Kind.CONSTRUCTOR && takes(k, u)).map(k -> List.of(id(k), k.parent().value(), u.id())));
+            case "takes-arguments" -> elements(first).filter(m -> m.kind() == Kind.METHOD || m.kind() == Kind.CONSTRUCTOR)
+                    .flatMap(m -> holes(pattern.size() > 1 ? pattern.get(1) : null).filter(u -> takes(m, u)).map(u -> List.of(id(m), u.id())));
             case "self-use" -> uses(first, Reference.Receiver.SELF);
             case "type-use" -> uses(first, Reference.Receiver.TYPE);
             case "top" -> inTypes(first).map(e -> List.of(id(e), id(program.topLevel(e.id()))));
@@ -96,6 +117,22 @@ final class GraphFacts implements Facts {
             default -> Stream.empty();
         };
         return tuples.filter(tuple -> Facts.matches(tuple, pattern));
+    }
+
+    /** The uses that bind nothing: the one named, or all. */
+    private Stream<ide.program.Unresolved> holes(String id) {
+        return program.unresolved().stream().filter(u -> id == null || id.equals(u.id()));
+    }
+
+    /** Whether a callable's parameters are, in order, of the types of what a use that binds nothing passes. */
+    private boolean takes(Element callable, ide.program.Unresolved use) {
+        var arguments = projection.needs(use.id()).map(n -> n.arguments()).orElse(List.of());
+        var params = program.children(callable.id()).stream().filter(e -> e.kind() == Kind.PARAM).toList();
+        if (params.size() != arguments.size()) return false;
+        for (var i = 0; i < params.size(); i++) {
+            if (!arguments.get(i).type().equals(params.get(i).fact(Fact.TYPE))) return false;
+        }
+        return true;
     }
 
     /** The uses made from {@code site} (or from anywhere) on {@code receiver}: site and target. */
