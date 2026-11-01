@@ -256,4 +256,22 @@ class IdeQuickFixesTest {
         assertThat(ws.source("a/A.java")).contains("    int count = 0;");
         assertThat(ws.source("a/B.java")).contains("public int size() {");
     }
+
+    @Test
+    void aTypeNothingDeclaresIsCreatedInTheFilesPackage() {
+        var ws = Workspace.of(Map.of("a/U.java", """
+                package a;
+
+                class U {
+                    Wallet wallet;
+                }
+                """));
+
+        assertThat(ws.fixes("a/U.java", 4)).containsExactly("create class Wallet in a", "create interface Wallet in a");
+
+        ws.fix("a/U.java", 4, "create class Wallet in a");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Wallet.java")).contains("package a;", "class Wallet {");
+    }
 }

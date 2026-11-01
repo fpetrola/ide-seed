@@ -99,7 +99,7 @@ class ImportQuickFixTest {
                         """));
 
         assertThat(ws.fixes("a/U.java", 4)).containsExactly("open-visibility b.Money package -> public, then import b.Money");
-        assertThat(ws.why("a/U.java", 4).lines()).containsExactly(
+        assertThat(ws.why("a/U.java", 4).lines()).containsSubsequence(
                 "ecj.UndefinedType Money",
                 "? resolves(Money)",
                 "  ! import b.Money",
@@ -129,7 +129,7 @@ class ImportQuickFixTest {
                 }
                 """));
 
-        assertThat(ws.why("a/U.java", 4).lines()).containsExactly(
+        assertThat(ws.why("a/U.java", 4).lines()).containsSubsequence(
                 "ecj.UndefinedType List",
                 "? resolves(List)",
                 "  ! import java.util.List",

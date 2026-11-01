@@ -260,3 +260,22 @@ effect widen-override "make ${name(inside(path, line, column))}() ${v}"
     set ${inside(path, line, column)} visibility ${v}
   end
 end
+
+# A type nothing declares: the file's package gets it, a class or an interface.
+effect create-class "create class ${symbol} in ${qualified(owner(top-in(path)))}"
+  makes resolves(symbol)
+  when and(nonempty(unresolved-in(path, symbol, "type")), empty(types-named(symbol)))
+  cost 3
+  do
+    create CLASS ${owner(top-in(path))} ${symbol}
+  end
+end
+
+effect create-interface "create interface ${symbol} in ${qualified(owner(top-in(path)))}"
+  makes resolves(symbol)
+  when and(nonempty(unresolved-in(path, symbol, "type")), empty(types-named(symbol)))
+  cost 4
+  do
+    create INTERFACE ${owner(top-in(path))} ${symbol}
+  end
+end
