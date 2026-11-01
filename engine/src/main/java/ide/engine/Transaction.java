@@ -134,10 +134,23 @@ public final class Transaction implements Projection {
         return change;
     }
 
+    /**
+     * A manual edit, recorded with what it was understood as: each element the projection still knows as itself
+     * under another address (renamed, re-signed or moved by hand). A member of a renamed type keeps its address, so
+     * only the type is listed.
+     */
     @Override
     public void edit(String path, String text) {
+        var before = projection.program();
         projection.edit(path, text);
-        trace.add(Trace.Kind.PRIMITIVE, "edit " + path);
+        var after = projection.program();
+        trace.open(Trace.Kind.PRIMITIVE, "edit " + path);
+        for (var element : after.elements()) {
+            if (!before.contains(element.id())) continue;
+            var was = before.element(element.id());
+            if (!was.address().equals(element.address())) trace.add(Trace.Kind.NOTE, was.qualified() + " -> " + element.qualified());
+        }
+        trace.close();
     }
 
     /** A primitive as the steps show it: elements by their address before it, and what it produced after. */
