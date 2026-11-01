@@ -168,3 +168,27 @@ say parameter for resolves "create parameter ${named} in ${name(owner)}()"
 
 # What only the person knows of what is created: asked, with what the rules deduce proposed.
 ask type "type of the new field" for type of new field
+
+# A name called (JLS 15.12) is a method of the type it is looked up in: answering what the call's place expects,
+# taking a parameter for each argument the call passes; static when called from a static place of its own type.
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "call") and scope(u, t)
+  and not library(t) and expected(u, ty) and member(m, t, symbol, "method") and type(m, ty)
+  and takes-arguments(m, u) and fits-call(m, u)
+
+def fits-call(m, u) when site(u, s) and given static(s) and enclosing(s, t) and scope(u, t) and static(m)
+def fits-call(m, u) when site(u, s) and given not static(s) and kind(m, _)
+def fits-call(m, u) when site(u, s) and given static(s) and enclosing(s, e) and scope(u, t) and e != t and kind(m, _)
+
+ask type "return type of the new method" for type of new method
+
+# A new object that no constructor makes (JLS 15.9.3): its class gets one that takes what the new passes.
+def constructs(symbol) when known("path", path) and unresolved(u, path, symbol, "new") and scope(u, t)
+  and not library(t) and constructor-for(k, t, u) and takes-arguments(k, u)
+
+say constructor-for for constructs "create constructor in ${name(owner)}"
+
+# A type written that no type of the program is (JLS 6.5.5): the file's package declares one, a class or an interface.
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "type") and not named(_, symbol)
+  and site(u, s) and top(s, h) and parent(h, p) and member(c, p, symbol, "class")
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "type") and not named(_, symbol)
+  and site(u, s) and top(s, h) and parent(h, p) and member(c, p, symbol, "interface")

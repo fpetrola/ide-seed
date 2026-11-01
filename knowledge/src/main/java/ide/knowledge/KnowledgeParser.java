@@ -19,7 +19,8 @@ import java.util.List;
  * <pre>
  * goal &lt;code&gt; needs p(a, b)
  * def p(x, "constant") when q(x, y) and not r(y, _) and x != y     (Datalog: a name is a variable, a quoted text a
- *   and s(y)                                                        constant, _ any value; it goes on in "and" lines)
+ *   and s(y) and given t(x)                                         constant, _ any value; it goes on in "and" lines;
+ *                                                                   a given literal is a condition, never changed)
  * order name "low" "high" ...      (facts: name-value(v), and name-at-least(a, b) for each a not below b)
  * say [not] relation for p "title with ${element}, ${was} and ${value}"   (how a change made for p is said)
  * rule name "what the language says"     (a constraint: where it does not hold, violates-name(vars) does)
@@ -57,13 +58,14 @@ final class KnowledgeParser {
         var says = new HashMap<String, String>();
         var promises = new HashMap<String, String>();
         var questions = new HashMap<String, List<String>>();
+        var conditions = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Literal, Boolean>());
         for (var i = 0; i < lines.size(); i++) {
             var line = lines.get(i).strip();
             if (line.isEmpty() || line.startsWith("# ")) continue;
             if (line.startsWith("def ")) {
                 var definition = new StringBuilder(line.substring(4));
                 while (i + 1 < lines.size() && lines.get(i + 1).strip().startsWith("and ")) definition.append(' ').append(lines.get(++i).strip());
-                clauses.add(definition(definition.toString()));
+                clauses.add(definition(definition.toString(), conditions));
             } else if (line.startsWith("order ")) {
                 var parts = quoted(line.substring(6).strip());
                 var name = parts.getFirst();
@@ -114,7 +116,7 @@ final class KnowledgeParser {
                 var body = new ArrayList<String>();
                 if (where != null) body.add(where);
                 for (var alternative : split(must, " or ")) body.add(negated(alternative.strip()));
-                clauses.add(definition(head + " when " + String.join(" and ", body)));
+                clauses.add(definition(head + " when " + String.join(" and ", body), conditions));
             } else if (line.startsWith("goal ")) {
                 var needs = line.indexOf(" needs ");
                 goals.add(new Knowledge.Goal(line.substring(5, needs).strip(), predicate(line.substring(needs + 7)), true));
@@ -168,11 +170,11 @@ final class KnowledgeParser {
                 throw new IllegalArgumentException("knowledge: unexpected line: " + line);
             }
         }
-        return new Knowledge(goals, facts, effects, Rules.of(clauses), says, promises, questions, library);
+        return new Knowledge(goals, facts, effects, Rules.of(clauses), conditions, says, promises, questions, library);
     }
 
     /** {@code def head when literal and literal ...}: one clause of Datalog. */
-    private static Clause definition(String text) {
+    private static Clause definition(String text, java.util.Set<Literal> conditions) {
         var when = text.indexOf(" when ");
         var head = atom(when < 0 ? text : text.substring(0, when));
         var body = new ArrayList<Literal>();
@@ -180,17 +182,22 @@ final class KnowledgeParser {
         if (when >= 0) {
             for (var part : split(text.substring(when + 6), " and ")) {
                 var literal = part.strip();
+                var given = literal.startsWith("given ");
+                if (given) literal = literal.substring(6).strip();
+                Literal read;
                 if (literal.startsWith("not ")) {
-                    body.add(new Literal.Negative(atom(literal.substring(4), anonymous)));
+                    read = new Literal.Negative(atom(literal.substring(4), anonymous));
                 } else if (literal.contains("(")) {
-                    body.add(new Literal.Positive(atom(literal, anonymous)));
+                    read = new Literal.Positive(atom(literal, anonymous));
                 } else {
                     var unequal = literal.indexOf("!=");
                     var equal = unequal >= 0 ? unequal : literal.indexOf('=');
                     if (equal < 0) throw new IllegalArgumentException("knowledge: expected an atom or a comparison: " + literal);
-                    body.add(new Literal.Comparison(term(literal.substring(0, equal), anonymous), unequal < 0,
-                            term(literal.substring(equal + (unequal >= 0 ? 2 : 1)), anonymous)));
+                    read = new Literal.Comparison(term(literal.substring(0, equal), anonymous), unequal < 0,
+                            term(literal.substring(equal + (unequal >= 0 ? 2 : 1)), anonymous));
                 }
+                if (given) conditions.add(read);
+                body.add(read);
             }
         }
         return new Clause(head, body);

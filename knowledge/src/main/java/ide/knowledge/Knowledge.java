@@ -98,18 +98,20 @@ public final class Knowledge implements Remedy, QuickFix {
     private final List<Fact> facts;
     private final List<Effect> effects;
     private final Rules rules;
+    private final java.util.Set<Literal> conditions;
     private final Map<String, String> says;
     private final Map<String, String> promises;
     private final Map<String, List<String>> questions;
     private final Library library;
     private final Engine engine = Engine.standard();
 
-    Knowledge(List<Goal> goals, List<Fact> facts, List<Effect> effects, Rules rules, Map<String, String> says,
-              Map<String, String> promises, Map<String, List<String>> questions, Library library) {
+    Knowledge(List<Goal> goals, List<Fact> facts, List<Effect> effects, Rules rules, java.util.Set<Literal> conditions,
+              Map<String, String> says, Map<String, String> promises, Map<String, List<String>> questions, Library library) {
         this.goals = List.copyOf(goals);
         this.facts = List.copyOf(facts);
         this.effects = List.copyOf(effects);
         this.rules = rules;
+        this.conditions = conditions;
         this.says = Map.copyOf(says);
         this.promises = Map.copyOf(promises);
         this.questions = Map.copyOf(questions);
@@ -282,7 +284,7 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     private Abduction abduction(Map<String, Value> known, Projection projection) {
-        return new Abduction(rules, engine.evaluate(rules, new GraphFacts(projection, known)), promises, new Abduction.Shown() {
+        return new Abduction(rules, conditions, engine.evaluate(rules, new GraphFacts(projection, known)), promises, new Abduction.Shown() {
             @Override
             public String of(Atom atom) {
                 return shown(atom, projection);

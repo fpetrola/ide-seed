@@ -598,7 +598,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   Lo creado y lo que se le fija son un paso, con un título; un marcador lo nombra hasta que existe. `ask nombre
   "pregunta" for relación of new tipo` declara lo que solo la persona sabe: lo deducido queda como respuesta
   propuesta. Así un nombre usado como valor es un campo del tipo donde se busca, o un parámetro del método donde se
-  usa (JLS 6.5.6.1): se fueron `create-field` y `create-parameter`. Y que un tipo escrito en un archivo nombra un tipo
+  usa (JLS 6.5.6.1): se fueron `create-field` y `create-parameter`. Después, que un nombre llamado es un método del
+  tipo donde se busca, que una creación sin constructor que la haga pide uno que tome lo que pasa, y que un tipo
+  escrito que no existe lo declara el paquete del archivo (JLS 15.12, 15.9.3, 6.5.5): se fueron `create-method`,
+  `create-constructor`, `create-class` y `create-interface`. Para el método estático hizo falta decir qué es
+  condición en una definición: `given static(s)` se comprueba y nunca se cambia; sin eso, la abducción también
+  proponía volver estático a quien llama. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).

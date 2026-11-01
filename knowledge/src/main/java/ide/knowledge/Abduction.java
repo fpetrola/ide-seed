@@ -93,6 +93,7 @@ final class Abduction {
     }
 
     private final Rules rules;
+    private final Set<Literal> conditions;
     private final Evaluation base;
     private final Map<String, String> promises;
     private final Map<String, Integer> violations = new HashMap<>();
@@ -105,8 +106,10 @@ final class Abduction {
         String of(String constant);
     }
 
-    Abduction(Rules rules, Evaluation base, Map<String, String> promises, Shown shown) {
+    Abduction(Rules rules, Set<Literal> conditions, Evaluation base, Map<String, String> promises, Shown shown) {
         this.rules = rules;
+        this.conditions = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        this.conditions.addAll(conditions);
         this.base = base;
         this.promises = promises;
         this.shown = shown;
@@ -144,6 +147,16 @@ final class Abduction {
         var literal = pending.get(index);
         var rest = new ArrayList<>(pending);
         rest.remove(index);
+        if (conditions.contains(literal)) { // a condition is only checked: what it asks binds, what it says must hold
+            var answers = solutions(List.of(literal), binding, state);
+            for (var answer : answers) explore(forWhat, rest, answer, changes, needs, state, found, stuck);
+            if (answers.isEmpty()) stuck(stuck, switch (literal) {
+                case Literal.Positive p -> new Literal.Positive(bound(p.atom(), binding));
+                case Literal.Negative n -> new Literal.Negative(bound(n.atom(), binding));
+                case Literal.Comparison c -> bound(c, binding);
+            });
+            return;
+        }
         switch (literal) {
             case Literal.Positive p -> {
                 var atom = bound(p.atom(), binding);
@@ -250,6 +263,7 @@ final class Abduction {
         var ways = new ArrayList<List<Change>>();
         for (var literal : support.clause().body()) {
             var options = new ArrayList<Change>();
+            if (conditions.contains(literal)) continue; // a condition is never what is taken away
             switch (literal) {
                 case Literal.Positive p -> {
                     var standing = bound(p.atom(), support.binding());
@@ -443,20 +457,22 @@ final class Abduction {
         return atom.terms().stream().anyMatch(t -> t instanceof Term.Constant c && c.value().startsWith(NEW));
     }
 
-    /** A clause with its variables renamed apart, to be read inside another body. */
-    private static Clause renamed(Clause clause) {
+    /** A clause with its variables renamed apart, to be read inside another body; its conditions stay conditions. */
+    private Clause renamed(Clause clause) {
         var suffix = "~" + CREATIONS.incrementAndGet();
         java.util.function.Function<Atom, Atom> rename = atom -> new Atom(atom.relation(), atom.terms().stream()
                 .map(t -> t instanceof Term.Variable v ? (Term) Term.variable(v.name() + suffix) : t).toList());
         var body = new ArrayList<Literal>();
         for (var literal : clause.body()) {
-            body.add(switch (literal) {
+            Literal copy = switch (literal) {
                 case Literal.Positive p -> new Literal.Positive(rename.apply(p.atom()));
                 case Literal.Negative n -> new Literal.Negative(rename.apply(n.atom()));
                 case Literal.Comparison c -> new Literal.Comparison(
                         c.left() instanceof Term.Variable v ? Term.variable(v.name() + suffix) : c.left(), c.equal(),
                         c.right() instanceof Term.Variable v ? Term.variable(v.name() + suffix) : c.right());
-            });
+            };
+            if (conditions.contains(literal)) conditions.add(copy);
+            body.add(copy);
         }
         return new Clause(rename.apply(clause.head()), body);
     }

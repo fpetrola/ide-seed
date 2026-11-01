@@ -42,28 +42,7 @@ effect call-similar "change to ${name(m)}(..)"
   end
 end
 
-# A call to no method: the method, where the call looks for it, taking what the call passes; static if it is called
-# from a static place of its own type, and answering what its type starts with until it is written.
-effect create-method "create method ${symbol} in ${name(scope(unresolved-in(path, symbol, "call")))}"
-  makes resolves(symbol)
-  when nonempty(scope(unresolved-in(path, symbol, "call")))
-  ask type "return type of the new method" "${expected(unresolved-in(path, symbol, "call"))}"
-  cost 2
-  do
-    let call = unresolved-in(path, symbol, "call")
-    let where = scope(call)
-    let alone = and(eq(where, enclosing(site(call))), eq(attr(site(call), "static"), "true"))
-    let passed = arguments(call)
-    m := create METHOD ${where} ${symbol}
-    set ${m} static ${alone}
-    set ${m} type ${type}
-    for a in passed
-      p := create PARAM ${m} ${first(a)}
-      set ${p} type ${last(a)}
-    end
-    set ${m} body "return default"
-  end
-end
+# A call to no method, a new no constructor makes, a type nothing declares: java.rules says what is created for each.
 
 # A blank final field has its value where it is declared or from every constructor of its type; Eclipse says so at
 # the field, or at a constructor that does not give it one, naming the field.
@@ -169,44 +148,11 @@ effect declare-in-superclass "declare ${name(m)}() in ${name(superclass(owner(m)
   end
 end
 
-# A new object no constructor makes: the class gets one that takes what the new passes.
+# A new object no constructor makes: the class gets one that takes what the new passes (java.rules says how).
 goal ecj.UndefinedConstructor needs constructs(symbol)
-
-effect create-constructor "create constructor in ${name(scope(unresolved-in(path, symbol, "new")))}"
-  makes constructs(symbol)
-  when nonempty(unresolved-in(path, symbol, "new"))
-  do
-    let made = unresolved-in(path, symbol, "new")
-    let t = scope(made)
-    let passed = arguments(made)
-    c := create CONSTRUCTOR ${t} ${name(t)}
-    for a in passed
-      p := create PARAM ${c} ${first(a)}
-      set ${p} type ${last(a)}
-    end
-  end
-end
 
 # A final field assigned where it may not be: java.rules says who may (and making it not final is deduced).
 
 # An override that hides what it overrides: it is as visible again, or more (java.rules says how).
 goal ecj.MethodReducesVisibility needs visible-as-overridden(inside(path, line, column))
 
-# A type nothing declares: the file's package gets it, a class or an interface.
-effect create-class "create class ${symbol} in ${qualified(owner(top-in(path)))}"
-  makes resolves(symbol)
-  when and(nonempty(unresolved-in(path, symbol, "type")), empty(types-named(symbol)))
-  cost 3
-  do
-    create CLASS ${owner(top-in(path))} ${symbol}
-  end
-end
-
-effect create-interface "create interface ${symbol} in ${qualified(owner(top-in(path)))}"
-  makes resolves(symbol)
-  when and(nonempty(unresolved-in(path, symbol, "type")), empty(types-named(symbol)))
-  cost 4
-  do
-    create INTERFACE ${owner(top-in(path))} ${symbol}
-  end
-end

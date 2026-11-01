@@ -47,10 +47,13 @@ class CreateMethodQuickFixTest {
                 }
                 """));
 
+        // that the caller is static is a condition of the method made for it, never something to change
+        assertThat(ws.fixes("a/U.java", 5)).containsExactly("create method log in U");
+
         ws.fix("a/U.java", 5, "create method log in U");
 
         assertThat(ws.errors()).isEmpty();
-        assertThat(ws.source("a/U.java")).contains("static void log(String string) {");
+        assertThat(ws.source("a/U.java")).contains("static void log(String string) {", "    static void main() {");
     }
 
     @Test
