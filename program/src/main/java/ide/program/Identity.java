@@ -88,6 +88,19 @@ public final class Identity {
         rebind(callable, new Address.Callable(callable.owner(), callable.name(), keys));
     }
 
+    /**
+     * The element read anew as {@code fresh} is the one known as {@code old}: {@code old} takes its address (a type
+     * takes its nested types along), and {@code fresh}, with whatever was read under it, is forgotten.
+     */
+    public void transfer(ElementId fresh, ElementId old) {
+        var to = address(fresh);
+        var from = address(old);
+        if (to == null || from == null) return;
+        forget(fresh);
+        if (from instanceof Address.Type type) rebindType(type.qualified(), ((Address.Type) to).qualified());
+        else rebind(from, to);
+    }
+
     /** Forgets an element and everything addressed under it: members, parameters, nested types. */
     public void forget(ElementId id) {
         var gone = new HashSet<ElementId>();

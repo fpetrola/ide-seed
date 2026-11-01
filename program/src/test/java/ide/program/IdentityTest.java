@@ -50,6 +50,28 @@ class IdentityTest {
     }
 
     @Test
+    void anElementReadAnewCanBeTheOneItWas() {
+        var ids = new Identity();
+        var a = ids.of(new Address.Type("a.A"), Kind.CLASS);
+        var x = ids.of(new Address.Field(a, "x"), Kind.FIELD);
+        var inner = ids.of(new Address.Type("a.A.Inner"), Kind.CLASS);
+        var count = ids.of(new Address.Field(a, "count"), Kind.FIELD); // x, renamed by hand, read anew
+        var b = ids.of(new Address.Type("a.B"), Kind.CLASS); // A, renamed by hand, read anew
+        ids.of(new Address.Type("a.B.Inner"), Kind.CLASS);
+        ids.of(new Address.Field(b, "x"), Kind.FIELD);
+
+        ids.transfer(count, x);
+        ids.transfer(b, a);
+
+        assertThat(ids.get(new Address.Field(a, "count"))).isEqualTo(x);
+        assertThat(ids.has(new Address.Field(a, "x"))).isFalse();
+        assertThat(ids.get(new Address.Type("a.B"))).isEqualTo(a);
+        assertThat(ids.get(new Address.Type("a.B.Inner"))).isEqualTo(inner);
+        assertThat(ids.has(new Address.Field(b, "x"))).isFalse(); // what was read under the new id is forgotten
+        assertThat(ids.address(count)).isNull();
+    }
+
+    @Test
     void forgettingATypeForgetsWhatItOwns() {
         var ids = new Identity();
         var a = ids.of(new Address.Type("a.A"), Kind.CLASS);

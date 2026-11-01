@@ -20,6 +20,7 @@ import ide.program.Element;
 import ide.program.Identity;
 import ide.program.Primitive;
 import ide.program.Program;
+import ide.program.Reconciliation;
 import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
@@ -135,9 +136,30 @@ public final class JavaProjection implements Projection {
         return JavaPrimitives.apply(primitive, context);
     }
 
+    /** The user's text for a file; what it renamed, re-signed or moved is still the element it was. */
     @Override
     public void edit(String path, String text) {
+        var before = program();
         sources.put(Map.of(path, text));
+        reconcile(before);
+    }
+
+    /**
+     * Pairs, round by round, what the edit renamed, re-signed or moved with what it was (types first, then what they
+     * hold, then parameters), reading again after each round. What the edit removed is forgotten, so that its id never
+     * comes back for something else.
+     */
+    private void reconcile(Program before) {
+        for (var round = 0; round < 3; round++) {
+            var pairs = Reconciliation.pairs(before, program());
+            if (pairs.isEmpty()) break;
+            pairs.forEach(ids::transfer);
+            invalidate();
+        }
+        var after = program();
+        for (var element : before.elements()) {
+            if (!element.inLibrary() && !after.contains(element.id())) ids.forget(element.id());
+        }
     }
 
     @Override
