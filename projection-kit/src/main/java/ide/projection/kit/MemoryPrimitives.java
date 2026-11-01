@@ -1,6 +1,7 @@
 package ide.projection.kit;
 
 import ide.program.Address;
+import ide.program.Body;
 import ide.program.Change;
 import ide.program.ElementId;
 import ide.program.Fact;
@@ -167,8 +168,12 @@ final class MemoryPrimitives {
     }
 
     private static void set(MemoryGraph graph, ElementId element, String attribute, String value) {
+        if (attribute.equals(Fact.BODY.label())) {
+            body(graph, element, value);
+            return;
+        }
         var fact = switch (attribute) {
-            case "visibility", "static", "abstract", "final", "type", "superclass", "body" -> Fact.of(attribute);
+            case "visibility", "static", "abstract", "final", "type", "superclass" -> Fact.of(attribute);
             default -> throw new PrimitiveRejected("projection.unsupported", "a memory projection has no " + attribute);
         };
         var node = graph.nodes.get(element);
@@ -176,6 +181,16 @@ final class MemoryPrimitives {
         if (fact == Fact.TYPE) graph.relink(element, Mode.DECLARED, graph.typeNamed(value)); // the text decides what it links to
         if (fact == Fact.SUPERCLASS) graph.relink(element, Mode.EXTENDS, graph.typeNamed(value));
         if (fact == Fact.TYPE && node.kind() == Kind.PARAM) graph.resign(node.parent());
+    }
+
+    /** A body in no language is its own text, and the uses it makes take the place of the old body's. */
+    private static void body(MemoryGraph graph, ElementId method, String text) {
+        var body = Body.parse(text, graph.read(), method);
+        graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
+        for (var use : body.uses()) {
+            graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode()));
+        }
+        graph.nodes.put(method, graph.nodes.get(method).with(Fact.BODY, text));
     }
 
     private static void link(MemoryGraph graph, ElementId element, Mode mode, ElementId target) {

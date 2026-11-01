@@ -53,7 +53,7 @@ class PreviewExpandSaveTest {
                 ". encapsulate-field",
                 "  . generate-getter",
                 "    ' create METHOD a.P#getX()",
-                "    ' set a.P#getX() body = return #{field:2};",
+                "    ' set a.P#getX() body = return #{field:2}",
                 "  ' set a.P#x visibility = private");
         assertThat(ws.source("a/P.java")).isEqualTo(P);
     }

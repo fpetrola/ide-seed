@@ -11,7 +11,6 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import ide.java.syntax.Imports;
 import ide.java.syntax.Modifiers;
-import ide.java.syntax.Render;
 import ide.java.text.EditSet;
 import ide.java.text.Unit;
 import ide.program.Address;
@@ -21,16 +20,12 @@ import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
 
-import java.util.regex.Pattern;
-
 /**
  * Sets an attribute of an element, as text: its access or another modifier, an abstract method or class, the
- * superclass or the declared type as written, a body, an initial value, or an import of its file. {@link LinkType}
- * writes extends clauses, interfaces and declared types with the same means.
+ * superclass or the declared type as written, a body said in no language ({@link WriteBody}), or an initial value.
+ * {@link LinkType} writes extends clauses, interfaces and declared types with the same means.
  */
 final class SetAttribute {
-
-    private static final Pattern PLACEHOLDER = Pattern.compile("#\\{([^}]+)}");
 
     private SetAttribute() {
     }
@@ -48,7 +43,7 @@ final class SetAttribute {
             case "abstract" -> setAbstract(c, id, Boolean.parseBoolean(value));
             case "superclass" -> superclass(c, id, value);
             case "type" -> type(c, id, value);
-            case "body" -> body(c, id, value);
+            case "body" -> WriteBody.apply(c, id, value);
             case "initializer" -> initializer(c, id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
@@ -129,16 +124,6 @@ final class SetAttribute {
         }
         c.sources().apply(edits);
         if (method != null) Shared.resign(c, method, unit.path(), names);
-    }
-
-    /** A method's body, from a template of one statement per line where {@code #{id}} is the element's name. */
-    private static void body(Context c, ElementId id, String template) {
-        var declaration = c.declaration(c.program().element(id));
-        var method = declaration.as(MethodDeclaration.class);
-        var unit = declaration.unit();
-        var indent = unit.indentation(method.getBegin().orElseThrow().line);
-        var statements = PLACEHOLDER.matcher(template).replaceAll(m -> c.program().element(new ElementId(m.group(1))).name());
-        c.sources().apply(Shared.edits(e -> e.replace(unit, method.getBody().orElseThrow(), Render.block(statements, indent))));
     }
 
     /** The initial value of a field, as written. */

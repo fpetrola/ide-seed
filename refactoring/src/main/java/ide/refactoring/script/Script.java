@@ -1,6 +1,7 @@
 package ide.refactoring.script;
 
 import ide.core.Param;
+import ide.program.Body;
 import ide.program.ElementId;
 import ide.projection.PrimitiveRejected;
 import ide.refactoring.Args;
@@ -14,11 +15,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** A refactoring written in the {@code .ref} language, over typed values (see {@link Value}). */
 public final class Script implements Refactoring {
 
-    private static final Pattern INTERPOLATION = Pattern.compile("\\$\\{([^}]*)}");
+    private static final Pattern INTERPOLATION = Pattern.compile("([$#])\\{([^}]*)}");
 
     private final String id;
     private final String description;
@@ -37,7 +39,7 @@ public final class Script implements Refactoring {
         return new Script("expression", "", List.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
     }
 
-    /** Interpolates {@code ${expr}} in a text with the given variables. */
+    /** Interpolates {@code ${expr}} and {@code #{expr}} in a text with the given variables. */
     public static String render(String text, Run run, Map<String, Value> variables) {
         return Value.asText(new Script("text", "", List.of(), List.of()).interpolate(text, run, variables));
     }
@@ -144,12 +146,24 @@ public final class Script implements Refactoring {
         return bound;
     }
 
-    /** Text with {@code ${expr}}; an argument that is exactly one {@code ${expr}} keeps the value (e.g. a list). */
+    /**
+     * Text with {@code ${expr}}, a value as text, and {@code #{expr}}, elements as a body names them ({@link Body}), a
+     * list joined by commas. An argument that is exactly one {@code ${expr}} keeps the value (e.g. a list).
+     */
     private Value interpolate(String text, Run run, Map<String, Value> env) {
         var whole = INTERPOLATION.matcher(text);
-        if (whole.matches()) return eval(ScriptParser.expression(whole.group(1)), run, env);
-        return new Value.Text(INTERPOLATION.matcher(text).replaceAll(m ->
-                Matcher.quoteReplacement(Value.asText(eval(ScriptParser.expression(m.group(1)), run, env)))));
+        if (whole.matches() && whole.group(1).equals("$")) return eval(ScriptParser.expression(whole.group(2)), run, env);
+        return new Value.Text(INTERPOLATION.matcher(text).replaceAll(m -> {
+            var value = eval(ScriptParser.expression(m.group(2)), run, env);
+            return Matcher.quoteReplacement(m.group(1).equals("$") ? Value.asText(value) : named(value));
+        }));
+    }
+
+    private static String named(Value value) {
+        return Value.items(value).stream().map(item -> {
+            if (!(item instanceof Value.Elem element)) throw new IllegalArgumentException("a body names elements, not " + Value.asText(item));
+            return Body.name(element.id());
+        }).collect(Collectors.joining(", "));
     }
 
     private String text(String text, Run run, Map<String, Value> env) {

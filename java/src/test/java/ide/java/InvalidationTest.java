@@ -1,5 +1,6 @@
 package ide.java;
 
+import ide.program.Body;
 import ide.program.ElementId;
 import ide.program.Primitive;
 import ide.program.Program;
@@ -39,7 +40,8 @@ class InvalidationTest {
     void aChangeInsideABodyResolvesOnlyItsFile() {
         var projection = JavaProjection.of(SOURCES);
 
-        projection.apply(new Primitive.Set(id(projection.program(), "a.A#twice()"), "body", "return x * 3;"));
+        var p = projection.program();
+        projection.apply(new Primitive.Set(id(p, "a.A#twice()"), "body", "return " + Body.name(id(p, "a.A#x"))));
         projection.program();
 
         assertThat(projection.resolvedLastTime()).containsExactly("a/A.java");

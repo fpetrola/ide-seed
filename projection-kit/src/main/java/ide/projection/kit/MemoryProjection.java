@@ -23,8 +23,9 @@ import java.util.Optional;
  * implementation of {@link ProjectionContract}, and the stand-in for a driver in the tests of the products above it.
  * <p>
  * What only a language knows is not modelled: there is no text (so no {@link #edit} and no diagnostics), uses bind by
- * id (so nothing is ever shadowed), a body is a fact whose uses are given with {@link ProgramBuilder#use}. An
- * extract's fragment is a range of the method's uses by position.
+ * id (so nothing is ever shadowed), a body is its text in no language ({@link ide.program.Body}) with the uses it
+ * names, or uses given by hand with {@link ProgramBuilder#use}. An extract's fragment is a range of the method's uses
+ * by position.
  */
 public final class MemoryProjection implements Projection {
 

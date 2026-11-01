@@ -1,33 +1,26 @@
 # The standard catalog: every refactoring here is a composition of primitives and other refactorings.
 # The coherence engine verifies and repairs the result, so scripts state intent, not care.
-# Known leak (ARCHITECTURE.md, section 8): bodies are written in Java, each marked where it is. In etapa 2 they are
-# written in a neutral body language that each projection renders.
+# No code of any language is written here: a body is said in the body language (#{x} names the element x), and each
+# projection writes it in its own.
 
-refactoring generate-getter "public T getX() { return x; } for a field x of type T"
+refactoring generate-getter "A public method getX that answers the value of a field x"
   param field : element(FIELD) "the field to read"
   getter := create METHOD ${owner(field)} get${cap(name(field))}
   set ${getter} visibility public
   set ${getter} static ${attr(field, "static")}
   set ${getter} type ${type(field)}
-  # leak: Java body
-  set ${getter} body "return #{${field}};"
+  set ${getter} body "return #{field}"
   return ${getter}
 end
 
-refactoring generate-setter "public void setX(T x) { this.x = x; } for a field x of type T"
+refactoring generate-setter "A public method setX(x) that gives a field x a value"
   param field : element(FIELD) "the field to write"
   setter := create METHOD ${owner(field)} set${cap(name(field))}
   set ${setter} visibility public
   set ${setter} static ${attr(field, "static")}
   p := create PARAM ${setter} ${name(field)}
   set ${p} type ${type(field)}
-  if eq(attr(field, "static"), "true")
-    # leak: Java body
-    set ${setter} body "#{${owner(field)}}.#{${field}} = #{${p}};"
-  else
-    # leak: Java body
-    set ${setter} body "this.#{${field}} = #{${p}};"
-  end
+  set ${setter} body "#{field} = #{p}"
   return ${setter}
 end
 
@@ -107,8 +100,7 @@ refactoring introduce-factory "Static factory for a constructor; every new outsi
     q := create PARAM ${f} ${name(p)}
     set ${q} type ${type(p)}
   end
-  # leak: Java body
-  set ${f} body "return new #{${owner(constructor)}}(${join(paramnames(constructor), ", ")});"
+  set ${f} body "return new #{constructor}(#{params(f)})"
   for r in refs(constructor) | not-within f
     retarget ${r} ${f}
   end

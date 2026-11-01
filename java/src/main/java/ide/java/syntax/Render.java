@@ -1,5 +1,6 @@
 package ide.java.syntax;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 /** Text for code that does not exist yet, written the way this driver writes code. */
@@ -21,5 +22,23 @@ public final class Render {
     /** A block with one statement per line of {@code statements}, its braces at {@code indent}. */
     public static String block(String statements, String indent) {
         return "{\n" + statements.lines().map(line -> indent + "    " + line + "\n").collect(Collectors.joining()) + indent + "}";
+    }
+
+    public static String returning(String value) {
+        return "return " + value + ";";
+    }
+
+    public static String assignment(String target, String value) {
+        return target + " = " + value + ";";
+    }
+
+    /** {@code new Type(a, b)}. */
+    public static String creation(String type, List<String> arguments) {
+        return "new " + type + "(" + String.join(", ", arguments) + ")";
+    }
+
+    /** A member through what it is reached from: {@code this.x}, {@code P.count}. */
+    public static String through(String receiver, String member) {
+        return receiver + "." + member;
     }
 }

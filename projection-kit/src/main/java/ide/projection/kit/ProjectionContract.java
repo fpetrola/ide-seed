@@ -1,5 +1,6 @@
 package ide.projection.kit;
 
+import ide.program.Body;
 import ide.program.Change;
 import ide.program.Element;
 import ide.program.ElementId;
@@ -86,7 +87,9 @@ public abstract class ProjectionContract {
                 new Scenario("extract a statement", p -> new Primitive.Extract(id(p, "a.A#total()"), fragmentOfTotalCallingM(), "add")),
                 new Scenario("rename a type", p -> new Primitive.Rename(id(p, "a.A"), "Base")),
                 new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)),
-                new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))));
+                new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))),
+                new Scenario("write a body", p -> new Primitive.Set(id(p, "a.A#k(int)"), "body",
+                        "return " + Body.name(id(p, "a.A#x")))));
     }
 
     @Test
@@ -126,6 +129,25 @@ public abstract class ProjectionContract {
         assertThat(change.expectations()).containsExactly(new Change.Bound(use, id(p, "a.A")));
         assertThat(after.unresolved()).isEmpty();
         assertThat(after.declaredType(price)).map(Element::qualified).contains("a.A");
+    }
+
+    /**
+     * Obligation 8: a body is said in no language ({@link Body}); the projection writes it in its own, and the method
+     * makes the uses the body names, in the order it names them. Its parameters are values, not uses.
+     */
+    @Test
+    void aBodySaidInNoLanguageMakesTheUsesItNames() {
+        var projection = fixture();
+        var p = projection.program();
+        var k = id(p, "a.A#k(int)");
+        var x = Body.name(id(p, "a.A#x"));
+
+        projection.apply(new Primitive.Set(k, "body", x + " = " + Body.name(id(p, "a.A#k(int)/p")) + "\nreturn " + x));
+
+        var after = projection.program();
+        assertThat(after.referencesFrom(k)).extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactly("a.A#x write", "a.A#x read");
+        assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
     /** Obligation 1: an element keeps its id through rename, move, set and link. */
