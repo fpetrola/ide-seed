@@ -77,9 +77,11 @@ De la arquitectura (nuevos):
 ## 4. Mapa de módulos
 
 ```
+          cli       ui       mcp       (adaptadores: solo session y core)
+            \       |       /
                  acceptance            (solo tests: donde los productos se encuentran)
                      |
-                  session              (ensambla; después, los adaptadores encima)
+                  session              (ensambla)
           ___________|____________
          |           |            |
          |       knowledge        |
@@ -110,6 +112,9 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | knowledge   | engine, refactoring                                        | planificador por metas                       |
 | session     | java, engine, refactoring, knowledge; JavaParser en runtime | el ensamblado                                |
 | acceptance  | session, solo para tests                                   | escenarios transversales, samples, reglas    |
+| cli         | session, core                                              | adaptador: la terminal                       |
+| ui          | session, core; RSyntaxTextArea                             | adaptador: la ventana Swing                  |
+| mcp         | session, core                                              | adaptador: servidor MCP por stdio            |
 
 Cómo se hace cumplir:
 
@@ -119,6 +124,8 @@ Cómo se hace cumplir:
 - javac viene con el JDK, así que "solo `java` usa la API del compilador" lo verifica ArchUnit, igual que "solo
   `knowledge` implementa remedios". Son las dos reglas que Maven no puede expresar, y viven en `acceptance`.
 - `acceptance` no es un producto: es donde los productos se encuentran.
+- Un adaptador declara `session` y `core`, pero por la dependencia transitiva compilaría contra todo lo de abajo: su
+  `AdapterTest` (ArchUnit) hace cumplir que use solo `session` y `core`.
 - `projection-kit` es lo que bajaría quien escribe un driver: `java` lo declara para correr el contrato en sus
   tests; `engine`, `refactoring`, `knowledge` y `session` lo declaran para probarse sobre la proyección en memoria.
   Siempre solo para tests.
@@ -147,7 +154,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Qué es.** `Capability`, `Param`, `CapabilityRegistry` (esquema más invocación con respuesta JSON), `Json`,
   `EventLog` (JSONL append-only), `TextDiff`. Sin ningún dominio del IDE.
 - **Prueba de autonomía.** Ya la pasa: se usa con lambdas en un test.
-- **Estado actual.** Se mantiene como está.
+- **Estado actual.** Desde el ítem 6 de la etapa 2, `Json` también lee (la CLI escribe las respuestas como texto,
+  MCP lee sus pedidos), y `Param` tiene el tipo `map` (nombres a valores). `JsonTest` es el primer test de `core`.
 
 ### 5.2 `program`: modelo de programas para herramientas
 
@@ -244,6 +252,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `edit(path, text)`: edición manual; el texto del usuario es la autoridad; rechaza lo que no parsea.
   - `List<Diagnostic> diagnostics()`: la vista del compilador.
   - `Optional<CompletionContext> completion(path, text, offset)`.
+  - `Optional<Location> locate(element)` y `Optional<ElementId> elementAt(path, line, column)`: dónde está declarado un
+    elemento, y qué elemento declara o usa el nombre en una posición. Lo que un editor necesita para F3, un menú
+    contextual o un diálogo precargado con lo seleccionado.
   - `LanguageRules rules()`: accesibilidad, visibilidades posibles de un elemento, y cómo escribe el lenguaje el
     valor que tiene un campo que nadie asignó. Ya no ofrece candidatos de import: el programa tiene los tipos que un
     uso podría nombrar.
@@ -263,6 +274,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   7. Un retarget de un uso sin resolver lo liga: desde ahí es una referencia.
   8. Un cuerpo dicho sin lenguaje (`Body`) se escribe en el del driver, y el método hace los usos que el cuerpo
      nombra, en ese orden. Sus parámetros son valores, no usos.
+  9. Lo que una proyección ubica (`locate`: archivo, línea y columna del nombre de una declaración) se encuentra donde
+     dice (`elementAt`). Una proyección sin texto no ubica nada.
 - **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
   el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
   mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo
@@ -329,7 +342,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   nombre lo tapa, y un objeto nuevo por el nombre simple de su tipo, importado si hace falta. Desde el ítem 5 borra
   tipos anidados (sus líneas, como un miembro); fusiona un miembro en otro renombrando los usos que lo nombran
   distinto en la misma edición que lo quita, así ningún uso liga otra cosa en el medio; un retarget del tipo escrito
-  en un parámetro le lleva la identidad al método; y un archivo nombra sin import los tipos que declara.
+  en un parámetro le lleva la identidad al método; y un archivo nombra sin import los tipos que declara. Desde el ítem
+  6 responde posiciones desde su lectura (`semantics.Positions`): un uso se encuentra por el nombre con que está
+  escrito, así el cursor sobre `a` en `a.m(1)` está en `a` y no en la llamada.
 - **Abierto.** Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
   cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez.
   Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
@@ -475,8 +490,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `Completion`, `Capabilities` y `Workspace`, cuyos métodos son delegaciones de una línea. `NavigationTest` y
   `CompletionTest` corren sobre la proyección en memoria; `FixesTest` y `SessionTest`, sobre un proyecto Java chico.
   Los tests anteriores de la sesión y los de aceptación pasan contra la fachada sin cambios.
-- **Abierto.** Las operaciones que todavía no son capacidades (edit, save, asks, model) entran cuando un adaptador
-  las pida. `Capabilities` lista las operaciones a mano: si un día se desfasan de la fachada, se derivan de ella.
+- **Desde el ítem 6.** `Workspace.open(root)` lee las fuentes de una carpeta, registra los eventos en
+  `.ide/events.jsonl` ahí y guarda ahí (`save()`); uno hecho en memoria no tiene dónde guardar. Entraron las
+  capacidades que pidieron los adaptadores: `save`, `edit`, `asks` (las preguntas de un fix, con su default), `at`
+  (el elemento y su clase en una posición), `where` (dónde está declarado), `elements` (de unas clases, o de un
+  archivo) y las respuestas de `fix`. `ls` responde ordenado y las respuestas con campos los mantienen en orden.
+- **Abierto.** `Capabilities` lista las operaciones a mano: si un día se desfasan de la fachada, se derivan de ella.
+  `model` sigue sin ser capacidad: ningún adaptador la pidió (`elements` alcanzó).
 
 ### 5.9 `adapters`: cli, ui, mcp
 
@@ -484,7 +504,28 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   Swing con keymap de Eclipse, después MCP.
 - **Regla propia.** Sin lógica y sin dependencias más allá de `session` y `core`. Si un adaptador necesita un `if`
   sobre el dominio, falta una capacidad.
-- **Estado actual.** No existen, por decisión: llegan al final.
+- **Estado actual** (ítem 6 de la etapa 2, 2026-11-01). Tres módulos, cada uno con su `AdapterTest`, y los tres
+  hablan con el IDE solo por capacidades, como JSON.
+  - `cli`: `ide <carpeta> <capacidad> [args]` corre un comando y guarda lo que cambió; `--script` corre un archivo de
+    comandos hasta que uno falla; sin comando es un shell hasta `exit`. Las palabras se ligan a los parámetros por
+    posición o por nombre, según el esquema (una lista de elementos con comas, una verdad como true o false,
+    `param.clave=valor` para los que toman varios por nombre); la respuesta JSON se escribe como texto. `help` es el
+    esquema de cada capacidad. `Command`, `Text`, `Cli`, `Main`; `target/ide-cli.jar`.
+  - `ui`: una ventana Swing. Los archivos del proyecto por paquete con la cantidad de problemas; un editor
+    RSyntaxTextArea por archivo (colores de Java, tema oscuro, problemas subrayados y marcados en una tira al costado,
+    y lo escrito sin aplicar nunca se pisa); abajo, Problems, Changes, Steps, Output y Results. Un formulario es el
+    esquema de una capacidad: un elemento se elige de los de las clases que toma, precargado con el que está bajo el
+    cursor si encaja, con vista previa del diff. Las teclas son las de Eclipse (`Keymap`): Ctrl+S aplica el editor,
+    Ctrl+1, Alt+Shift+R/T/C/V, F3 y Alt+flechas, F4, Ctrl+Alt+H, Ctrl+Shift+G, Ctrl+Shift+T y Ctrl+O con un quick
+    pick que filtra por iniciales, Ctrl+L, Ctrl+. y Ctrl+, , Ctrl+Space, zoom y Ctrl+Shift+L. Se prueba sin pantalla:
+    las partes son paneles y los diálogos una interfaz (`Dialogs`) que los tests guionan. `target/ide-ui.jar`.
+  - `mcp`: JSON-RPC 2.0 por stdio, una línea por mensaje: `initialize`, `ping`, `tools/list` (cada capacidad una
+    herramienta, su esquema un JSON Schema) y `tools/call` (lo que responde la capacidad, o un resultado de error).
+    Si una llamada cambia las herramientas, como `define`, avisa con `notifications/tools/list_changed`.
+    `target/ide-mcp.jar`.
+- **Abierto.** En la UI: la vista Steps como árbol, el diff lado a lado, la lamparita en el margen, defaults vivos en
+  los formularios, autocompletado en un popup junto al cursor (hoy es un quick pick), el tema Dracula (está el oscuro
+  de RSyntaxTextArea). De la spec quedan fuera de este ítem el build incremental con ECJ y el runner de `main`.
 
 ## 6. Cómo se testea
 
@@ -528,17 +569,20 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 | Etapa 2, ítem 4 | Etapa 2, ítem 5 |
-|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|-----------------|-----------------|
-| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   | 24              | 25              |
-| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   | 11              | 11              |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   | 39              | 39              |
-| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   | 20              | 21              |
-| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   | 12              | 12              |
-| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    | 6               | 8               |
-| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    | 0               | 0               |
-| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   | 22              | 22              |
-| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  | 108             | 114             |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 | Etapa 2, ítem 4 | Etapa 2, ítem 5 | Etapa 2, ítem 6 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|-----------------|-----------------|-----------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   | 24              | 25              | 25              |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   | 11              | 11              | 12              |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   | 39              | 39              | 42              |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   | 20              | 21              | 21              |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   | 12              | 12              | 12              |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    | 6               | 8               | 8               |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    | 0               | 0               | 3               |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   | 22              | 22              | 25              |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  | 108             | 114             | 114             |
+| cli              | (no existía)         |                     |                     |                     |                     |                     |                      |                 |                 | 12              |
+| ui               | (no existía)         |                     |                     |                     |                     |                     |                      |                 |                 | 13              |
+| mcp              | (no existía)         |                     |                     |                     |                     |                     |                      |                 |                 | 6               |
 
 ## 7. Decisiones
 
@@ -566,6 +610,8 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 20 | Fusión                   | dos miembros pasan a ser uno con `Delete(element, into)`, sin estado intermedio: retarget y después delete no pueden fusionar un override en lo que sobrescribe | tomada, 2026-11-01 (8eb59b1) |
 | 21 | Despacho                 | un override nuevo es un cambio de despacho solo si alguna llamada del método sobrescrito puede alcanzarlo; subir un método ya no aborta porque un hermano tenga la misma firma | tomada, 2026-11-01 (3909198) |
 | 22 | Encadenamiento           | `fact` dice cuándo vale un predicado y `needs` qué requiere un efecto; los planes se deducen hacia atrás, de hasta 4 efectos, y una búsqueda responde los 12 más baratos | tomada, 2026-11-01 (8695c28) |
+| 23 | Posiciones               | el contrato de la proyección dice dónde está declarado un elemento y qué elemento hay en una posición; el grafo sigue sin posiciones | tomada, 2026-11-01 (3223bf9) |
+| 24 | Adaptadores              | un módulo cada uno, que declara `session` y `core` y usa solo eso (`AdapterTest`); hablan con el IDE solo por capacidades, en JSON; lo que un adaptador necesita y no es capacidad entra a `session` como capacidad | tomada, 2026-11-01 (cedbd23, 763d4e6, 8b760b3) |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -791,7 +837,17 @@ etapa 2, por valor.
    Abierto: fusionar tipos (un `delete` de un tipo `into` otro) no existe, y collapse-hierarchy sigue retargeteando y
    borrando; `invariant` del conocimiento; de la lista de la spec faltan los refactorings que nombra la ficha de
    `refactoring`.
-6. Adaptadores: CLI, luego UI, luego MCP, cada uno como módulo que declara solo `session` y `core`.
+6. Adaptadores: CLI, luego UI, luego MCP, cada uno como módulo que declara solo `session` y `core`. Hecho en siete
+   ciclos:
+   - b6acdb2: `core` lee JSON.
+   - 5e8c928: un workspace se abre desde una carpeta, registra sus eventos ahí y guarda ahí; `save` es capacidad.
+   - cedbd23: la CLI.
+   - 3223bf9: posiciones en el contrato de la proyección (obligación 9), respondidas por el driver de Java.
+   - f7036cb: las capacidades de un editor (`at`, `where`, `elements`, `edit`, `asks`, respuestas de `fix`).
+   - 763d4e6: la UI.
+   - 8b760b3: el servidor MCP.
+
+   Abierto: lo de la UI que lista la ficha de adaptadores; el build incremental y el runner de la spec.
 
 ## 10. Glosario
 
@@ -826,6 +882,8 @@ etapa 2, por valor.
 - **Valor**: lo que los refactorings se pasan y los scripts calculan: un elemento o una referencia por id, texto, un
   valor de verdad o una lista.
 - **Capacidad**: esquema más invocación; lo único que los adaptadores conocen.
+- **Adaptador**: la CLI, la UI o el servidor MCP: traducen palabras, teclas o JSON-RPC a capacidades, y sus respuestas
+  a texto o pantalla.
 - **Test de producto**: usa un producto solo, en su vocabulario, con dobles de lo que necesita de afuera.
 - **Test de contrato**: verifica que cada implementación de una interfaz cumple lo que sus usuarios asumen.
 - **Test de aceptación**: un escenario de usuario que atraviesa todos los productos.

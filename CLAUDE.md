@@ -12,13 +12,17 @@ Every structural change is made of a few primitives; correctness comes from veri
   classes and resources in `target/` have hidden broken code here before.
 - Tests tagged `probe` (performance) are excluded by default; run them with
   `mvn test -Dtest=PerformanceProbe -DexcludedGroups=none`.
+- `mvn package -DskipTests -pl cli,ui,mcp -am` builds the adapters as runnable jars: `java -jar cli/target/ide-cli.jar
+  <folder> [capability args...]` (no capability: a shell), `java -jar ui/target/ide-ui.jar [folder]`, and
+  `java -jar mcp/target/ide-mcp.jar <folder>` (an MCP server on stdio). The folder is a source root.
 
 ## Map
 
 One Maven module per product; each pom declares only the products it uses, so the poms are the dependency map and
 the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package `ide.<product>`.
 
-- `core` — Capability, CapabilityRegistry, Param, Json, EventLog (JSONL), TextDiff. Knows nothing else.
+- `core` — Capability, CapabilityRegistry, Param, Json (written and read), EventLog (JSONL), TextDiff. Knows nothing
+  else.
 - `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy), Unresolved (a use that binds
   nothing, same id space as references; a Retarget binds it), Reconciliation (after an edit by hand, pairs what
@@ -32,7 +36,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   assign a field, new, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
   the old body's uses Dropped and the ones it names Added).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
-  typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`), LanguageRules (access, visibilities, how
+  typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
+  is declared and what the name at a line and column means), LanguageRules (access, visibilities, how
   the language writes a field's default value), Diagnostic,
   CompletionContext, PrimitiveRejected (and the rules every driver applies: nothing changes a library element; a
   field merges only into a field, a method into a method).
@@ -77,11 +82,18 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — parts over a `JavaProjection`:
   Session (each operation a transaction; undo, event log, saving; a fix must make its diagnostic disappear), Fixes
   (the quick fixes of a line; a Fix is a diagnostic and its plan), Navigation and Completion (no language: tested
-  over MemoryProjection), Capabilities (each refactoring and operation with its schema). `Workspace` builds the
-  parts and only delegates.
+  over MemoryProjection), Capabilities (each refactoring and operation with its schema, including what the adapters
+  asked for: save, edit, asks, at, where, elements). `Workspace` builds the parts and only delegates;
+  `Workspace.open(folder)` reads a project, logs to `.ide/events.jsonl` there and saves there.
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,
   completion over Java text), the samples in `acceptance/src/test/resources/samples` (case tables in
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.
+- Adapters (session, core; each with an `AdapterTest` that keeps it from anything else): they talk to the IDE only
+  through capabilities, in JSON, and decide nothing. `cli` (Command binds words to a capability's schema, Text writes
+  JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea and Eclipse's keys:
+  Workbench, Editors, Views, Form from a capability's schema, Dialogs as an interface the tests script, Keymap; tested
+  with no screen), `mcp` (Server: JSON-RPC 2.0 on stdio, each capability a tool with a JSON Schema, list_changed after
+  a call that changes the tools).
 
 ## Principles (do not break them; say so if an instruction does)
 
@@ -105,7 +117,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - Catalog scripts stay within 20 statements and write no code of any language: a body is said in the body language
   (`ide.program.Body`), and what only a language can write is asked of its rules (CatalogTest runs the bodies on the
   memory projection).
-- UI and MCP come last.
+- Adapters have no logic: when one needs something about the domain, it becomes a capability in `session`.
 
 ## Architecture and migration
 
