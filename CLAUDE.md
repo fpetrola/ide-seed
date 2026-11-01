@@ -43,7 +43,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. An edit by hand reconciles identity (types, members, parameters,
-  reading again between rounds) and forgets what it removed. The AST is never edited. Other modules use
+  reading again between rounds) and forgets what it removed. A reading after a change re-reads the files changed and
+  re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
+  the changed member's type, supertypes and subtypes); `resolvedLastTime()` tells which. The AST is never edited.
+  Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
 - `engine` (projection) — Transaction (born with its Repairer; intercepts `apply`, folds each declared Change into
   the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins

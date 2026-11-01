@@ -296,9 +296,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   tipos del JDK que podrían nombrar. Ligar uno escribe el nombre del destino y lo importa si hace falta. Reemplazar
   un tipo vinculado declara que los usos dentro de él, como sus argumentos de tipo, se van con él. Una edición a mano
   reconcilia la identidad por rondas (tipos, lo que contienen, parámetros), leyendo de nuevo entre una y otra; lo
-  que la edición quitó se olvida, para que su id no vuelva con otra cosa.
-- **Abierto.** Invalidación selectiva: se reparsea solo lo tocado, pero el grafo se relee entero. Borrado de tipos
-  anidados. Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
+  que la edición quitó se olvida, para que su id no vuelva con otra cosa. La lectura después de un cambio conserva lo
+  que el cambio no pudo afectar: un archivo cambiado se lee de nuevo; los usos de otro archivo se resuelven de nuevo
+  solo si pueden ligar distinto (todos, cuando cambió un tipo; si no, los que se llaman como un miembro cuya
+  declaración cambió y ligaban un miembro de su tipo, de un supertipo o de un subtipo, o están dentro de su tipo o de
+  un subtipo, o no ligaban nada, o ligaban algo que el programa no sigue). La forma de lo declarado se lee del texto
+  (`syntax.Shape`); `resolvedLastTime()` dice qué archivos resolvió la última lectura.
+- **Abierto.** javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez. Borrado de
+  tipos anidados. Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
   cuerpo, porque esos usos no son referencias del grafo.
 
@@ -474,11 +479,11 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 y 2 |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 |
 |------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|
 | program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   |
 | projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 29                   |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   |
 | engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   |
 | refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   |
 | knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    |
@@ -693,7 +698,15 @@ etapa 2, por valor.
    archivos y ofrecer seguir el rename. No se hizo todavía: verificar también el archivo editado marcaría como
    violaciones los cambios hechos a propósito, y ofrecer seguir el rename necesita los usos de miembros sin resolver
    (lo abierto del ítem 1). Tampoco se reconoce un miembro llevado de un tipo o de un archivo a otro.
-3. Invalidación selectiva del grafo.
+3. Invalidación selectiva del grafo. Hecho en d97d73b. En el sample grande (101 archivos, unas 10.000 referencias),
+   la relectura después de un rename de campo resuelve 2 archivos y tarda unos 20 ms en vez de unos 190; un rename
+   con el programa ya leído tarda la mitad. Lo que queda del costo es javac. Las pruebas de que una lectura parcial
+   es igual a una completa ya existían: la obligación de lectura reproducible del contrato, después de cada
+   primitivo, y los samples, que comparan el modelo con uno releído después de cada caso. `InvalidationTest` cubre
+   la regla, con las capturas a través de un subtipo y de una sobrecarga.
+
+   Abierto: un cambio de tipo (nombre, paquete, cabecera) relee todo, también lo que no lo nombra; javac
+   incremental.
 4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo.
 5. Lo que falta del catálogo: pull-up-unifying, borrado de tipos anidados, encadenamiento en varios niveles del
    conocimiento.
