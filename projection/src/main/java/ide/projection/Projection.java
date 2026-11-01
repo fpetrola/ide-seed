@@ -1,6 +1,7 @@
 package ide.projection;
 
 import ide.program.Change;
+import ide.program.ElementId;
 import ide.program.Primitive;
 import ide.program.Program;
 
@@ -43,6 +44,12 @@ public interface Projection {
 
     /** Where completion is asked in {@code text} (the editor's possibly unparsable version of {@code path}). */
     Optional<CompletionContext> completionContext(String path, String text, int offset);
+
+    /** Where an element is declared: the start of its name; nowhere for what has no text (a package, a library type). */
+    Optional<Location> locate(ElementId element);
+
+    /** The element whose name is at a line and column of a file: the one declared there, or the one a use there binds. */
+    Optional<ElementId> elementAt(String path, int line, int column);
 
     /** A projection's saved state; only the projection that took it can restore it. */
     interface Snapshot {

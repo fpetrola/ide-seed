@@ -11,6 +11,7 @@ import ide.program.Program;
 import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
+import ide.projection.Location;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 
@@ -136,6 +137,17 @@ public final class MemoryProjection implements Projection {
 
     @Override
     public Optional<CompletionContext> completionContext(String path, String text, int offset) {
+        return Optional.empty();
+    }
+
+    /** There is no text: nothing is anywhere. */
+    @Override
+    public Optional<Location> locate(ElementId element) {
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<ElementId> elementAt(String path, int line, int column) {
         return Optional.empty();
     }
 

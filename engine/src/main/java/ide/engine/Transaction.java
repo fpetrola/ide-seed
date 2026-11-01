@@ -1,12 +1,14 @@
 package ide.engine;
 
 import ide.program.Change;
+import ide.program.ElementId;
 import ide.program.Primitive;
 import ide.program.Program;
 import ide.program.Unresolved;
 import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
+import ide.projection.Location;
 import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 
@@ -206,5 +208,15 @@ public final class Transaction implements Projection {
     @Override
     public Optional<CompletionContext> completionContext(String path, String text, int offset) {
         return projection.completionContext(path, text, offset);
+    }
+
+    @Override
+    public Optional<Location> locate(ElementId element) {
+        return projection.locate(element);
+    }
+
+    @Override
+    public Optional<ElementId> elementAt(String path, int line, int column) {
+        return projection.elementAt(path, line, column);
     }
 }

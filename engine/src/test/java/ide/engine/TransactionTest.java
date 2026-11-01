@@ -177,6 +177,16 @@ class TransactionTest {
             public Optional<CompletionContext> completionContext(String path, String text, int offset) {
                 return Optional.empty();
             }
+
+            @Override
+            public Optional<ide.projection.Location> locate(ide.program.ElementId element) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<ide.program.ElementId> elementAt(String path, int line, int column) {
+                return Optional.empty();
+            }
         };
     }
 }

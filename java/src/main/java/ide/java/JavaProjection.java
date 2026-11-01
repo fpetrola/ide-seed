@@ -11,12 +11,14 @@ import ide.java.primitives.JavaPrimitives;
 import ide.java.semantics.Completion;
 import ide.java.semantics.JavacCheck;
 import ide.java.semantics.Keys;
+import ide.java.semantics.Positions;
 import ide.java.semantics.Reader;
 import ide.java.semantics.WorkspaceTypeSolver;
 import ide.java.syntax.Decl;
 import ide.java.text.Sources;
 import ide.program.Change;
 import ide.program.Element;
+import ide.program.ElementId;
 import ide.program.Identity;
 import ide.program.Primitive;
 import ide.program.Program;
@@ -24,6 +26,7 @@ import ide.program.Reconciliation;
 import ide.projection.CompletionContext;
 import ide.projection.Diagnostic;
 import ide.projection.LanguageRules;
+import ide.projection.Location;
 import ide.projection.Projection;
 
 import java.util.Collection;
@@ -195,6 +198,16 @@ public final class JavaProjection implements Projection {
     public Optional<CompletionContext> completionContext(String path, String text, int offset) {
         program(); // the identities of the saved version, which the edited text is matched against
         return Completion.at(sources, reader, ids, text, offset);
+    }
+
+    @Override
+    public Optional<Location> locate(ElementId element) {
+        return Positions.of(reading(), element);
+    }
+
+    @Override
+    public Optional<ElementId> elementAt(String path, int line, int column) {
+        return Positions.at(reading(), sources, path, line, column);
     }
 
     /**
