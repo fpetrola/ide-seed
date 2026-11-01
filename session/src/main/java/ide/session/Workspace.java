@@ -177,6 +177,10 @@ public final class Workspace {
 
     // ---- reading
 
+    public List<Completion.Candidate> completions(String path, String text, int offset) {
+        return completion.options(path, text, offset);
+    }
+
     public List<String> complete(String path, String text, int offset) {
         return completion.at(path, text, offset);
     }
@@ -193,7 +197,7 @@ public final class Workspace {
         return navigation.where(element);
     }
 
-    public List<String> elements(Collection<String> kinds, Optional<String> path) {
+    public List<Element> elements(Collection<String> kinds, Optional<String> path) {
         return navigation.elements(kinds, path);
     }
 

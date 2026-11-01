@@ -73,12 +73,14 @@ final class Capabilities {
                 .register(Capability.of("elements", "The workspace's elements of some kinds (comma-separated), or all; in a file, if given",
                         List.of(Param.of("kinds", "text").optional(), Param.of("path", "text").optional()),
                         args -> workspace.elements(args.containsKey("kinds") ? List.of(text(args, "kinds").split(",")) : List.of(),
-                                Optional.ofNullable(args.get("path")).map(String::valueOf))))
+                                Optional.ofNullable(args.get("path")).map(String::valueOf)).stream()
+                                .map(e -> entries("element", e.qualified(), "kind", e.kind().name())).toList()))
                 .register(Capability.of("why", "How the fixes for a line are deduced", List.of(path, line),
                         args -> workspace.why(text(args, "path"), number(args, "line")).lines()))
                 .register(Capability.of("complete", "Completions at an offset of edited text",
                         List.of(path, Param.of("text", "text"), Param.of("offset", "text")),
-                        args -> workspace.complete(text(args, "path"), text(args, "text"), number(args, "offset"))))
+                        args -> workspace.completions(text(args, "path"), text(args, "text"), number(args, "offset")).stream()
+                                .map(c -> entries("label", c.label(), "kind", c.kind())).toList()))
                 .register(Capability.of("preview", "A refactoring's diff, without keeping it", List.of(refactoring, itsArgs),
                         args -> {
                             var preview = workspace.preview(text(args, "refactoring"), nested(args));

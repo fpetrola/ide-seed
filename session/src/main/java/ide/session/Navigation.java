@@ -67,12 +67,12 @@ public final class Navigation {
      * The workspace's elements of these kinds (any kind, if none is given), sorted by address; with a path, only those
      * its file declares.
      */
-    public List<String> elements(Collection<String> kinds, Optional<String> path) {
+    public List<Element> elements(Collection<String> kinds, Optional<String> path) {
         var program = projection.program();
         return program.elements().stream()
                 .filter(e -> !e.inLibrary() && (kinds.isEmpty() || kinds.contains(e.kind().name())))
                 .filter(e -> path.isEmpty() || e.kind() != Kind.PACKAGE && path.get().equals(program.topLevel(e.id()).fact(Fact.FILE)))
-                .map(Element::qualified).sorted().toList();
+                .sorted(Comparator.comparing(Element::qualified)).toList();
     }
 
     /** The model as sorted text: {@code KIND qualified} per element, {@code site -> target (mode)} per reference. */
