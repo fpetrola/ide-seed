@@ -32,6 +32,7 @@ class KnowledgeTest {
 
             effect widen "widen ${qualified(target)} to ${v}"
               makes reachable(site, target)
+              keeps meaning
               for v in wider(target)
               do
                 set ${target} visibility ${v}
@@ -41,6 +42,7 @@ class KnowledgeTest {
             effect bring "bring ${qualified(target)} into ${qualified(top(site))}"
               makes reachable(site, target)
               when ne(top(site), top(target))
+              keeps meaning
               cost 2
               do
                 move ${target} ${top(site)}
@@ -103,6 +105,17 @@ class KnowledgeTest {
         assertThat(result.repairs()).containsExactly("bring a.A#x into a.B"); // widening would undo the change
         assertThat(projection.program().element(x).qualified()).isEqualTo("a.B#x");
         assertThat(projection.program().element(x).fact(Fact.VISIBILITY)).isEqualTo("private");
+    }
+
+    @Test
+    void onlyAPlanWhoseEffectsAllKeepMeaningMayRepair() {
+        var knowledge = Knowledge.parse(REACH.replace("  keeps meaning\n  cost 2", "  cost 2"), Library.standard());
+        var violation = new ide.engine.Violation("access.insufficient", id(program().program(), "a.B#n()"), id(program().program(), "a.A#x"), "");
+
+        var plans = knowledge.plans(violation, program());
+
+        assertThat(plans).filteredOn(plan -> plan.title().startsWith("widen")).allMatch(plan -> !plan.changesMeaning()).isNotEmpty();
+        assertThat(plans).filteredOn(plan -> plan.title().startsWith("bring")).singleElement().matches(ide.engine.Plan::changesMeaning);
     }
 
     @Test

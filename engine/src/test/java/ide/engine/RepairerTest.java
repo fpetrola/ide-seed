@@ -80,6 +80,17 @@ class RepairerTest {
     }
 
     @Test
+    void aPlanThatChangesWhatTheCodeMeansIsOnlyForPeopleToChoose() {
+        Remedy meaning = (violation, p) -> List.of(new Plan("open it", List.of(), true,
+                (target, answers) -> target.apply(new Primitive.Set(violation.target(), "visibility", "public"))));
+
+        var outcome = new Repairer(List.of(meaning)).stabilize(before, List.of(), projection);
+
+        assertThat(outcome.repairs()).isEmpty();
+        assertThat(outcome.search().lines()).contains("  (no plan)");
+    }
+
+    @Test
     void aPlanThatFailsIsUndoneAndTheNextIsTried() {
         var failing = remedy("fail", violation -> {
             throw new PrimitiveRejected("test.refused", "refused on purpose");

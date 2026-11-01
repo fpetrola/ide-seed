@@ -62,7 +62,7 @@ public final class Repairer {
             for (var target : violations) { // one with no plan may follow from another: the next one is tried
                 search.open(Trace.Kind.QUESTION, target.code() + " " + target.detail());
                 var plans = remedies.stream().flatMap(r -> r.plans(target, projection).stream())
-                        .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
+                        .filter(plan -> plan.asks().isEmpty() && !plan.changesMeaning()).toList(); // the user's to choose, never guessed
                 if (plans.isEmpty()) search.add(Trace.Kind.NOTE, "(no plan)");
                 for (var plan : plans) {
                     if (branches++ >= MAX_BRANCHES) {

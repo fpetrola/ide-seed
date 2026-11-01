@@ -53,6 +53,7 @@ final class KnowledgeParser {
                 Knowledge.Predicate makes = null;
                 String when = null, forVariable = null, forItems = null;
                 var cost = 1;
+                var keepsMeaning = false;
                 var needs = new ArrayList<Knowledge.Predicate>();
                 var asks = new ArrayList<ide.engine.Plan.Ask>();
                 var body = new StringBuilder();
@@ -62,6 +63,7 @@ final class KnowledgeParser {
                     else if (clause.startsWith("when ")) when = clause.substring(5);
                     else if (clause.startsWith("needs ")) needs.add(predicate(clause.substring(6)));
                     else if (clause.startsWith("cost ")) cost = Integer.parseInt(clause.substring(5).strip());
+                    else if (clause.equals("keeps meaning")) keepsMeaning = true;
                     else if (clause.startsWith("ask ")) {
                         var parts = quoted(clause.substring(4).strip());
                         asks.add(new ide.engine.Plan.Ask(parts.getFirst(), parts.get(1), parts.size() > 2 ? parts.get(2) : ""));
@@ -84,7 +86,7 @@ final class KnowledgeParser {
                 if (forVariable != null) variables.add(forVariable);
                 asks.forEach(ask -> variables.add(ask.name()));
                 effects.add(new Knowledge.Effect(name, title, makes, when, forVariable, forItems, List.copyOf(needs),
-                        List.copyOf(asks), cost, Script.block(body.toString(), List.copyOf(variables))));
+                        List.copyOf(asks), cost, keepsMeaning, Script.block(body.toString(), List.copyOf(variables))));
             } else {
                 throw new IllegalArgumentException("knowledge: unexpected line: " + line);
             }

@@ -49,7 +49,7 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     record Effect(String name, String title, Predicate makes, String when, String forVariable, String forItems,
-                  List<Predicate> needs, List<Plan.Ask> asks, int cost, Script body) {
+                  List<Predicate> needs, List<Plan.Ask> asks, int cost, boolean keepsMeaning, Script body) {
     }
 
     /** An effect ready to run: its variables bound, its questions with their defaults, its title. */
@@ -224,7 +224,8 @@ public final class Knowledge implements Remedy, QuickFix {
     private Plan plan(Way way) {
         var title = String.join(", then ", way.steps().stream().map(Step::title).toList());
         var asks = way.steps().stream().flatMap(step -> step.asks().stream()).toList();
-        return new Plan(title, asks, (projection, answers) -> way.steps().forEach(step -> run(step, projection, answers)));
+        var changesMeaning = way.steps().stream().anyMatch(step -> !step.effect().keepsMeaning());
+        return new Plan(title, asks, changesMeaning, (projection, answers) -> way.steps().forEach(step -> run(step, projection, answers)));
     }
 
     /** An element as people read it: by its address. */

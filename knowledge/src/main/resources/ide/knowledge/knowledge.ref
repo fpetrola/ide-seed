@@ -1,6 +1,9 @@
 # What must hold for each violation or diagnostic to go away, when a predicate holds, and what makes it hold.
 # No remedy is written in Java: repairs and quick fixes are deduced from here, and the verifier judges them.
 # What an effect needs holds already or is made first, deduced backward the same way.
+# An effect is a quick fix people choose. Only one that "keeps meaning" (the code does what it did: something opened,
+# moved where it is used, imported, declared as the language would) may also repair a refactoring by itself: a name
+# changed to a similar one, a value made up, a final dropped are never done behind anybody's back.
 
 goal access.insufficient needs accessible(site, target)
 goal binding.unresolved needs in-scope(site, target)
@@ -14,6 +17,7 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 fact accessible(site, target) when can-access(site, target)
 
 effect open-visibility "open-visibility ${qualified(target)} ${attr(target, "visibility")} -> ${v}"
+  keeps meaning
   makes accessible(site, target)
   for v in wider(target)
   do
@@ -22,6 +26,7 @@ effect open-visibility "open-visibility ${qualified(target)} ${attr(target, "vis
 end
 
 effect pull-up-dependency "pull-up-dependency ${qualified(target)} -> ${qualified(enclosing(site))}"
+  keeps meaning
   makes in-scope(site, target)
   when and(ne(owner(target), enclosing(site)), subclass-of(owner(target), enclosing(site)), empty(member-named(enclosing(site), target)))
   do
@@ -34,6 +39,7 @@ effect pull-up-dependency "pull-up-dependency ${qualified(target)} -> ${qualifie
 end
 
 effect import "import ${qualified(t)}"
+  keeps meaning
   makes resolves(symbol)
   when nonempty(unresolved-in(path, symbol, "type"))
   for t in types-named(symbol)
@@ -115,6 +121,7 @@ end
 fact constructed-explicitly(type) when nonempty(constructors(type))
 
 effect declare-constructor "create constructor ${name(type)}()"
+  keeps meaning
   makes constructed-explicitly(type)
   do
     c := create CONSTRUCTOR ${type} ${name(type)}
@@ -281,6 +288,7 @@ end
 goal ecj.MethodReducesVisibility needs visible-as-overridden(symbol)
 
 effect widen-override "make ${name(inside(path, line, column))}() ${v}"
+  keeps meaning
   makes visible-as-overridden(symbol)
   for v in wider(inside(path, line, column), overridden(inside(path, line, column)))
   do
