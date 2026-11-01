@@ -82,14 +82,11 @@ public sealed interface Primitive {
         };
     }
 
-    /**
-     * A new body ({@link Body}): the uses of the old one are gone, unless it keeps it, and the method makes the ones the
-     * new one names.
-     */
+    /** A new body ({@link Body}): the uses of the old one are gone, and the method makes the ones the new one names. */
     private static Change body(Program before, ElementId method, String text) {
         var change = Change.NONE;
         var body = Body.parse(text, before, method);
-        for (var use : body.keeps() ? List.<Reference>of() : before.referencesFrom(method)) {
+        for (var use : before.referencesFrom(method)) {
             if (!use.mode().isLink()) change = change.expect(new Change.Dropped(method, use.target()));
         }
         for (var use : body.uses()) {
@@ -128,7 +125,8 @@ public sealed interface Primitive {
     /**
      * An element of {@code kind} named {@code name} inside {@code parent} (none for a package), born with
      * {@code facts} (a type as written, a visibility...) or the language's defaults. A parameter of a method that is
-     * called needs the {@code argument} every call passes for it.
+     * called needs the {@code argument} every call passes for it. A statement is said in no language, as its body: it
+     * goes at the end of its method's body, or at the start if it calls a constructor, which comes first.
      */
     @Summary("Creates an element, with the facts it is born with")
     record Create(Kind kind, @Optional ElementId parent, String name, @Optional Map<Fact, String> facts,

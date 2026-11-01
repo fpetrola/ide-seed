@@ -43,10 +43,11 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
   baseline; an Extract's fragment names statements by their ids, or is what only the projection understands; a
   statement is created said in the body language at the end of a body, moved before another or into another method
-  with the uses made in it, and deleted with them), Change (produced element, expectations, pins: what a repair may not take back) and Body (what a method
-  does in no language: return, assign a field, new, a call, the type's default, `...` first to keep what it does and
-  add after it, over elements named `#{id}`; its
-  parameters are values, not uses; a Set of a body expects the old body's uses Dropped and the ones it names Added).
+  with the uses made in it, and deleted with them; one that calls a constructor goes first), Change (produced element,
+  expectations, pins: what a repair may not take back) and Body (what a method does in no language, a statement a
+  line: return, assign a field, new, a call, the type's default, a constructor called first, over elements named
+  `#{id}`; its parameters are values, not uses; a Set of a body expects the old body's uses Dropped and the ones it
+  names Added).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
   is declared and what the name at a line and column means, `needs`: what a use that binds nothing needs, asked for

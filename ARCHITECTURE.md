@@ -316,7 +316,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba. En la etapa 2 el
   fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7. El ítem 4 suma
   la obligación 8 y dos escenarios para las obligaciones 2 y 3: escribir un cuerpo, y reemplazar uno que tenía usos.
-  La obligación 8 pide también el cuerpo que empieza con `...`: conserva lo que el método hace y agrega lo que sigue.
+  La obligación 8 pedía también el cuerpo que empieza con `...`, que conservaba lo que el método hacía y agregaba lo
+  que seguía; desde la fase 3 de la etapa 3 eso es crear una sentencia al final del cuerpo (obligación 14).
   La obligación 11 (`said`), desde la fase 3 de la etapa 3 también por sentencia: la proyección dice el cuerpo de un
   método o constructor, o una sentencia, en el lenguaje de cuerpos cuando todo se puede decir así (asignar un campo, responder un valor, hacer el objeto con otro constructor primero, sobre
   campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
@@ -575,14 +576,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `declare-constructor`. El planificador encadena solo: sin constructor ofrece `create constructor Q(), then
   initialize limit in the constructors`; con constructores, `initialize limit in the constructors` a secas. Cada
   constructor toma el valor (`create PARAM` con el argumento que pasan los `new`, el valor inicial del tipo según las
-  reglas) y lo asigna después de lo que ya hacía: el lenguaje de cuerpos ganó `...`, primero, que conserva el cuerpo
-  y agrega al final (sus usos se suman, no reemplazan a los viejos). Eclipse dice el problema en el constructor que no
+  reglas) y lo asigna después de lo que ya hacía: primero con `...` en el lenguaje de cuerpos, y desde la fase 3 de
+  la etapa 3 creando una sentencia al final del cuerpo (sus usos se suman, no reemplazan a los viejos). Eclipse dice el problema en el constructor que no
   asigna, nombrando el campo en sus argumentos: la meta es `initialized(first(arguments))`.
   Un constructor no puede asignar un `final` de su superclase (`FinalFieldAssignment`): `pass-to-superclass` hace que
   el constructor de la superclase tome el valor y lo asigne (declarándolo antes si no hay, por la misma
   `constructed-explicitly`), y el constructor se lo pasa primero (`#{constructor}(valor)`, que Java escribe
-  `super(...)`) en vez de asignarlo. Lee el cuerpo con `said` (obligación 11) y `value-given`/`said-without`; si el
-  cuerpo no se puede decir sin lenguaje, no se ofrece. Conserva el sentido, así que también repara: un extract
+  `super(...)`) en vez de asignarlo. Desde la fase 3 de la etapa 3 lo hace con sentencias: busca la que asigna el
+  campo (`giving`), crea la llamada con lo que da (`value`), que va primera, y borra la asignación; si esa sentencia
+  no se puede decir sin lenguaje, no se ofrece. Conserva el sentido, así que también repara: un extract
   superclass que sube un `final` que el constructor inicializa deja `super(limit)`, como IntelliJ.
 - **Desde la fase 0 de la etapa 3.** Además de efectos, el conocimiento tiene definiciones (`def`, Datalog que evalúa
   `rules`, en `java.rules`): un predicado definido se hace verdadero por abducción. Se lee la definición de izquierda
@@ -1342,6 +1344,18 @@ que esto no escala solo:
    - Java dice una sentencia con lo mismo que decía un cuerpo entero (`SaidBody`), y escribe una al final de un cuerpo
      sin pasar por `...` (`WriteBody.append`).
    - En la memoria, una sentencia dice lo que se le dio al crearla, y las de un cuerpo escrito de nuevo dicen la suya.
+
+   **Ciclo 2 hecho el 2026-11-01**: el conocimiento y el catálogo trabajan con sentencias, y se fueron `...`, `said`
+   (de un elemento y de un cuerpo entero), `value-given` y `said-without`.
+   - Agregar al final de un cuerpo es crear una sentencia (`create STATEMENT ${c} "" facts="body=#{f} = #{p}"`):
+     `initialize-in-constructors` y `generate-constructor`.
+   - `pass-to-superclass` busca la sentencia del constructor que da el valor al campo (`giving`), crea la llamada al
+     constructor de la superclase con lo que daba (`value`) y borra la asignación, en vez de volver a decir el
+     cuerpo entero.
+   - Una sentencia que llama a un constructor se crea primera: el lenguaje de cuerpos ya decía que esa llamada va
+     primero, y Java no puede leer un `super(...)` en otro lugar (el plan fallaba con un error de sintaxis).
+   - `ScriptFunctions` cambió tres funciones angostas por tres sobre sentencias (`statements`, `giving`, `value`).
+     Un valor dado por nombre entre comillas (`facts="..."`) se lee sin ellas, como uno dado por posición.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.

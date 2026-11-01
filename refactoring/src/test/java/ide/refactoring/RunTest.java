@@ -199,24 +199,23 @@ class RunTest {
     }
 
     @Test
-    void aScriptReadsWhatABodySaysAField() {
+    void aScriptReadsWhatAStatementGivesAField() {
         var projection = program();
         var a = id(projection.program(), "a.A");
         var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, a, "A")).produced();
         var given = projection.apply(new Primitive.Create(Kind.PARAM, made, "x", Map.of(Fact.TYPE, "int"), null)).produced();
         var x = ide.program.Body.name(id(projection.program(), "a.A#x"));
-        projection.apply(new Primitive.Set(made, "body", x + " = " + ide.program.Body.name(given) + "\n" + x + " = " + x));
+        projection.apply(new Primitive.Create(Kind.STATEMENT, made, "", Map.of(Fact.BODY, x + " = " + ide.program.Body.name(given)), null));
         var library = Library.standard();
         library.define("""
-                refactoring read-body
+                refactoring read-statement
                   param c : element(CONSTRUCTOR)
                   param f : element(FIELD)
-                  fail "${value-given(c, f)} | ${said-without(c, f)}"
+                  fail "${qualified(giving(c, f))} gives ${value(giving(c, f))}"
                 end
                 """);
 
-        assertThatThrownBy(() -> Run.on(projection, library).call("read-body", Map.of("c", made.value(), "f", "a.A#x")))
-                .hasMessageContaining(ide.program.Body.name(given) + " | ");
-        assertThat(projection.said(made)).isPresent();
+        assertThatThrownBy(() -> Run.on(projection, library).call("read-statement", Map.of("c", made.value(), "f", "a.A#x")))
+                .hasMessageContaining("[1] gives " + ide.program.Body.name(given));
     }
 }

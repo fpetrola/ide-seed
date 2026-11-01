@@ -35,7 +35,7 @@ final class CreateElement {
         return create.intent(before, created);
     }
 
-    /** A statement at the end of a body, said in no language, written in Java. */
+    /** A statement at the end of a body (a constructor called, at its start), said in no language, written in Java. */
     private static ElementId statement(Context c, Program before, ElementId method, String said) {
         if (said == null) throw new PrimitiveRejected("create.statement", "a statement is said in no language, as its body");
         var body = ide.program.Body.parse(said, before, method);
@@ -43,10 +43,16 @@ final class CreateElement {
         var nothing = body.statements().size() == 1 && body.statements().getFirst() instanceof ide.program.Body.Return answer
                 && answer.value() instanceof ide.program.Body.Default
                 && (callable.kind() == Kind.CONSTRUCTOR || "void".equals(callable.fact(ide.program.Fact.TYPE))); // Java writes nothing for it
-        if (body.statements().size() != 1 || body.keeps() || nothing) throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
-        var count = (int) before.children(method).stream().filter(e -> e.kind() == Kind.STATEMENT).count();
-        WriteBody.append(c, method, body.statements().getFirst());
-        return c.ids().of(new Address.Statement(method, count), Kind.STATEMENT);
+        if (body.statements().size() != 1 || nothing) throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
+        var own = before.children(method).stream().filter(e -> e.kind() == Kind.STATEMENT).map(ide.program.Element::id).toList();
+        var first = body.statements().getFirst() instanceof ide.program.Body.Construct; // a constructor called comes first
+        WriteBody.append(c, method, body.statements().getFirst(), first);
+        if (!first) return c.ids().of(new Address.Statement(method, own.size()), Kind.STATEMENT);
+        var placed = new ArrayList<ElementId>();
+        placed.add(null);
+        placed.addAll(own);
+        c.ids().placeStatements(method, placed);
+        return c.ids().of(new Address.Statement(method, 0), Kind.STATEMENT);
     }
 
     private static ElementId create(Context c, Kind kind, ElementId parent, String name, String argument) {

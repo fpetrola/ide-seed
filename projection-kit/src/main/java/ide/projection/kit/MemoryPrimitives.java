@@ -95,13 +95,19 @@ final class MemoryPrimitives {
         return id;
     }
 
-    /** A statement at the end of a body, said in no language: the uses it names are made in it. */
+    /** A statement at the end of a body (a constructor called, at its start), said in no language: the uses it names are made in it. */
     private static ElementId statement(MemoryGraph graph, ElementId method, String said) {
         var body = said == null ? null : Body.parse(said, graph.read(), method);
-        if (body != null && (body.statements().size() != 1 || body.keeps())) {
+        if (body != null && body.statements().size() != 1) {
             throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
         }
         var statement = create(graph, Kind.STATEMENT, method, "", null);
+        var own = graph.statements(method);
+        if (body != null && body.statements().getFirst() instanceof Body.Construct && own.size() > 1) { // a constructor called comes first
+            graph.order.remove(statement);
+            graph.order.add(graph.order.indexOf(own.getFirst()), statement);
+            graph.ids.placeStatements(method, graph.statements(method));
+        }
         if (body == null) return statement;
         for (var use : Body.uses(body.statements().getFirst())) {
             graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()).in(statement));
@@ -229,31 +235,23 @@ final class MemoryPrimitives {
         if (fact == Fact.TYPE && node.kind() == Kind.PARAM) graph.resign(node.parent());
     }
 
-    /**
-     * A body in no language is its own text, and the uses and statements it makes take the place of the old body's; one
-     * that keeps the old body ({@code ...}) is the old text followed by what it adds, and its uses and statements are added.
-     */
+    /** A body in no language is its own text, and the uses and statements it makes take the place of the old body's. */
     private static void body(MemoryGraph graph, ElementId method, String text) {
         var body = Body.parse(text, graph.read(), method);
-        if (!body.keeps()) {
-            graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
-            for (var statement : graph.statements(method)) {
-                graph.order.remove(statement);
-                graph.nodes.remove(statement);
-                graph.ids.forget(statement);
-            }
+        graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
+        for (var statement : graph.statements(method)) {
+            graph.order.remove(statement);
+            graph.nodes.remove(statement);
+            graph.ids.forget(statement);
         }
         for (var statement : body.statements()) {
-            if (statement instanceof Body.Kept) continue;
             var made = create(graph, Kind.STATEMENT, method, "", null);
             graph.nodes.put(made, graph.nodes.get(made).with(Fact.BODY, Body.text(statement))); // what it says
             for (var use : Body.uses(statement)) {
                 graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()).in(made));
             }
         }
-        var old = graph.nodes.get(method).facts().get(Fact.BODY);
-        var said = body.keeps() && old != null ? old + "\n" + text.strip().substring(3).replaceFirst("^[;\\s]+", "") : text;
-        graph.nodes.put(method, graph.nodes.get(method).with(Fact.BODY, said));
+        graph.nodes.put(method, graph.nodes.get(method).with(Fact.BODY, text));
     }
 
     private static void link(MemoryGraph graph, ElementId element, Mode mode, ElementId target) {

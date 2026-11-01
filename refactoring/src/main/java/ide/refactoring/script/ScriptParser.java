@@ -175,9 +175,14 @@ public final class ScriptParser {
         return args;
     }
 
+    /** An argument without its quotes: a quoted value, or a quoted value given by name ({@code facts="body=..."}). */
     private static String unquoteArg(String arg) {
+        var named = NAMED_QUOTED.matcher(arg);
+        if (named.matches()) return named.group(1) + "=" + named.group(2);
         return arg.startsWith("\"") && arg.endsWith("\"") && arg.length() >= 2 ? arg.substring(1, arg.length() - 1) : arg;
     }
+
+    private static final java.util.regex.Pattern NAMED_QUOTED = java.util.regex.Pattern.compile("([\\w-]+)=\"(.*)\"", java.util.regex.Pattern.DOTALL);
 
     private static String unquote(String text) {
         if (!text.startsWith("\"") || !text.endsWith("\"") || text.length() < 2) throw error("expected a quoted string", text);

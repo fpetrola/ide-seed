@@ -54,18 +54,13 @@ final class WriteBody {
         var indent = unit.indentation(callable.getBegin().orElseThrow().line);
         var block = callable instanceof MethodDeclaration m ? m.getBody().orElseThrow()
                 : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
-        if (body.keeps() && block.getStatements().isNonEmpty()) { // after what it does, as it is written
-            edits.insertAfter(unit, block.getStatements().getLast().orElseThrow(),
-                    statements.lines().map(line -> "\n" + indent + "    " + line).collect(Collectors.joining()));
-        } else {
-            edits.replace(unit, block, Render.block(statements, indent));
-        }
+        edits.replace(unit, block, Render.block(statements, indent));
         c.sources().apply(edits);
-        if (!body.keeps()) Shared.forgetBody(c, program, method);
+        Shared.forgetBody(c, program, method);
     }
 
-    /** One statement said in no language, written at the end of a method's or constructor's body. */
-    static void append(Context c, ElementId method, Body.Statement said) {
+    /** One statement said in no language, written at the end of a method's or constructor's body, or at its start. */
+    static void append(Context c, ElementId method, Body.Statement said, boolean first) {
         var program = c.program();
         var declaration = c.declaration(program.element(method));
         com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
@@ -76,7 +71,8 @@ final class WriteBody {
         var statements = ide.java.semantics.Bodies.statements(callable);
         var indent = statements.isEmpty() ? unit.indentation(callable.getBegin().orElseThrow().line) + "    "
                 : unit.indentation(statements.getFirst().getBegin().orElseThrow().line);
-        ide.java.syntax.Statements.append(edits, unit, ide.java.semantics.Bodies.body(callable), indent, writer.statement(said));
+        if (first && !statements.isEmpty()) ide.java.syntax.Statements.insertBefore(edits, unit, statements.getFirst(), writer.statement(said));
+        else ide.java.syntax.Statements.append(edits, unit, ide.java.semantics.Bodies.body(callable), indent, writer.statement(said));
         c.sources().apply(edits);
     }
 
@@ -91,7 +87,6 @@ final class WriteBody {
             case Body.Return r when r.value() instanceof Body.Call && type.equals("void") -> value(r.value()) + ";";
             case Body.Return r -> Render.returning(value(r.value()));
             case Body.Assign a -> Render.assignment(field(a.field()), value(a.value()));
-            case Body.Kept k -> "";
             case Body.Construct made -> (program.element(made.constructor()).parent().equals(owner) ? "this" : "super")
                     + "(" + String.join(", ", made.arguments().stream().map(this::value).toList()) + ");";
         };

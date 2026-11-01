@@ -272,13 +272,11 @@ refactoring generate-constructor "A constructor that takes a value for each fiel
   param fields : elements(FIELD) "the fields it sets" from "fields(type)"
   c := create CONSTRUCTOR ${type} ${name(type)}
   set ${c} visibility public
-  let body = ""
   for f in fields
     p := create PARAM ${c} ${name(f)}
     set ${p} type ${type(f)}
-    let body = concat(body, said(f), " = ", said(p), "; ")
+    create STATEMENT ${c} "" facts="body=#{f} = #{p}"
   end
-  set ${c} body ${body}
   return ${c}
 end
 

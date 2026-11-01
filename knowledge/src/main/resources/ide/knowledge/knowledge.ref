@@ -59,7 +59,7 @@ effect initialize-in-constructors "initialize ${field} in the constructors"
     for c in constructors(owner(f))
       p := create PARAM ${c} ${field} argument=${default-value(type(f))}
       set ${p} type ${type(f)}
-      set ${c} body "...; ${said(f)} = ${said(p)}"
+      create STATEMENT ${c} "" facts="body=#{f} = #{p}"
     end
   end
 end
@@ -72,16 +72,16 @@ goal ecj.FinalFieldAssignment needs given-by-its-type(element-at(path, line, col
 effect pass-to-superclass "pass ${name(field)} to the constructor of ${name(owner(field))}"
   makes given-by-its-type(field, constructor)
   keeps meaning
-  when and(eq(kind(constructor), "CONSTRUCTOR"), nonempty(value-given(constructor, field)))
+  when and(eq(kind(constructor), "CONSTRUCTOR"), nonempty(giving(constructor, field)))
   needs constructed-explicitly(owner(field))
   do
     let made = first(constructors(owner(field)))
-    let value = value-given(constructor, field)
-    let rest = said-without(constructor, field)
+    let given = giving(constructor, field)
     p := create PARAM ${made} ${name(field)}
     set ${p} type ${type(field)}
-    set ${made} body "...; ${said(field)} = ${said(p)}"
-    set ${constructor} body "${said(made)}(${value}); ${rest}"
+    create STATEMENT ${made} "" facts="body=#{field} = #{p}"
+    create STATEMENT ${constructor} "" facts="body=#{made}(${value(given)})"
+    delete ${given}
   end
 end
 

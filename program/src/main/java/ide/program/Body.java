@@ -30,10 +30,6 @@ public record Body(List<Statement> statements) {
     public sealed interface Statement {
     }
 
-    /** What the method does now, kept as it is written: what the body says after it is added at its end. */
-    public record Kept() implements Statement {
-    }
-
     /** The object is made first by {@code constructor}, given {@code arguments}: only a constructor's body says it, first. */
     public record Construct(ElementId constructor, List<Expression> arguments) implements Statement {
         public Construct {
@@ -99,23 +95,13 @@ public record Body(List<Statement> statements) {
     public static Body parse(String text, Program program, ElementId method) {
         var statements = new ArrayList<Statement>();
         for (var line : text.lines().flatMap(line -> java.util.Arrays.stream(line.split(";"))).map(String::strip).filter(line -> !line.isEmpty()).toList()) {
-            if (line.equals("...")) {
-                if (!statements.isEmpty()) throw new IllegalArgumentException("body: '...' comes first, in: " + text);
-                statements.add(new Kept());
-            } else {
-                var statement = new Parser(line, program, method).statement();
-                if (statement instanceof Construct && !statements.isEmpty()) {
-                    throw new IllegalArgumentException("body: a constructor called comes first, in: " + text);
-                }
-                statements.add(statement);
+            var statement = new Parser(line, program, method).statement();
+            if (statement instanceof Construct && !statements.isEmpty()) {
+                throw new IllegalArgumentException("body: a constructor called comes first, in: " + text);
             }
+            statements.add(statement);
         }
         return new Body(statements);
-    }
-
-    /** Whether it keeps what the method does now and adds to it, instead of taking its place. */
-    public boolean keeps() {
-        return !statements.isEmpty() && statements.getFirst() instanceof Kept;
     }
 
     /**
@@ -140,7 +126,6 @@ public record Body(List<Statement> statements) {
     /** A statement as it is said. */
     public static String text(Statement statement) {
         return switch (statement) {
-            case Kept k -> "...";
             case Construct c -> name(c.constructor()) + "(" + text(c.arguments()) + ")";
             case Return r -> "return " + text(r.value());
             case Assign a -> name(a.field()) + " = " + text(a.value());
@@ -176,13 +161,10 @@ public record Body(List<Statement> statements) {
         return uses;
     }
 
-    /** The uses one statement makes, in the order it names them; none for {@code ...}, whose uses the method makes. */
+    /** The uses one statement makes, in the order it names them. */
     public static List<Use> uses(Statement statement) {
         var uses = new ArrayList<Use>();
         switch (statement) {
-            case Kept k -> {
-                // the uses the method already makes
-            }
             case Construct c -> {
                 uses.add(new Use(c.constructor(), Mode.CALL));
                 c.arguments().forEach(argument -> uses(argument, uses));

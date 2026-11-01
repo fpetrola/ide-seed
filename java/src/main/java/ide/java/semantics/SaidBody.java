@@ -1,8 +1,6 @@
 package ide.java.semantics;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -10,7 +8,6 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -26,8 +23,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * A Java body said in no language ({@link Body}), when all of it can be: a field given a value, a value answered, the
- * object made first by another constructor; values that are fields, parameters, calls and new objects of what the
+ * A Java statement said in no language ({@link Body}), when all of it can be: a field given a value, a value answered,
+ * the object made first by another constructor; values that are fields, parameters, calls and new objects of what the
  * program has. Anything else (a local, a literal, a loop) cannot be said, and then nothing is.
  */
 public final class SaidBody {
@@ -42,40 +39,19 @@ public final class SaidBody {
         this.parameters = parameters;
     }
 
-    /** What a method's or constructor's body does, or one statement of it, said in no language when all of it can be. */
+    /** What a statement does, said in no language when all of it can be; nothing for anything else. */
     public static Optional<String> of(Reader.Reading reading, ElementId element) {
         var program = reading.program();
-        if (!program.contains(element)) return Optional.empty();
-        var statement = program.element(element).kind() == Kind.STATEMENT ? (Statement) reading.declaration(element).node() : null;
-        var callable = statement == null ? element : program.element(element).parent();
-        var kind = program.element(callable).kind();
-        if (kind != Kind.METHOD && kind != Kind.CONSTRUCTOR) return Optional.empty();
-        var block = switch (reading.declaration(callable).node()) {
-            case MethodDeclaration method -> method.getBody().orElse(null);
-            case ConstructorDeclaration constructor -> constructor.getBody();
-            default -> null;
-        };
-        if (block == null) return Optional.empty();
+        if (!program.contains(element) || program.element(element).kind() != Kind.STATEMENT) return Optional.empty();
         var targets = new IdentityHashMap<Node, ElementId>();
         var fields = new java.util.HashSet<ElementId>();
-        for (var reference : program.referencesFrom(callable)) {
+        for (var reference : program.referencesIn(element)) {
             targets.put(reading.use(reference.id()), reference.target());
             if (program.contains(reference.target()) && program.element(reference.target()).kind() == Kind.FIELD) fields.add(reference.target());
         }
         var parameters = new java.util.HashMap<String, ElementId>();
-        program.children(callable).stream().filter(e -> e.kind() == Kind.PARAM).forEach(p -> parameters.put(p.name(), p.id()));
-        var saying = new SaidBody(targets, fields, parameters);
-        return statement == null ? saying.body(block) : Optional.ofNullable(saying.statement(statement));
-    }
-
-    private Optional<String> body(BlockStmt block) {
-        var said = new ArrayList<String>();
-        for (var statement : block.getStatements()) {
-            var line = statement(statement);
-            if (line == null) return Optional.empty();
-            said.add(line);
-        }
-        return Optional.of(String.join("\n", said));
+        program.children(program.element(element).parent()).stream().filter(e -> e.kind() == Kind.PARAM).forEach(p -> parameters.put(p.name(), p.id()));
+        return Optional.ofNullable(new SaidBody(targets, fields, parameters).statement((Statement) reading.declaration(element).node()));
     }
 
     private String statement(Statement statement) {
