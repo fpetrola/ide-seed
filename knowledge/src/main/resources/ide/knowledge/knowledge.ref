@@ -195,3 +195,17 @@ effect change-field-type "change type of ${name(f)} to ${first(arguments)}"
     set ${f} type ${first(arguments)}
   end
 end
+
+# A name nothing declares, used inside a method: the method takes it, of the type its place expects; its calls pass
+# what that type starts with.
+effect create-parameter "create parameter ${symbol} in ${name(m)}()"
+  makes resolves(symbol)
+  for m in inside(path, line, column) | of-kind "METHOD"
+  when nonempty(unresolved-in(path, symbol, "value"))
+  cost 3
+  do
+    let t = expected(unresolved-in(path, symbol, "value"))
+    p := create PARAM ${m} ${symbol} argument=${default-value(t)}
+    set ${p} type ${t}
+  end
+end

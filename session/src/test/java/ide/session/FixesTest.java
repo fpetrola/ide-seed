@@ -27,7 +27,7 @@ class FixesTest {
     void theFixesOfALineAreDeducedFromItsDiagnostics() {
         var fixes = new Fixes(JavaProjection.of(Map.of("a/P.java", P)), Knowledge.standard(Library.standard()));
 
-        assertThat(fixes.titles("a/P.java", 5)).containsExactly("create field total in P");
+        assertThat(fixes.titles("a/P.java", 5)).containsExactly("create field total in P", "create parameter total in twice()");
         assertThat(fixes.titles("a/P.java", 4)).isEmpty();
         assertThat(fixes.asks("a/P.java", 5, "create field total in P")).containsExactly("type: type of the new field [int]");
         assertThat(fixes.find("a/P.java", 5, "create field total in P").diagnostic().symbol()).isEqualTo("total");
@@ -38,6 +38,7 @@ class FixesTest {
                 "  X import: nonempty(unresolved-in(path, symbol, \"type\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",
                 "  ! create field total in P",
-                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))");
+                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))",
+                "  ! create parameter total in twice()");
     }
 }

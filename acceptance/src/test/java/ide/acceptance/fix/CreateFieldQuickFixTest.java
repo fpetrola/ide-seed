@@ -24,7 +24,7 @@ class CreateFieldQuickFixTest {
     void unresolvedVariableOffersToCreateAFieldAskingItsType() {
         var ws = Workspace.of(Map.of("a/U.java", U));
 
-        assertThat(ws.fixes("a/U.java", 5)).containsExactly("create field count in U");
+        assertThat(ws.fixes("a/U.java", 5)).containsExactly("create field count in U", "create parameter count in total()");
         assertThat(ws.asks("a/U.java", 5, "create field count in U")).containsExactly("type: type of the new field [int]");
 
         var result = ws.fix("a/U.java", 5, "create field count in U", Map.of("type", "long"));

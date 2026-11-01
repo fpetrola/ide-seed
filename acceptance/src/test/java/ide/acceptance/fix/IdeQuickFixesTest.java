@@ -148,4 +148,28 @@ class IdeQuickFixesTest {
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).contains("String label = \"none\";", "String title() {");
     }
+
+    @Test
+    void aNameNothingDeclaresBecomesAParameterOfItsMethodAndItsCallsPassWhatItsTypeStartsWith() {
+        var ws = Workspace.of(Map.of("a/U.java", """
+                package a;
+
+                class U {
+                    long total() {
+                        return limit * 2;
+                    }
+
+                    long twice() {
+                        return total();
+                    }
+                }
+                """));
+
+        assertThat(ws.fixes("a/U.java", 5)).contains("create field limit in U", "create parameter limit in total()");
+
+        ws.fix("a/U.java", 5, "create parameter limit in total()");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/U.java")).contains("long total(int limit) {", "return total(0);");
+    }
 }
