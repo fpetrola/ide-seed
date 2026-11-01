@@ -22,7 +22,7 @@ class ExampleTest {
 
     @Test
     void itsOnlyProblemsAreTheOnesLeftForTheQuickFixes() {
-        assertThat(example().diagnostics()).extracting(Diagnostic::path).containsOnly("shop/fixes/Broken.java", "shop/fixes/Unset.java");
+        assertThat(example().diagnostics()).extracting(Diagnostic::path).containsOnly("shop/fixes/Broken.java", "shop/fixes/Gaps.java", "shop/fixes/Unset.java");
     }
 
     @Test
@@ -69,5 +69,24 @@ class ExampleTest {
 
         assertThat(ws.diagnostics()).extracting(Diagnostic::line).doesNotContain(30);
         assertThat(ws.source("shop/fixes/Broken.java")).contains("double sum(int items, int i) {");
+    }
+
+    @Test
+    void theIdeQuickFixesItLeavesFixWhatTheySay() {
+        var ws = example();
+
+        assertThat(ws.fixes("shop/fixes/Gaps.java", 12)).contains("change type of label to String");
+        assertThat(ws.fixes("shop/fixes/Gaps.java", 15)).contains("make base() static");
+        assertThat(ws.fixes("shop/fixes/Gaps.java", 23)).contains("change return type of title() to String");
+        assertThat(ws.fixes("shop/fixes/Gaps.java", 36)).contains("implement methods of Square", "make Square abstract");
+
+        ws.fix("shop/fixes/Gaps.java", 36, "implement methods of Square"); // below the others: their lines stay
+        ws.fix("shop/fixes/Gaps.java", 12, "change type of label to String");
+        ws.fix("shop/fixes/Gaps.java", 15, "make base() static");
+        ws.fix("shop/fixes/Gaps.java", 23, "change return type of title() to String");
+        assertThat(ws.fixes("shop/fixes/Gaps.java", 26)).contains("remove unused"); // a warning, once the errors are gone
+        ws.fix("shop/fixes/Gaps.java", 26, "remove unused");
+
+        assertThat(ws.diagnostics()).extracting(Diagnostic::path).doesNotContain("shop/fixes/Gaps.java");
     }
 }

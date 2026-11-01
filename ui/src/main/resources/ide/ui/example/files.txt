@@ -1,6 +1,7 @@
 pom.xml
 shop/cart/Cart.java
 shop/fixes/Broken.java
+shop/fixes/Gaps.java
 shop/fixes/Unset.java
 shop/model/Book.java
 shop/model/Discount.java
