@@ -104,7 +104,7 @@ say not final for final-where "make ${called} not final"
 # A class that is not abstract implements every method it inherits without a body (JLS 8.1.1.1), and nothing makes
 # an object of one that is (JLS 15.9.1).
 rule complete "a class that is not abstract implements every method it inherits without a body"
-  for t where kind(t, "class") and unimplemented(t, _)
+  for t where kind(t, "class") and unimplemented(t, m)
   must abstract(t)
 end
 
@@ -119,6 +119,7 @@ promise abstract of class "whether objects of it can be made"
 problem ecj.AbstractMethodMustBeImplemented is complete(type-in(path, symbol))
 
 say abstract for complete "make ${called} abstract"
+say not unimplemented for complete "implement methods of ${called}"
 
 # What a method answers, or a field starts with, is of the type it declares (JLS 14.17, 8.3.2): the compiler says of
 # what type the value is (its first argument).
@@ -155,6 +156,11 @@ end
 problem ecj.UninitializedBlankFinalField is final-once(field-in(path, first(arguments)))
 
 say not final for final-once "make ${called} not final"
+say initialized for final-once "initialize ${called} in its declaration"
+
+# What a field starts with, where it is declared, is the person's to say: the language's start for its type proposed.
+def start-of(f, v) when type(f, t) and start-value(t, v)
+ask value "initial value" for initialized of field default start-of
 
 # A name used as a value (JLS 6.5.6.1) is a field of the type it is looked up in, of the type its place expects; or,
 # used inside a method, one of its parameters, which every call passes what that type starts with.

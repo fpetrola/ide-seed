@@ -30,6 +30,7 @@ import java.util.List;
  * problem &lt;code&gt; is name(expr, expr)    (the code is the rule broken there: the plans make it hold)
  * promise relation of kind "why"         (a change of relation on an element of that kind is made only on purpose)
  * ask name "question" for relation of new kind   (what is set of an element created is asked, the deduced proposed)
+ * ask name "question" for relation of kind default p   (a change of an element there: asked, p(element, v) proposed)
  * fact p(x, y) when expr
  * effect &lt;name&gt; "title with ${expr}"
  *   makes p(x, y)
@@ -85,9 +86,11 @@ final class KnowledgeParser {
                 if (!promised.matches()) throw new IllegalArgumentException("knowledge: expected promise <relation> of <kind> \"why\": " + line);
                 promises.put(promised.group(1) + " of " + promised.group(2), promised.group(3));
             } else if (line.startsWith("ask ")) {
-                var asked = java.util.regex.Pattern.compile("ask (\\S+) \"(.*)\" for (\\S+) of new (\\S+)").matcher(line);
-                if (!asked.matches()) throw new IllegalArgumentException("knowledge: expected ask <name> \"question\" for <relation> of new <kind>: " + line);
-                questions.put(asked.group(3) + " of new " + asked.group(4), List.of(asked.group(1), asked.group(2)));
+                var created = java.util.regex.Pattern.compile("ask (\\S+) \"(.*)\" for (\\S+) of new (\\S+)").matcher(line);
+                var existing = java.util.regex.Pattern.compile("ask (\\S+) \"(.*)\" for (\\S+) of (\\S+) default (\\S+)").matcher(line);
+                if (created.matches()) questions.put(created.group(3) + " of new " + created.group(4), List.of(created.group(1), created.group(2)));
+                else if (existing.matches()) questions.put(existing.group(3) + " of " + existing.group(4), List.of(existing.group(1), existing.group(2), existing.group(5)));
+                else throw new IllegalArgumentException("knowledge: expected ask <name> \"question\" for <relation> of [new] <kind> [default <relation>]: " + line);
             } else if (line.startsWith("problem ")) {
                 var is = line.indexOf(" is ");
                 var broken = predicate(line.substring(is + 4));

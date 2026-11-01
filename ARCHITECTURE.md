@@ -603,7 +603,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   escrito que no existe lo declara el paquete del archivo (JLS 15.12, 15.9.3, 6.5.5): se fueron `create-method`,
   `create-constructor`, `create-class` y `create-interface`. Para el método estático hizo falta decir qué es
   condición en una definición: `given static(s)` se comprueba y nunca se cambia; sin eso, la abducción también
-  proponía volver estático a quien llama. Y que un tipo escrito en un archivo nombra un tipo
+  proponía volver estático a quien llama. Por último, sacarle a `complete` el método heredado sin cuerpo es
+  implementarlo (`implement-methods` se fue: todos los de una clase son un paso), y darle a un `final` su valor donde
+  se declara es una pregunta sobre lo que existe, `ask value "initial value" for initialized of field default
+  start-of`, que propone lo que el tipo empieza valiendo (`initialize-in-declaration` se fue). Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).
@@ -1205,15 +1208,12 @@ que esto no escala solo:
    estáticos ya pasaron (el 2026-11-01, 37279f6..): hizo falta que un uso diga sobre qué se hace (`Reference.receiver`,
    obligación 12), restricciones (`rule`, `problem`), abducir hechos que se quitan, revisar las reglas después de
    cada cambio supuesto y promesas. Después pasaron `make-abstract`, `unfinal`, `drop-final` y los dos cambios de
-   tipo (38b5704..ea3354e): `knowledge.ref` tiene 14 efectos, de los 25 del principio, y `java.rules` 32 definiciones
-   y reglas, ninguna un fix. Los que quedan son de tres clases, y cada una pide una pieza que todavía no está:
-   - *Crean miembros o tipos con forma* (`create-field`, `create-method`, `create-parameter`, `create-constructor`,
-     `create-class`, `create-interface`, `implement-methods`, `declare-in-superclass`): la abducción hoy crea solo un
-     constructor sin parámetros; hace falta crear un elemento con su nombre, sus parámetros y su tipo, tomados de lo
-     que el problema dice.
-   - *Necesitan un valor o un tipo que solo la persona sabe* (`create-field`, `create-method`,
-     `initialize-in-declaration`): un hecho cambiable cuyo valor no se deduce tiene que volverse una pregunta, como
-     hoy lo es un `ask`.
+   tipo (38b5704..ea3354e): `knowledge.ref` tenía entonces 14 efectos, de los 25 del principio. Con la creación de
+   miembros con forma y las preguntas (7cd09fe..) quedan 6. Lo que sigue es lo que se escribió en aquel momento, con
+   lo que ya se hizo marcado:
+   - *Crean miembros o tipos con forma*: hecho, salvo `declare-in-superclass`, que necesita saber qué dice
+     `@Override` (las anotaciones no están en el grafo).
+   - *Necesitan un valor o un tipo que solo la persona sabe*: hecho, con `ask`.
    - *Hablan de sentencias* (`initialize-in-constructors`, `pass-to-superclass`): esperan la fase 1 de esta etapa.
    Y dos que eligen por parecido (`use-similar`, `call-similar`) y uno que borra (`remove-unused`): el parecido de
    nombres puede ser una relación del grafo, y borrar lo que nada usa, quitar un hecho de existencia.

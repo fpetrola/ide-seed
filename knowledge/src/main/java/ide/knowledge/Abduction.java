@@ -38,8 +38,13 @@ final class Abduction {
 
     /** Relations a primitive sets, keyed by their first argument: a visibility, a parent, what a use binds, a place, a type. */
     static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before", "type");
-    /** Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)}. */
-    static final Set<String> TOGGLED = Set.of("static", "final", "abstract");
+    /**
+     * Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)}; and
+     * {@code initialized(f)}, which a value given where the field is declared turns on.
+     */
+    static final Set<String> TOGGLED = Set.of("static", "final", "abstract", "initialized");
+    /** Relations a tuple of which goes away when something is created: {@code unimplemented(t, m)}, by implementing m in t. */
+    static final Set<String> UNDONE_BY_CREATING = Set.of("unimplemented");
     /**
      * Relations whose first argument a primitive creates, when nothing is there: {@code constructor(k, t)} (one with no
      * parameters), {@code member(e, owner, name, kind)}, {@code parameter(p, callable, name, what calls pass)} and
@@ -267,7 +272,7 @@ final class Abduction {
             switch (literal) {
                 case Literal.Positive p -> {
                     var standing = bound(p.atom(), support.binding());
-                    if (ground(standing) && TOGGLED.contains(standing.relation())) {
+                    if (ground(standing) && (TOGGLED.contains(standing.relation()) || UNDONE_BY_CREATING.contains(standing.relation()))) {
                         options.add(new Change(standing.relation(), null, values(standing), forWhat));
                     }
                 }

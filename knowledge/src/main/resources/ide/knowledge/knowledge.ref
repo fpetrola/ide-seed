@@ -48,14 +48,6 @@ end
 # the field, or at a constructor that does not give it one, naming the field.
 goal ecj.UninitializedBlankFinalField needs given-a-value(first(arguments))
 
-effect initialize-in-declaration "initialize ${field} in its declaration"
-  makes given-a-value(field)
-  ask value "initial value" "${default-value(type(field-in(path, field)))}"
-  do
-    set ${field-in(path, field)} initializer ${value}
-  end
-end
-
 # Every constructor takes the value, and the calls pass what its type starts with. A type that declares no
 # constructor has the one the language gives, which assigns nothing: one is declared first (java.rules says how).
 effect initialize-in-constructors "initialize ${field} in the constructors"
@@ -93,27 +85,8 @@ effect pass-to-superclass "pass ${name(field)} to the constructor of ${name(owne
   end
 end
 
-# A class that does not implement what its supertypes leave abstract: it implements each, answering what the type
-# starts with until it is written; or it is abstract too (java.rules says when it may be).
-goal ecj.AbstractMethodMustBeImplemented needs complete(symbol)
-
-effect implement-methods "implement methods of ${symbol}"
-  makes complete(symbol)
-  when nonempty(unimplemented(type-in(path, symbol)))
-  do
-    let t = type-in(path, symbol)
-    for m in unimplemented(t)
-      d := create METHOD ${t} ${name(m)}
-      set ${d} visibility ${attr(m, "visibility")}
-      set ${d} type ${type(m)}
-      for p in params(m)
-        q := create PARAM ${d} ${name(p)}
-        set ${q} type ${type(p)}
-      end
-      set ${d} body "return default"
-    end
-  end
-end
+# A class that does not implement what its supertypes leave abstract: it implements each, or it is abstract too
+# (java.rules says both, and when it may be abstract).
 
 # A method used from a static place, where there is no object to call it on: java.rules says what needs an object.
 

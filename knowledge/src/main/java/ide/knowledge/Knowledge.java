@@ -388,6 +388,7 @@ public final class Knowledge implements Remedy, QuickFix {
             }
         }
         var asked = new java.util.HashSet<String>();
+        var implemented = new java.util.HashSet<String>();
         for (var change : changes) {
             var key = change.element();
             if (groups.containsKey(key)) {
@@ -396,6 +397,18 @@ public final class Knowledge implements Remedy, QuickFix {
             }
             var on = change.added() != null;
             var value = on && change.added().size() > 1 ? change.added().get(1) : null;
+            if (change.relation().equals("unimplemented")) { // every method a class implements, one step
+                if (implemented.add(key)) {
+                    var methods = changes.stream().filter(c -> c.relation().equals("unimplemented") && c.element().equals(key))
+                            .map(c -> c.removed().get(1)).toList();
+                    steps.add(implementing(key, methods, change.forWhat(), projection));
+                }
+                continue;
+            }
+            if (change.relation().equals("initialized")) { // a value where the field is declared: the person's
+                steps.add(initializing(key, change.forWhat(), projection, asked));
+                continue;
+            }
             Primitive primitive = switch (change.relation()) {
                 case "static", "final", "abstract" -> new Primitive.Set(new ElementId(key), change.relation(), String.valueOf(on));
                 case "type" -> new Primitive.Set(new ElementId(key), "type", value);
@@ -487,6 +500,54 @@ public final class Knowledge implements Remedy, QuickFix {
             for (var set : sets) set.apply(answers, id).forEach(target::apply);
             if (method) target.apply(new Primitive.Set(id, "body", "return default"));
         });
+    }
+
+    /**
+     * The methods a class inherits without a body, each implemented in it as declared where it was inherited from: its
+     * visibility, its type, its parameters; answering what its type starts with until it is written.
+     */
+    private Step implementing(String type, List<String> methods, String forWhat, Projection projection) {
+        var program = projection.program();
+        var owner = new ElementId(type);
+        var shapes = methods.stream().map(id -> program.element(new ElementId(id))).toList();
+        var variables = new LinkedHashMap<String, Value>();
+        variables.put("element", value(type, projection));
+        variables.put("called", new Value.Text(called(type, projection)));
+        var title = title("not unimplemented", forWhat, variables, projection);
+        return new Step(title, List.of(), 1, true, (target, answers, done) -> {
+            for (var shape : shapes) {
+                var id = target.apply(new Primitive.Create(Kind.METHOD, owner, shape.name())).produced();
+                target.apply(new Primitive.Set(id, "visibility", shape.fact(ide.program.Fact.VISIBILITY)));
+                target.apply(new Primitive.Set(id, "type", shape.fact(ide.program.Fact.TYPE)));
+                for (var param : program.children(shape.id()).stream().filter(e -> e.kind() == Kind.PARAM).toList()) {
+                    target.apply(new Primitive.Create(Kind.PARAM, id, param.name(), Map.of(ide.program.Fact.TYPE, param.fact(ide.program.Fact.TYPE)), null));
+                }
+                target.apply(new Primitive.Set(id, "body", "return default"));
+            }
+        });
+    }
+
+    /** A value given where a field is declared: asked, with what the knowledge proposes ({@code ask ... default}). */
+    private Step initializing(String field, String forWhat, Projection projection, java.util.Set<String> asked) {
+        var element = projection.program().element(new ElementId(field));
+        var question = questions.get("initialized of " + element.kind().name().toLowerCase(java.util.Locale.ROOT));
+        var proposed = "";
+        if (question != null && question.size() > 2) {
+            var answers = engine.evaluate(rules, new GraphFacts(projection, Map.of()))
+                    .answers(Atom.of(question.get(2), Term.constant(field), Term.variable("V")));
+            if (!answers.isEmpty()) proposed = answers.getFirst().get("V");
+        }
+        var name = question == null ? "value" : question.getFirst();
+        while (!asked.add(name)) name = name + "'";
+        var answer = name;
+        var value = proposed;
+        var variables = new LinkedHashMap<String, Value>();
+        variables.put("element", value(field, projection));
+        variables.put("called", new Value.Text(called(field, projection)));
+        var title = title("initialized", forWhat, variables, projection);
+        var asks = List.of(new Plan.Ask(answer, question == null ? "initial value" : question.get(1), value));
+        return new Step(title, asks, 1, true, (target, given, done) ->
+                target.apply(new Primitive.Set(new ElementId(field), "initializer", given.getOrDefault(answer, value))));
     }
 
     /** A step's title, as {@code say <relation> for <what>} says it; with nothing said, the change as it is. */
