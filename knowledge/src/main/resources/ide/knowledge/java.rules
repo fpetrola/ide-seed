@@ -46,3 +46,10 @@ def visible-as-overridden(m) when overrides(m, n) and visibility(n, vn)
   and visibility-at-least(v, vn) and may-be(m, v) and visibility(m, v)
 
 say visibility for visible-as-overridden "make ${name(element)}() ${value}"
+
+# A type written in a file names a type of that name that the file can use (JLS 6.5.5): binding the use to it is
+# what importing it does.
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "type")
+  and named(t, symbol) and site(u, s) and top(s, here) and accessible(here, t) and target(u, t)
+
+say target for resolves "import ${qualified(value)}"

@@ -561,7 +561,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   no se prueba `protected` donde no alcanza. Después, dónde se usa un miembro sin decir de quién es (JLS 8.2) y el
   orden de los inicializadores (JLS 8.3.3): `pull-up-dependency` se fue, y subir un campo que un inicializador usa
   es un cambio de padre y uno de lugar que se juntan en un solo `Move`. Y que un override es por lo menos tan visible
-  como lo que sobrescribe (JLS 8.4.8.3): `widen-override` se fue.
+  como lo que sobrescribe (JLS 8.4.8.3): `widen-override` se fue. Y que un tipo escrito en un archivo nombra un tipo
+  de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
+  archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
+  en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).
 - **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
   misma. La propuesta de la etapa 3 (decisión 32) las reemplaza por reglas generales del lenguaje, de las que se
   deducen las transformaciones, y deja los refactorings como intenciones; necesita las sentencias en el grafo. Un predicado que ningún `fact` define siempre se hace, aunque

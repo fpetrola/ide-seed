@@ -35,7 +35,7 @@ class FixesTest {
         assertThat(fixes.why("a/P.java", 5).lines()).containsSubsequence(
                 "ecj.UnresolvedVariable total",
                 "? resolves(total)",
-                "  X import: nonempty(unresolved-in(path, symbol, \"type\"))",
+                "  X resolves: unresolved(u, a/P.java, total, type)",
                 "  ! create field total in P",
                 "  ! create parameter total in twice()");
     }
