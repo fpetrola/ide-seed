@@ -80,7 +80,7 @@ class ModernJavaTest {
 
         assertThat(program.outline()).contains("CLASS a.Circle", "CLASS a.Square", "INTERFACE a.Shape", "INTERFACE a.Shown",
                 "FIELD a.Circle#UNIT", "a.Circle -> a.Shape (implements)", "a.Report#unit() -> a.Circle (declared)",
-                "a.Report#unit() -> a.Circle#UNIT (read)");
+                "a.Report#unit() -> a.Circle#UNIT (read) in [1]");
         assertThat(program.unresolved()).isEmpty();
         assertThat(projection.diagnostics()).isEmpty();
     }
@@ -90,7 +90,7 @@ class ModernJavaTest {
     void aTypeDeclaredInAMethodIsNoElement() {
         var program = JavaProjection.of(SOURCES).program();
 
-        assertThat(program.outline()).contains("METHOD a.Report#count()", "a.Report#count() -> a.Circle#UNIT (read)")
+        assertThat(program.outline()).contains("METHOD a.Report#count()", "a.Report#count() -> a.Circle#UNIT (read) in [2]")
                 .noneMatch(line -> line.contains("Pair") || line.contains("Counter"));
     }
 }

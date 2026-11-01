@@ -57,7 +57,7 @@ public record Change(ElementId produced, List<Expectation> expectations, List<Pi
     public record Bound(String use, ElementId to) implements Expectation {
     }
 
-    /** Every use made from inside {@code element} is gone with it. */
+    /** Every use made from inside {@code element}, or in a statement of it, is gone with it. */
     public record UsesGone(ElementId element) implements Expectation {
     }
 

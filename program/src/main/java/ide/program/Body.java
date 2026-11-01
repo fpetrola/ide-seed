@@ -167,20 +167,25 @@ public record Body(List<Statement> statements) {
     /** The uses the body makes of elements outside its method, in the order it names them. */
     public List<Use> uses() {
         var uses = new ArrayList<Use>();
-        for (var statement : statements) {
-            switch (statement) {
-                case Kept k -> {
-                    // the uses the method already makes
-                }
-                case Construct c -> {
-                    uses.add(new Use(c.constructor(), Mode.CALL));
-                    c.arguments().forEach(argument -> uses(argument, uses));
-                }
-                case Return r -> uses(r.value(), uses);
-                case Assign a -> {
-                    uses.add(new Use(a.field(), Mode.WRITE));
-                    uses(a.value(), uses);
-                }
+        for (var statement : statements) uses.addAll(uses(statement));
+        return uses;
+    }
+
+    /** The uses one statement makes, in the order it names them; none for {@code ...}, whose uses the method makes. */
+    public static List<Use> uses(Statement statement) {
+        var uses = new ArrayList<Use>();
+        switch (statement) {
+            case Kept k -> {
+                // the uses the method already makes
+            }
+            case Construct c -> {
+                uses.add(new Use(c.constructor(), Mode.CALL));
+                c.arguments().forEach(argument -> uses(argument, uses));
+            }
+            case Return r -> uses(r.value(), uses);
+            case Assign a -> {
+                uses.add(new Use(a.field(), Mode.WRITE));
+                uses(a.value(), uses);
             }
         }
         return uses;

@@ -218,10 +218,11 @@ final class MemoryPrimitives {
             }
         }
         for (var statement : body.statements()) {
-            if (!(statement instanceof Body.Kept)) create(graph, Kind.STATEMENT, method, "", null);
-        }
-        for (var use : body.uses()) {
-            graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()));
+            if (statement instanceof Body.Kept) continue;
+            var made = create(graph, Kind.STATEMENT, method, "", null);
+            for (var use : Body.uses(statement)) {
+                graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()).in(made));
+            }
         }
         var old = graph.nodes.get(method).facts().get(Fact.BODY);
         var said = body.keeps() && old != null ? old + "\n" + text.strip().substring(3).replaceFirst("^[;\\s]+", "") : text;
@@ -306,12 +307,13 @@ final class MemoryPrimitives {
         graph.add(created, new MemoryGraph.Node(Kind.METHOD, extract.name(), method.parent(),
                 MemoryGraph.typed(MemoryGraph.modifiers("private", method.facts().getOrDefault(Fact.STATIC, "false")), "void")));
         var change = extract.intent(before, created);
+        var where = graph.uses.get(positions.get(first)).statement(); // the call goes where the fragment began
         for (var k = first; k <= last; k++) {
             var use = graph.uses.get(positions.get(k));
-            graph.uses.set(positions.get(k), use.moved(created, use.target(), use.name()));
+            graph.uses.set(positions.get(k), use.moved(created, use.target(), use.name()).in(null)); // the new method's body has no statements yet
             if (use.target() != null) change = change.expect(new Change.Resited(use.target(), extract.method(), created));
         }
-        graph.uses.add(positions.get(first), new MemoryGraph.Use(extract.method(), created, extract.name(), Mode.CALL));
+        graph.uses.add(positions.get(first), new MemoryGraph.Use(extract.method(), created, extract.name(), Mode.CALL).in(where));
         return change;
     }
 
@@ -326,6 +328,6 @@ final class MemoryPrimitives {
             throw new PrimitiveRejected("inline.recursive", graph.render(call.target()) + " calls itself");
         }
         graph.uses.remove(index);
-        graph.uses.addAll(index, body.stream().map(use -> use.moved(call.site(), use.target(), use.name())).toList());
+        graph.uses.addAll(index, body.stream().map(use -> use.moved(call.site(), use.target(), use.name()).in(call.statement())).toList());
     }
 }

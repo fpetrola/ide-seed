@@ -29,6 +29,7 @@ public final class Program {
     private final Map<ElementId, List<Element>> children = new HashMap<>();
     private final Map<ElementId, List<Reference>> from = new HashMap<>();
     private final Map<ElementId, List<Reference>> to = new HashMap<>();
+    private final Map<ElementId, List<Reference>> in = new HashMap<>();
     private final Map<String, Reference> byReferenceId = new HashMap<>();
     private final Map<String, Element> byQualified = new HashMap<>();
     private final List<Element> types = new ArrayList<>();
@@ -51,6 +52,7 @@ public final class Program {
         for (var r : this.references) {
             from.computeIfAbsent(r.site(), k -> new ArrayList<>()).add(r);
             to.computeIfAbsent(r.target(), k -> new ArrayList<>()).add(r);
+            if (r.statement() != null) in.computeIfAbsent(r.statement(), k -> new ArrayList<>()).add(r);
             byReferenceId.putIfAbsent(r.id(), r);
         }
         this.unresolved = List.copyOf(unresolved);
@@ -148,6 +150,11 @@ public final class Program {
 
     public List<Reference> referencesFrom(ElementId site) {
         return from.getOrDefault(site, List.of());
+    }
+
+    /** The uses made in a statement of a body, in order. */
+    public List<Reference> referencesIn(ElementId statement) {
+        return in.getOrDefault(statement, List.of());
     }
 
     // ---- links: the hierarchy and declared types are references too; the hierarchy is the workspace's
@@ -333,17 +340,23 @@ public final class Program {
 
     /**
      * The program without ids, as sorted lines: {@code KIND address} for every type with its members and parameters,
-     * {@code site -> target (mode)} for every reference. Two readings of the same source have the same outline.
+     * {@code site -> target (mode)} for every reference, {@code in [n]} after one made in the n-th statement of a body.
+     * Two readings of the same source have the same outline.
      */
     public List<String> outline() {
         var lines = new ArrayList<String>();
         for (var type : types) outline(type, lines);
         for (var r : references) {
-            lines.add(element(r.site()).qualified() + " -> " + element(r.target()).qualified() + " (" + r.mode().label() + ")");
+            lines.add(element(r.site()).qualified() + " -> " + element(r.target()).qualified() + " (" + r.mode().label() + ")" + in(r.statement()));
         }
-        for (var u : unresolved) lines.add(element(u.site()).qualified() + " -> ? " + u.name() + " (" + u.mode().label() + ")");
+        for (var u : unresolved) lines.add(element(u.site()).qualified() + " -> ? " + u.name() + " (" + u.mode().label() + ")" + in(u.statement()));
         lines.sort(null);
         return lines;
+    }
+
+    /** Where in a body a use is, as the outline writes it: {@code in [2]} for its second statement. */
+    private String in(ElementId statement) {
+        return statement == null ? "" : " in [" + (((Address.Statement) element(statement).address()).index() + 1) + "]";
     }
 
     private void outline(Element element, List<String> lines) {
@@ -378,7 +391,7 @@ public final class Program {
         for (var i = 0; i < copy.size(); i++) {
             var r = copy.get(i);
             if (r.site().equals(site) && r.target().equals(from)) {
-                copy.set(i, new Reference(r.id(), r.site(), to, r.name(), r.mode(), r.receiver()));
+                copy.set(i, r.binding(to));
                 break;
             }
         }
@@ -390,7 +403,7 @@ public final class Program {
         var hole = byUnresolvedId.get(use);
         if (hole == null) return this;
         var copy = new ArrayList<>(references);
-        copy.add(new Reference(hole.id(), hole.site(), to, hole.name(), hole.mode()));
+        copy.add(new Reference(hole.id(), hole.site(), to, hole.name(), hole.mode(), Reference.Receiver.of(hole.mode()), hole.statement()));
         return new Program(elements.values(), copy, unresolved.stream().filter(u -> u != hole).toList());
     }
 
@@ -400,7 +413,7 @@ public final class Program {
         for (var i = 0; i < copy.size(); i++) {
             var r = copy.get(i);
             if (r.site().equals(site) && r.target().equals(target)) {
-                copy.set(i, new Reference(r.id(), newSite, target, r.name(), r.mode(), r.receiver()));
+                copy.set(i, r.from(newSite));
                 break;
             }
         }
@@ -432,14 +445,14 @@ public final class Program {
         var uses = new ArrayList<Reference>();
         for (var r : references) {
             if (within(r.site(), element)) continue;
-            uses.add(r.target().equals(element) ? new Reference(r.id(), r.site(), into, r.name(), r.mode(), r.receiver()) : r);
+            uses.add(r.target().equals(element) ? r.binding(into) : r);
         }
         return new Program(kept, uses, unresolved.stream().filter(u -> !within(u.site(), element)).toList());
     }
 
     /** A copy without the references made from inside {@code element} (it is going away with them). */
     private Program withoutUsesFrom(ElementId element) {
-        var kept = references.stream().filter(r -> !within(r.site(), element)).toList();
+        var kept = references.stream().filter(r -> !within(r.site(), element) && (r.statement() == null || !within(r.statement(), element))).toList();
         return new Program(elements.values(), kept, unresolved);
     }
 

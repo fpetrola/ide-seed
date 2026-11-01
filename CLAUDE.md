@@ -29,7 +29,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   value where it is declared), Unresolved (a use that binds
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
   Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
-  no doubt), Reference (id `site@ordinal`, Mode:
+  no doubt), Reference (id `site@ordinal`; site is the member that makes the use, `statement` the statement of the
+  body it is in, if any; `referencesIn(statement)`; Mode:
   uses read|write|update|call|new|type and links extends|implements|declared; Receiver: what a use is made on, the
   object itself, a type or another object, none for links, types and news), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by

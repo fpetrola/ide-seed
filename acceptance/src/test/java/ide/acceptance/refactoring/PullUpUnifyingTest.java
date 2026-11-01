@@ -69,8 +69,8 @@ class PullUpUnifyingTest {
                     }
                 }
                 """);
-        assertThat(ws.model()).contains("a.Board#show(Square) -> a.Shape#label (read)",
-                "a.Square#title() -> a.Shape#label (read)");
+        assertThat(ws.model()).contains("a.Board#show(Square) -> a.Shape#label (read) in [1]",
+                "a.Square#title() -> a.Shape#label (read) in [1]");
         assertThat(ws.errors()).isEmpty();
     }
 
@@ -111,7 +111,7 @@ class PullUpUnifyingTest {
         assertThat(ws.source("a/Shape.java")).contains("public String kind() {");
         assertThat(ws.source("a/Circle.java")).doesNotContain("kind");
         assertThat(ws.source("a/Square.java")).doesNotContain("kind");
-        assertThat(ws.model()).contains("a.Board#show(Square) -> a.Shape#kind() (call)");
+        assertThat(ws.model()).contains("a.Board#show(Square) -> a.Shape#kind() (call) in [1]");
         assertThat(ws.errors()).isEmpty();
     }
 

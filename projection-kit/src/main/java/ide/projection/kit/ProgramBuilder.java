@@ -111,7 +111,10 @@ public final class ProgramBuilder {
         return this;
     }
 
-    /** A use made from inside {@code site}: what a body would say; a use of a member is made on the object itself. */
+    /**
+     * A use made from inside {@code site}: what a body would say; a use of a member is made on the object itself. A
+     * statement as the site ({@code a.A#m()[2]}) makes the use from its method, in that statement.
+     */
     public ProgramBuilder use(String site, String target, Mode mode) {
         projection.addUse(id(site), id(target), mode);
         return this;

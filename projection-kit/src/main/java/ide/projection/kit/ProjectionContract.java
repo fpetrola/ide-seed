@@ -56,13 +56,14 @@ public abstract class ProjectionContract {
             "STATEMENT a.A#k(int)[1]", "STATEMENT a.A#m(int)[1]",
             "STATEMENT a.A#total()[1]", "STATEMENT a.A#total()[2]", "STATEMENT a.A#total()[3]",
             "STATEMENT a.B#n()[1]", "STATEMENT b.C#use(A)[1]",
-            "a.A#m(int) -> a.A#x (read)",
-            "a.A#total() -> a.A#m(int) (call)", "a.A#total() -> a.A#total()/sum (read)",
-            "a.A#total() -> a.A#total()/sum (read)", "a.A#total() -> a.A#total()/sum (write)", "a.A#total() -> a.A#x (read)",
+            "a.A#m(int) -> a.A#x (read) in [1]",
+            "a.A#total() -> a.A#m(int) (call) in [2]", "a.A#total() -> a.A#total()/sum (read) in [2]",
+            "a.A#total() -> a.A#total()/sum (read) in [3]", "a.A#total() -> a.A#total()/sum (write) in [2]",
+            "a.A#total() -> a.A#x (read) in [1]",
             "a.B -> a.A (extends)",
-            "a.B#n() -> a.A#m(int) (call)", "a.B#n() -> a.A#x (read)",
+            "a.B#n() -> a.A#m(int) (call) in [1]", "a.B#n() -> a.A#x (read) in [1]",
             "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)", "b.C#price -> ? Money (declared)",
-            "b.C#use(A) -> ? weigh (call)",
+            "b.C#use(A) -> ? weigh (call) in [1]",
             "b.C#use(A)/other -> a.A (declared)");
 
     /** A projection holding the fixture. */
@@ -184,8 +185,8 @@ public abstract class ProjectionContract {
 
     /**
      * Obligation 14: the statements of a body are elements of its method or constructor, in the order they are written;
-     * what one holds, a block too, is part of it. A body that keeps what the method does adds statements after the
-     * method's own, which stay who they are; one that replaces it brings new ones.
+     * what one holds, a block too, is part of it, and a use made in it says so. A body that keeps what the method does
+     * adds statements after the method's own, which stay who they are; one that replaces it brings new ones.
      */
     @Test
     void theStatementsOfABodyAreElementsOfItsMethodInOrder() {
@@ -195,6 +196,9 @@ public abstract class ProjectionContract {
         var total = id(p, "a.A#total()");
         var own = id(p, "a.A#m(int)[1]");
         var replaced = id(p, "a.A#total()[1]");
+        assertThat(p.referencesIn(id(p, "a.A#total()[2]"))).extracting(r -> p.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactlyInAnyOrder("a.A#total()/sum write", "a.A#total()/sum read", "a.A#m(int) call");
+        assertThat(p.referencesIn(id(p, "a.A#total()[2]"))).allMatch(r -> r.site().equals(total));
 
         projection.apply(new Primitive.Set(m, "body", "...\n" + Body.name(id(p, "a.A#x")) + " = " + Body.name(id(p, "a.A#m(int)/p"))));
         projection.apply(new Primitive.Set(total, "body", "return " + Body.name(id(p, "a.A#x"))));

@@ -172,7 +172,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `Element`: `id`, `kind`, `name`, `parent`, `facts`. `Kind`: PACKAGE, CLASS, INTERFACE, ENUM, FIELD,
     CONSTRUCTOR, METHOD, PARAM, y desde la etapa 3 lo que hace un cuerpo (`inBody`): LOCAL (una variable de un método
     o constructor, hija de él) y STATEMENT (una sentencia del primer nivel de un cuerpo, hija de su método).
-  - `Reference`: `site`, `target`, `mode`, `name` (cómo se escribió) y `receiver`: sobre qué se hace el uso, el
+  - `Reference`: `site` (el miembro que hace el uso), `target`, `mode`, `name` (cómo se escribió), `statement` (la
+    sentencia del cuerpo donde está, si está en uno) y `receiver`: sobre qué se hace el uso, el
     objeto mismo (escrito solo, o con `this` o `super`), un tipo, u otro objeto; un vínculo, un tipo usado, un
     objeto nuevo o un local, sobre nada. Lo agregó la regla de estáticos: un método estático usa lo que necesita un objeto solo a
     través de uno, y eso depende de cómo está escrito el uso (obligación 12 del contrato). Modos de uso: READ, WRITE, UPDATE, CALL, NEW,
@@ -318,9 +319,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
   La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. La obligación 13 (etapa 3,
   fase 1): un local es un elemento de su método, con su tipo, y cada uso suyo es una referencia desde el método,
-  sin receptor. La obligación 14 (fase 2): las sentencias de un cuerpo son elementos de su método, en orden; un
-  cuerpo que conserva lo que el método hace agrega sentencias después de las suyas, que siguen siendo quienes eran, y
-  uno que lo reemplaza trae sentencias nuevas. El ítem 5 suma al fixture una
+  sin receptor. La obligación 14 (fase 2): las sentencias de un cuerpo son elementos de su método, en orden, y un uso
+  hecho en una dice en cuál está; un cuerpo que conserva lo que el método hace agrega sentencias después de las
+  suyas, que siguen siendo quienes eran, y uno que lo reemplaza trae sentencias nuevas. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
@@ -1290,7 +1291,7 @@ que esto no escala solo:
    - Conservan su id en los primitivos que cambian la lista de un cuerpo: extract las lleva al método nuevo y la llamada
      ocupa su lugar; borrar un local se lleva su sentencia; un cuerpo escrito de nuevo, o un método que se vuelve
      abstracto, olvida las suyas (y sus locales). Después de una edición a mano, por orden y texto.
-   - El `site` todavía es el miembro; la sentencia como `site` es el ciclo 2.
+   - El `site` sigue siendo el miembro (ver la pregunta 2).
    - `inside` de la proyección responde lo más interno, una sentencia o un local también, como pide la obligación 9.
      Lo que preguntan los adaptadores (`inside` de la sesión) y las reglas (`inside(path, line, column)` de los
      scripts) es el miembro (`Program.memberOf`). Eso ya pasaba con los locales desde la fase 1 sin que un test lo
@@ -1299,6 +1300,16 @@ que esto no escala solo:
      con y sin sentencias); el segundo rename, de 48 a 54 ms sin sentencias a 54 a 94 ms con ellas. Crece lo que es
      proporcional a todos los elementos: armar el `Program` en cada lectura, el diff y las vistas. Hay que mirarlo, y
      también la memoria en un proyecto grande, donde las sentencias son cientos de miles de elementos más.
+
+   **Ciclo 2 hecho el 2026-11-01**: cada uso hecho en un cuerpo dice en qué sentencia está (`Reference.statement`, y
+   lo mismo un uso que no liga nada), en los dos drivers.
+   - `Program.referencesIn(sentencia)` son sus usos.
+   - `UsesGone` de una sentencia se lleva los usos hechos en ella, aunque su `site` sea el método.
+   - El outline escribe dónde está un uso en el cuerpo (`a.A#total() -> a.A#m(int) (call) in [2]`), así la
+     obligación 3 también lo verifica después de cada primitivo.
+   - En la proyección en memoria, un uso escrito desde una sentencia (`.use("a.A#total()[2]", ...)`) se hace desde su
+     método y en ella. Un cuerpo dicho hace los usos de cada sentencia en ella. Lo que extract en memoria lleva al
+     método nuevo no queda en ninguna sentencia, porque ese método todavía no tiene.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
@@ -1320,10 +1331,15 @@ fase 2, con lo propuesto.
    *Decidida: orden y texto.* Lo que los dos cuerpos dicen en el mismo orden, lo más que se pueda, conserva sus ids
    (`Reconciliation.statements`); una sentencia cuyo texto cambió es nueva.
 2. El `site` de una referencia: ¿la sentencia (propuesto), o el miembro más un campo nuevo con la sentencia? Lo
-   segundo es menos invasivo, pero deja dos maneras de decir dónde está un uso. *Decidida: la sentencia*, y el
-   verificador compara un uso por el miembro que lo hace (`Program.memberOf`). Así un cuerpo dicho sigue declarando
-   sus usos sobre el método, y lo que mira quién hace un uso (las reglas de estáticos, la navegación) pregunta por el
-   miembro.
+   segundo es menos invasivo, pero deja dos maneras de decir dónde está un uso. *Decidida primero la sentencia, y
+   cambiada en el ciclo 2 de la fase 2, antes de escribirla: el miembro sigue siendo el `site`, y cada uso dice en qué
+   sentencia de un cuerpo está (`Reference.statement`).* Al contarlos, todo lo que lee `site` quiere decir "el miembro
+   que hace el uso": el verificador, las reglas de estáticos, la navegación, los cuerpos dichos que declaran sus usos
+   sobre el método. Con la sentencia como `site`, cada uno tendría que subir hasta el miembro (`Program.memberOf`), y
+   olvidarlo es un error que no se ve; `inside` ya lo mostró en el ciclo 1. La proyección en memoria tendría que
+   rehacer todos sus usos. Y la información es la misma: con el campo, el borrado o la mudanza de una sentencia saben
+   sus usos (`referencesIn`), y las reglas pueden preguntar por ellos. Las dos maneras de decir dónde está un uso
+   existen igual: el `site` y lo que el `site` es.
 3. Los bloques anidados (`if`, `for`, `try`): ¿sentencias hijas de su sentencia desde el principio, o opacos hasta
    que un refactoring los pida (propuesto)? *Decidida: opacos*; una sentencia es una del primer nivel del cuerpo.
 4. Las expresiones siguen opacas (propuesto). Extract Variable desde una expresión usa la selección de la persona,

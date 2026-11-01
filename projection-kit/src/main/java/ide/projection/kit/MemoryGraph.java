@@ -48,25 +48,33 @@ final class MemoryGraph {
         }
     }
 
-    /** A use from {@code site}; its {@code target} is null when its name binds nothing. */
-    /** A use; one that binds nothing may say where it is looked up and what it needs. */
-    record Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs, Reference.Receiver receiver) {
+    /**
+     * A use from {@code site}, in one of its statements or in none; its {@code target} is null when its name binds
+     * nothing, and then it may say where it is looked up and what it needs.
+     */
+    record Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs, Reference.Receiver receiver,
+               ElementId statement) {
 
         Use(ElementId site, ElementId target, String name, Mode mode) {
-            this(site, target, name, mode, null, null, Reference.Receiver.of(mode));
+            this(site, target, name, mode, null, null, Reference.Receiver.of(mode), null);
         }
 
         Use(ElementId site, ElementId target, String name, Mode mode, ElementId scope, Needs needs) {
-            this(site, target, name, mode, scope, needs, Reference.Receiver.of(mode));
+            this(site, target, name, mode, scope, needs, Reference.Receiver.of(mode), null);
         }
 
         Use(ElementId site, ElementId target, String name, Mode mode, Reference.Receiver receiver) {
-            this(site, target, name, mode, null, null, receiver);
+            this(site, target, name, mode, null, null, receiver, null);
         }
 
-        /** The same use, made from {@code site}, binding {@code target} by {@code name}: on what it was made on. */
+        /** The same use, made from {@code site}, binding {@code target} by {@code name}: on what it was made on, where it was. */
         Use moved(ElementId site, ElementId target, String name) {
-            return new Use(site, target, name, mode, scope, needs, receiver);
+            return new Use(site, target, name, mode, scope, needs, receiver, statement);
+        }
+
+        /** The same use, in {@code statement} (null: in none). */
+        Use in(ElementId statement) {
+            return new Use(site, target, name, mode, scope, needs, receiver, statement);
         }
     }
 
@@ -93,8 +101,8 @@ final class MemoryGraph {
         var ordinals = new HashMap<ElementId, Integer>();
         for (var use : uses) {
             var id = use.site() + "@" + (ordinals.merge(use.site(), 1, Integer::sum) - 1);
-            if (use.target() == null) unresolved.add(new Unresolved(id, use.site(), use.name(), use.mode(), use.scope()));
-            else references.add(new Reference(id, use.site(), use.target(), use.name(), use.mode(), use.receiver()));
+            if (use.target() == null) unresolved.add(new Unresolved(id, use.site(), use.name(), use.mode(), use.scope(), use.statement()));
+            else references.add(new Reference(id, use.site(), use.target(), use.name(), use.mode(), use.receiver(), use.statement()));
         }
         return new Program(elements, references, unresolved);
     }
@@ -148,9 +156,12 @@ final class MemoryGraph {
             nodes.put(id, new Node(e.kind(), e.name(), e.parent() == null ? null : mapped.get(e.parent()), e.facts()));
             order.add(id);
         }
-        for (var r : program.references()) uses.add(new Use(mapped.get(r.site()), mapped.get(r.target()), r.name(), r.mode(), r.receiver()));
+        for (var r : program.references()) {
+            uses.add(new Use(mapped.get(r.site()), mapped.get(r.target()), r.name(), r.mode(), r.receiver()).in(mapped.get(r.statement())));
+        }
         for (var u : program.unresolved()) {
-            uses.add(new Use(mapped.get(u.site()), null, u.name(), u.mode(), u.scope() == null ? null : mapped.get(u.scope()), null));
+            uses.add(new Use(mapped.get(u.site()), null, u.name(), u.mode(), u.scope() == null ? null : mapped.get(u.scope()), null)
+                    .in(u.statement() == null ? null : mapped.get(u.statement())));
         }
     }
 
@@ -184,11 +195,19 @@ final class MemoryGraph {
     /** A use made from {@code site}: of a member, on the object itself; of a local, on nothing. */
     void addUse(ElementId site, ElementId target, Mode mode) {
         var local = nodes.get(target).kind() == Kind.LOCAL;
-        uses.add(new Use(site, target, nodes.get(target).name(), mode, local ? Reference.Receiver.NONE : Reference.Receiver.of(mode)));
+        addUse(site, target, mode, local ? Reference.Receiver.NONE : Reference.Receiver.of(mode));
     }
 
+    /** A use made from {@code site}; a statement as the site is the use's place in its method's body. */
     void addUse(ElementId site, ElementId target, Mode mode, Reference.Receiver receiver) {
-        uses.add(new Use(site, target, nodes.get(target).name(), mode, receiver));
+        uses.add(placed(new Use(site, target, nodes.get(target).name(), mode, receiver)));
+    }
+
+    /** A use whose site is a statement is made from the statement's method, in that statement. */
+    Use placed(Use use) {
+        var node = nodes.get(use.site());
+        return node.kind() == Kind.STATEMENT ? new Use(node.parent(), use.target(), use.name(), use.mode(), use.scope(), use.needs(),
+                use.receiver(), use.site()) : use;
     }
 
     /** The element and everything inside it. */

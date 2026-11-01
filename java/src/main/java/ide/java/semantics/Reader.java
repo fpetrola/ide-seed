@@ -344,7 +344,8 @@ public final class Reader {
                     : use instanceof ExplicitConstructorInvocationStmt invocation ? constructed(invocation)
                     : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                     : ((NodeWithSimpleName<?>) use).getNameAsString();
-            var site = target == null && !bindsNothing ? null : siteOf(use);
+            var place = target == null && !bindsNothing ? null : placeOf(use);
+            var site = place == null ? null : place.member();
             if (site == null) { // members of libraries, locals, what does not compile, in declarations it cannot read
                 untracked.add(name);
                 continue;
@@ -353,8 +354,8 @@ public final class Reader {
             nodes.put(id, use);
             var mode = typeName ? Mode.TYPE : modeOf(use);
             var receiver = target != null && target.value().startsWith(Kind.LOCAL.prefix()) ? Reference.Receiver.NONE : receiver(use, mode);
-            if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use)));
-            else references.add(new Reference(id, site, target, name, mode, receiver));
+            if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use), place.statement()));
+            else references.add(new Reference(id, site, target, name, mode, receiver, place.statement()));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
     }
@@ -588,17 +589,36 @@ public final class Reader {
      * A type declared inside a method is no element: what is inside it is inside the method.
      */
     public ElementId siteOf(Node node) {
+        return placeOf(node).member();
+    }
+
+    /** Where a use is made: the member, parameter or type that makes it, and the statement of a body it is in, if any. */
+    public record Place(ElementId member, ElementId statement) {
+    }
+
+    public Place placeOf(Node node) {
         var type = node.findAncestor(TypeDeclaration.class, t -> t.getFullyQualifiedName().isPresent()).orElseThrow();
         var owner = ids.get(new Address.Type(qualifiedOf(type)));
         var method = node.findAncestor(CallableDeclaration.class, c -> c.findAncestor(TypeDeclaration.class).orElse(null) == type);
         if (method.isPresent()) {
             var callable = ids.get(new Address.Callable(owner, nameOf(method.get()), keys.of(method.get())));
             var param = node.findAncestor(Parameter.class).filter(p -> p.getParentNode().orElse(null) == method.get());
-            return param.map(p -> ids.get(new Address.Param(callable, p.getNameAsString()))).orElse(callable);
+            if (param.isPresent()) return new Place(ids.get(new Address.Param(callable, param.get().getNameAsString())), null);
+            return new Place(callable, callable == null ? null : statementOf(node, method.get(), callable));
         }
         var field = node.findAncestor(VariableDeclarator.class).filter(v -> v.getParentNode()
                 .filter(FieldDeclaration.class::isInstance).isPresent());
-        return field.map(v -> ids.get(new Address.Field(owner, v.getNameAsString()))).orElse(owner);
+        return new Place(field.map(v -> ids.get(new Address.Field(owner, v.getNameAsString()))).orElse(owner), null);
+    }
+
+    /** The statement of a callable's body a node is in, or null: in its signature, or in no statement of it. */
+    private ElementId statementOf(Node node, CallableDeclaration<?> method, ElementId callable) {
+        var statements = Bodies.statements(method);
+        for (var n = node; n != null && n != method; n = n.getParentNode().orElse(null)) {
+            var place = Bodies.place(statements, n);
+            if (place >= 0) return ids.get(new Address.Statement(callable, place));
+        }
+        return null;
     }
 
     static String nameOf(CallableDeclaration<?> callable) {

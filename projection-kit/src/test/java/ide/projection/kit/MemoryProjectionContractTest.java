@@ -22,14 +22,14 @@ class MemoryProjectionContractTest extends ProjectionContract {
                 .method("b.C", "use", "int", "a.A other").type("b.C.Note")
                 .statement("a.A#m(int)").statement("a.A#k(int)").statement("a.A#total()").statement("a.A#total()")
                 .statement("a.A#total()").statement("a.B#n()").statement("b.C#use(A)")
-                .use("a.A#m(int)", "a.A#x", Mode.READ)
-                .use("a.A#total()", "a.A#x", Mode.READ).use("a.A#total()", "a.A#m(int)", Mode.CALL)
+                .use("a.A#m(int)[1]", "a.A#x", Mode.READ)
+                .use("a.A#total()[1]", "a.A#x", Mode.READ).use("a.A#total()[2]", "a.A#m(int)", Mode.CALL)
                 .local("a.A#total()", "sum", "int")
-                .use("a.A#total()", "a.A#total()/sum", Mode.WRITE).use("a.A#total()", "a.A#total()/sum", Mode.READ)
-                .use("a.A#total()", "a.A#total()/sum", Mode.READ)
-                .use("a.B#n()", "a.A#m(int)", Mode.CALL).use("a.B#n()", "a.A#x", Mode.READ)
+                .use("a.A#total()[2]", "a.A#total()/sum", Mode.WRITE).use("a.A#total()[2]", "a.A#total()/sum", Mode.READ)
+                .use("a.A#total()[3]", "a.A#total()/sum", Mode.READ)
+                .use("a.B#n()[1]", "a.A#m(int)", Mode.CALL).use("a.B#n()[1]", "a.A#x", Mode.READ)
                 .unresolved("b.C#price", "Money", Mode.DECLARED)
-                .unresolved("b.C#use(A)", "weigh", Mode.CALL, "a.A", new Needs("int", List.of(new Needs.Argument("string", "String"))))
+                .unresolved("b.C#use(A)[1]", "weigh", Mode.CALL, "a.A", new Needs("int", List.of(new Needs.Argument("string", "String"))))
                 .build();
     }
 

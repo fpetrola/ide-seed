@@ -2,9 +2,11 @@ package ide.program;
 
 /**
  * A use of, or a link to, {@code target}, written as {@code name}, from inside element {@code site}, made on
- * {@code receiver}.
+ * {@code receiver}. A use made in a body also says which of its statements it is in ({@code statement}; null for
+ * one outside a body).
  */
-public record Reference(String id, ElementId site, ElementId target, String name, Mode mode, Receiver receiver) {
+public record Reference(String id, ElementId site, ElementId target, String name, Mode mode, Receiver receiver,
+                        ElementId statement) {
 
     /**
      * What a use is made on: the object its site belongs to ({@code SELF}: written alone, or through this or super), a
@@ -25,5 +27,20 @@ public record Reference(String id, ElementId site, ElementId target, String name
     /** A use made on what its mode says when nothing else is said ({@link Receiver#of}). */
     public Reference(String id, ElementId site, ElementId target, String name, Mode mode) {
         this(id, site, target, name, mode, Receiver.of(mode));
+    }
+
+    /** A use made in no statement: a link, a use in a signature or in a field's start. */
+    public Reference(String id, ElementId site, ElementId target, String name, Mode mode, Receiver receiver) {
+        this(id, site, target, name, mode, receiver, null);
+    }
+
+    /** The same use, binding {@code target}. */
+    public Reference binding(ElementId target) {
+        return new Reference(id, site, target, name, mode, receiver, statement);
+    }
+
+    /** The same use, made from {@code site}. */
+    public Reference from(ElementId site) {
+        return new Reference(id, site, target, name, mode, receiver, statement);
     }
 }

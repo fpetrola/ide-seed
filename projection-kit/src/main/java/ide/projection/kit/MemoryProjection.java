@@ -181,7 +181,7 @@ public final class MemoryProjection implements Projection {
 
     /** A use from {@code site} written {@code name} that binds nothing, looked up in {@code scope}, needing {@code needs}. */
     void unresolved(ElementId site, String name, Mode mode, ElementId scope, Needs needs) {
-        graph.uses.add(new MemoryGraph.Use(site, null, name, mode, scope, needs));
+        graph.uses.add(graph.placed(new MemoryGraph.Use(site, null, name, mode, scope, needs)));
         program = null;
     }
 
