@@ -4,13 +4,24 @@ import ide.refactoring.Library;
 import ide.refactoring.script.Script;
 import ide.refactoring.script.ScriptParser;
 
+import ide.rules.Atom;
+import ide.rules.Clause;
+import ide.rules.Literal;
+import ide.rules.Rules;
+import ide.rules.Term;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
  * <pre>
  * goal &lt;code&gt; needs p(a, b)
+ * def p(x, "constant") when q(x, y) and not r(y, _) and x != y     (Datalog: a name is a variable, a quoted text a
+ *   and s(y)                                                        constant, _ any value; it goes on in "and" lines)
+ * order name "low" "high" ...      (facts: name-value(v), and name-at-least(a, b) for each a not below b)
+ * say relation for p "title with ${element}, ${was} and ${value}"  (how a change p asks for is said)
  * fact p(x, y) when expr
  * effect &lt;name&gt; "title with ${expr}"
  *   makes p(x, y)
@@ -35,10 +46,31 @@ final class KnowledgeParser {
         var goals = new ArrayList<Knowledge.Goal>();
         var facts = new ArrayList<Knowledge.Fact>();
         var effects = new ArrayList<Knowledge.Effect>();
+        var clauses = new ArrayList<Clause>();
+        var says = new HashMap<String, String>();
         for (var i = 0; i < lines.size(); i++) {
             var line = lines.get(i).strip();
             if (line.isEmpty() || line.startsWith("# ")) continue;
-            if (line.startsWith("goal ")) {
+            if (line.startsWith("def ")) {
+                var definition = new StringBuilder(line.substring(4));
+                while (i + 1 < lines.size() && lines.get(i + 1).strip().startsWith("and ")) definition.append(' ').append(lines.get(++i).strip());
+                clauses.add(definition(definition.toString()));
+            } else if (line.startsWith("order ")) {
+                var parts = quoted(line.substring(6).strip());
+                var name = parts.getFirst();
+                var values = parts.subList(1, parts.size());
+                for (var value : values) clauses.add(new Clause(Atom.of(name + "-value", Term.constant(value)), List.of()));
+                for (var high = 0; high < values.size(); high++) {
+                    for (var low = 0; low <= high; low++) {
+                        clauses.add(new Clause(Atom.of(name + "-at-least", Term.constant(values.get(high)), Term.constant(values.get(low))), List.of()));
+                    }
+                }
+            } else if (line.startsWith("say ")) {
+                var words = line.substring(4).strip().split("\\s+", 4);
+                if (words.length < 4 || !words[1].equals("for")) throw new IllegalArgumentException("knowledge: expected say <relation> for <predicate> \"title\": " + line);
+                var title = words[3].strip();
+                says.put(words[0] + " for " + words[2], title.substring(1, title.length() - 1));
+            } else if (line.startsWith("goal ")) {
                 var needs = line.indexOf(" needs ");
                 goals.add(new Knowledge.Goal(line.substring(5, needs).strip(), predicate(line.substring(needs + 7))));
             } else if (line.startsWith("fact ")) {
@@ -91,7 +123,70 @@ final class KnowledgeParser {
                 throw new IllegalArgumentException("knowledge: unexpected line: " + line);
             }
         }
-        return new Knowledge(goals, facts, effects, library);
+        return new Knowledge(goals, facts, effects, Rules.of(clauses), says, library);
+    }
+
+    /** {@code def head when literal and literal ...}: one clause of Datalog. */
+    private static Clause definition(String text) {
+        var when = text.indexOf(" when ");
+        var head = atom(when < 0 ? text : text.substring(0, when));
+        var body = new ArrayList<Literal>();
+        var anonymous = new int[1];
+        if (when >= 0) {
+            for (var part : split(text.substring(when + 6), " and ")) {
+                var literal = part.strip();
+                if (literal.startsWith("not ")) {
+                    body.add(new Literal.Negative(atom(literal.substring(4), anonymous)));
+                } else if (literal.contains("(")) {
+                    body.add(new Literal.Positive(atom(literal, anonymous)));
+                } else {
+                    var unequal = literal.indexOf("!=");
+                    var equal = unequal >= 0 ? unequal : literal.indexOf('=');
+                    if (equal < 0) throw new IllegalArgumentException("knowledge: expected an atom or a comparison: " + literal);
+                    body.add(new Literal.Comparison(term(literal.substring(0, equal), anonymous), unequal < 0,
+                            term(literal.substring(equal + (unequal >= 0 ? 2 : 1)), anonymous)));
+                }
+            }
+        }
+        return new Clause(head, body);
+    }
+
+    private static Atom atom(String text) {
+        return atom(text, new int[1]);
+    }
+
+    private static Atom atom(String text, int[] anonymous) {
+        var predicate = predicate(text.strip());
+        return new Atom(predicate.name(), predicate.args().stream().map(arg -> term(arg, anonymous)).toList());
+    }
+
+    /** A quoted text is a constant; {@code _} any value; any other word a variable. */
+    private static Term term(String text, int[] anonymous) {
+        var word = text.strip();
+        if (word.startsWith("\"") && word.endsWith("\"") && word.length() >= 2) return Term.constant(word.substring(1, word.length() - 1));
+        if (word.equals("_")) return Term.variable("_" + ++anonymous[0]);
+        return Term.variable(word);
+    }
+
+    /** {@code text} split at {@code separator} where it is outside quotes and parentheses. */
+    private static List<String> split(String text, String separator) {
+        var parts = new ArrayList<String>();
+        var depth = 0;
+        var quoted = false;
+        var start = 0;
+        for (var i = 0; i < text.length(); i++) {
+            var c = text.charAt(i);
+            if (c == '"') quoted = !quoted;
+            else if (!quoted && c == '(') depth++;
+            else if (!quoted && c == ')') depth--;
+            else if (!quoted && depth == 0 && text.startsWith(separator, i)) {
+                parts.add(text.substring(start, i));
+                start = i + separator.length();
+                i = start - 1;
+            }
+        }
+        parts.add(text.substring(start));
+        return parts;
     }
 
     /** {@code p(a, f(b, c))}: a name and its arguments, split at the commas outside parentheses and quotes. */

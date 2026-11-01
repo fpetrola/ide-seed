@@ -86,7 +86,7 @@ De la arquitectura (nuevos):
          |           |            |   \
          |       knowledge        |    maven     (lo que Maven dice de un proyecto)
          |           :            |
-         |         rules          |              (Datalog: no depende de nada; knowledge lo usará)
+         |         rules          |              (Datalog: no depende de nada; knowledge lo usa)
          |        /     \         |
        java   engine   refactoring
          \       |       /
@@ -111,7 +111,7 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | java        | projection, JavaParser                                     | el driver de Java                            |
 | engine      | projection                                                 | transacciones verificadas                    |
 | refactoring | projection, engine                                         | refactorings, run, lenguaje `.ref`, catálogo |
-| knowledge   | engine, refactoring                                        | planificador por metas                       |
+| knowledge   | engine, refactoring, rules                                 | planificador por metas                       |
 | rules       | nada                                                       | Datalog: reglas sobre hechos, un motor detrás de un contrato |
 | maven       | nada                                                       | el classpath de un proyecto, según Maven     |
 | session     | java, engine, refactoring, knowledge, maven; JavaParser en runtime | el ensamblado                         |
@@ -470,7 +470,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   para estáticos: cómo se califica un campo lo decide el lenguaje. `default-value` le pregunta a las reglas. En el
   ítem 5 llegó pull-up-unifying (sube un miembro y fusiona en él el mismo miembro de los hermanos: mismo nombre,
   firma, tipo, cuerpo y estaticidad), merge-duplicate pasó a ser un solo `delete ... into=`, `member-named` compara
-  también los tipos de los parámetros de un método, y `can-access` le pregunta a las reglas si un sitio alcanza algo.
+  también los tipos de los parámetros de un método, y `can-access` le preguntaba a las reglas del driver si un sitio alcanza algo (se fue en la fase 0 de la etapa
+  3: quién puede usar qué lo dice `java.rules`).
   Con los usos de miembros sin resolver, `unresolved-in` toma qué uso se busca (`type`, `value` o `call`), `site`
   y `scope` leen un uso sin resolver, `similar` da los miembros de un tipo cuyo nombre está a una o dos letras, y
   se fue `is-type-name`. Para create-method, `expected` y `arguments` (pares nombre y tipo) le preguntan a la
@@ -550,6 +551,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `super(...)`) en vez de asignarlo. Lee el cuerpo con `said` (obligación 11) y `value-given`/`said-without`; si el
   cuerpo no se puede decir sin lenguaje, no se ofrece. Conserva el sentido, así que también repara: un extract
   superclass que sube un `final` que el constructor inicializa deja `super(limit)`, como IntelliJ.
+- **Desde la fase 0 de la etapa 3.** Además de efectos, el conocimiento tiene definiciones (`def`, Datalog que evalúa
+  `rules`, en `java.rules`): un predicado definido se hace verdadero por abducción. Se lee la definición de izquierda
+  a derecha; lo que el grafo tiene (`GraphFacts`, una vista de `Program` sin lenguaje) liga variables, y un hecho del
+  grafo con sus argumentos ligados que no vale se cambia con el primitivo que lo cambia (`Abduction`: visibilidad,
+  padre, lugar, a qué liga un uso, un constructor que nadie tiene). Lo que una definición necesita de otra se hace
+  antes, igual que las necesidades de un efecto. `say` dice cada cambio como lo dice el lenguaje, y `order` da un
+  orden de valores. La primera definición en pasar fue quién puede usar qué (el efecto `open-visibility` se fue): ya
+  no se prueba `protected` donde no alcanza.
 - **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
   misma. La propuesta de la etapa 3 (decisión 32) las reemplaza por reglas generales del lenguaje, de las que se
   deducen las transformaciones, y deja los refactorings como intenciones; necesita las sentencias en el grafo. Un predicado que ningún `fact` define siempre se hace, aunque

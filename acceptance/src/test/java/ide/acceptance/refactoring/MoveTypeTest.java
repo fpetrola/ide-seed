@@ -99,9 +99,9 @@ class MoveTypeTest {
                 }
                 """);
         assertThat(ws.errors()).isEmpty();
-        assertThat(ws.whyRepair().lines()).contains(
+        // protected is not even tried: who can use what says a class of another package that is not a subclass cannot
+        assertThat(ws.whyRepair().lines()).containsSubsequence(
                 "? access.insufficient a.Shop#total() cannot access package b.Money#cents",
-                "  X open-visibility b.Money#cents package -> protected: still access.insufficient",
                 "  ! open-visibility b.Money#cents package -> public",
                 "? access.insufficient b.Money#currency cannot access package a.Currency",
                 "  ! open-visibility a.Currency package -> public");

@@ -1,0 +1,29 @@
+# How Java is: definitions the planner makes true by changing what they look at (decision 32, phase 0). Nothing
+# here is a fix or a step of a refactoring.
+# A definition is read left to right: a relation of the graph, asked with what is known, binds the rest; one whose
+# arguments are all known and that does not hold is made to hold, by the primitive that changes it (a visibility is
+# set, a member moved, a use bound, a constructor created). The definitions written first are the ways tried first.
+# The graph's relations: kind, name, parent, visibility, top-level, top, package, enclosing, subclass, overrides,
+# alike, before, constructor, named, unresolved, site, target, and known (what came with the problem).
+
+order visibility "private" "package" "protected" "public"
+
+# A top-level type is package-private or public; anything else may have any visibility.
+def may-be(e, v) when visibility(e, _) and visibility-value(v) and not top-level(e)
+def may-be(e, "package") when top-level(e)
+def may-be(e, "public") when top-level(e)
+
+# Who can use what (JLS 6.6), from the narrowest visibility that lets the site use it.
+def accessible(site, m) when top(site, t) and top(m, t)
+  and may-be(m, "private") and visibility(m, "private")
+def accessible(site, m) when package(site, p) and package(m, p)
+  and may-be(m, "package") and visibility(m, "package")
+def accessible(site, m) when protected-reach(site, m)
+  and may-be(m, "protected") and visibility(m, "protected")
+def accessible(site, m) when kind(site, _)
+  and may-be(m, "public") and visibility(m, "public")
+
+def protected-reach(site, m) when package(site, p) and package(m, p)
+def protected-reach(site, m) when enclosing(site, a) and enclosing(m, b) and subclass(a, b)
+
+say visibility for accessible "open-visibility ${qualified(element)} ${was} -> ${value}"

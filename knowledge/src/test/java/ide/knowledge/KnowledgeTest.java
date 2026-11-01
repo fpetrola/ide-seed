@@ -70,6 +70,43 @@ class KnowledgeTest {
         return program.find(address).orElseThrow().id();
     }
 
+    /**
+     * A predicate that definitions say, and no effect makes, is made true by changing what a definition looks at:
+     * here a visibility, by the primitive that sets it. Nothing says how; what the graph has binds the rest, and a
+     * definition that would need a change no primitive makes (the type a member is in) gives no way. The ways come in
+     * the order the definitions are written, each said as the knowledge says it.
+     */
+    @Test
+    void aDefinedPredicateIsMadeTrueByChangingWhatItsDefinitionLooksAt() {
+        var projection = program();
+        var p = projection.program();
+        projection.apply(new Primitive.Set(id(p, "a.A#x"), "visibility", "private"));
+        var knowledge = Knowledge.parse("""
+                goal access.insufficient needs reachable(site, target)
+
+                def reachable(site, m) when top(site, t) and top(m, t)
+                def reachable(site, m) when package(site, p) and package(m, p)
+                  and visibility(m, "package")
+                def reachable(site, m) when kind(site, _) and visibility(m, "public")
+                say visibility for reachable "open ${qualified(element)} ${was} -> ${value}"
+                """, Library.standard());
+
+        var search = knowledge.search("access.insufficient", Map.of("site", id(p, "a.B#n()"), "target", id(p, "a.A#x")),
+                projection);
+
+        assertThat(search.plans()).extracting(Plan::title).containsExactly("open a.A#x private -> package", "open a.A#x private -> public");
+        assertThat(search.trace().lines()).containsExactly(
+                "? reachable(a.B#n(), a.A#x)",
+                "  X reachable: top(a.A#x, a.B)",
+                "  ! open a.A#x private -> package",
+                "  ! open a.A#x private -> public");
+        assertThat(search.plans()).noneMatch(Plan::changesMeaning);
+
+        search.plans().getFirst().apply(projection);
+
+        assertThat(projection.program().element(id(p, "a.A#x")).fact(Fact.VISIBILITY)).isEqualTo("package");
+    }
+
     @Test
     void plansAreDeducedFromTheEffectsThatMakeTheGoalCheapestFirst() {
         var projection = program();

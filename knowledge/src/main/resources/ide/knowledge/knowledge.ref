@@ -14,16 +14,7 @@ goal ecj.UnresolvedVariable needs resolves(symbol)
 goal ecj.UndefinedField needs resolves(symbol)
 goal ecj.UndefinedMethod needs resolves(symbol)
 
-fact accessible(site, target) when can-access(site, target)
-
-effect open-visibility "open-visibility ${qualified(target)} ${attr(target, "visibility")} -> ${v}"
-  keeps meaning
-  makes accessible(site, target)
-  for v in wider(target)
-  do
-    set ${target} visibility ${v}
-  end
-end
+# accessible(site, target): how Java says who can use what is in java.rules, and the planner makes it hold from there.
 
 effect pull-up-dependency "pull-up-dependency ${qualified(target)} -> ${qualified(enclosing(site))}"
   keeps meaning

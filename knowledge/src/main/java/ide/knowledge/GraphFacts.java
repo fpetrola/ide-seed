@@ -1,0 +1,120 @@
+package ide.knowledge;
+
+import ide.program.Address;
+import ide.program.Element;
+import ide.program.ElementId;
+import ide.program.Fact;
+import ide.program.Kind;
+import ide.program.Mode;
+import ide.program.Program;
+import ide.refactoring.Value;
+import ide.rules.Facts;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
+
+/**
+ * The program as the relations rules read, asked by pattern: a view over {@link Program}, never a copy. Elements and
+ * uses are named by id; kinds in lower case. Plus {@code known(name, value)}: what came with the problem being solved
+ * (its path, its symbol...). Nothing here is of a language.
+ * <pre>
+ * kind(e, k)        name(e, n)        parent(e, p)      visibility(e, v)    top-level(t)
+ * top(e, t)         package(e, p)     enclosing(e, t)   subclass(a, b)      (a is b, or extends it)
+ * overrides(m, n)   alike(a, b)       before(a, b)      constructor(k, t)   named(t, n)        (types)
+ * unresolved(u, path, name, kind)     (kind: type, value, call or new)
+ * site(u, s)        target(u, t)      known(name, value)
+ * </pre>
+ */
+final class GraphFacts implements Facts {
+
+    private final Program program;
+    private final Map<String, Value> known;
+
+    GraphFacts(Program program, Map<String, Value> known) {
+        this.program = program;
+        this.known = known;
+    }
+
+    @Override
+    public Stream<List<String>> match(String relation, List<String> pattern) {
+        var first = pattern.isEmpty() ? null : pattern.getFirst();
+        Stream<List<String>> tuples = switch (relation) {
+            case "kind" -> elements(first).map(e -> List.of(id(e), e.kind().name().toLowerCase(Locale.ROOT)));
+            case "name" -> elements(first).map(e -> List.of(id(e), e.name()));
+            case "parent" -> elements(first).filter(e -> e.parent() != null).map(e -> List.of(id(e), e.parent().value()));
+            case "visibility" -> elements(first).filter(e -> e.fact(Fact.VISIBILITY) != null)
+                    .map(e -> List.of(id(e), e.fact(Fact.VISIBILITY)));
+            case "top-level" -> elements(first).filter(this::topLevel).map(e -> List.of(id(e)));
+            case "top" -> inTypes(first).map(e -> List.of(id(e), id(program.topLevel(e.id()))));
+            case "package" -> inTypes(first).map(e -> List.of(id(e), packageOf(program.topLevel(e.id()))));
+            case "enclosing" -> inTypes(first).map(e -> List.of(id(e), id(program.enclosingType(e.id()))));
+            case "subclass" -> types(first).flatMap(t -> program.superclassChain(t.id()).stream().map(s -> List.of(id(t), id(s))));
+            case "overrides" -> elements(first).filter(e -> e.kind() == Kind.METHOD)
+                    .flatMap(m -> program.overridden(m).stream().map(n -> List.of(id(m), id(n))));
+            case "alike" -> elements(first).flatMap(a -> program.elements().stream().filter(b -> alike(a, b))
+                    .map(b -> List.of(id(a), id(b))));
+            case "before" -> elements(first).filter(e -> e.parent() != null).flatMap(a -> {
+                var siblings = program.children(a.parent());
+                return siblings.subList(siblings.indexOf(a) + 1, siblings.size()).stream().map(b -> List.of(id(a), id(b)));
+            });
+            case "constructor" -> elements(first).filter(e -> e.kind() == Kind.CONSTRUCTOR)
+                    .map(k -> List.of(id(k), k.parent().value()));
+            case "named" -> program.types().stream().map(t -> List.of(id(t), t.name()));
+            case "unresolved" -> program.unresolved().stream().filter(u -> first == null || first.equals(u.id()))
+                    .filter(u -> program.contains(u.site()) && program.topLevel(u.site()).fact(Fact.FILE) != null)
+                    .map(u -> List.of(u.id(), program.topLevel(u.site()).fact(Fact.FILE), u.name(), used(u.mode())));
+            case "site" -> Stream.concat(
+                    program.unresolved().stream().map(u -> List.of(u.id(), u.site().value())),
+                    program.references().stream().map(r -> List.of(r.id(), r.site().value())));
+            case "target" -> program.references().stream().map(r -> List.of(r.id(), r.target().value()));
+            case "known" -> known.entrySet().stream().filter(e -> e.getValue() != null && !(e.getValue() instanceof Value.Items))
+                    .map(e -> List.of(e.getKey(), Value.asText(e.getValue())));
+            default -> Stream.empty();
+        };
+        return tuples.filter(tuple -> Facts.matches(tuple, pattern));
+    }
+
+    /** The element named, if any is; every element, if none is. */
+    private Stream<Element> elements(String id) {
+        if (id == null) return program.elements().stream();
+        var element = new ElementId(id);
+        return program.contains(element) ? Stream.of(program.element(element)) : Stream.empty();
+    }
+
+    /** As {@link #elements}, but only what lives in a type: a type itself, or anything inside one. */
+    private Stream<Element> inTypes(String id) {
+        return elements(id).filter(e -> e.kind() != Kind.PACKAGE && (e.kind().isType() || e.parent() != null));
+    }
+
+    private Stream<Element> types(String id) {
+        return elements(id).filter(e -> e.kind().isType());
+    }
+
+    private boolean topLevel(Element e) {
+        return e.kind().isType() && (e.parent() == null || program.element(e.parent()).kind() == Kind.PACKAGE);
+    }
+
+    private static String id(Element e) {
+        return e.id().value();
+    }
+
+    private static String packageOf(Element topLevel) {
+        var qualified = topLevel.qualified();
+        var dot = qualified.lastIndexOf('.');
+        return dot < 0 ? "" : qualified.substring(0, dot);
+    }
+
+    private static String used(Mode mode) {
+        return mode == Mode.CALL ? "call" : mode == Mode.NEW ? "new" : mode.isTypeUse() ? "type" : "value";
+    }
+
+    /** Two members that would be the same one in one type: same kind and name, and for a callable, same parameter types. */
+    private static boolean alike(Element a, Element b) {
+        if (a.kind() != b.kind() || !a.name().equals(b.name()) || a.kind().isType() || a.kind() == Kind.PACKAGE) return false;
+        return !(a.address() instanceof Address.Callable ca && b.address() instanceof Address.Callable cb)
+                || Objects.equals(ca.keys(), cb.keys());
+    }
+}

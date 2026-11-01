@@ -69,7 +69,6 @@ final class ScriptFunctions {
             case "unimplemented" -> args.getFirst() == null ? elems(List.of()) : elems(unimplemented(element(args, 0)));
             // language
             case "default-value" -> text(rules.defaultValue(text(args, 0)));
-            case "can-access" -> bool(rules.accessible(graph, element(args, 0).id(), element(args, 1).id()));
             case "wider" -> { // than it is; or, given another element, at least as wide as that one too
                 var all = rules.visibilities(graph, element(args, 0).id());
                 var from = all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1;

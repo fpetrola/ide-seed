@@ -85,11 +85,15 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   view, never a copy), Engine (`standard()`: on demand, from the query down; a recursive relation to its fixpoint) and
   Evaluation (answers, holds, `suppose`: the same rules with facts added and removed). `RulesContract` is what every
   engine answers alike. Knows nothing of programs.
-- `knowledge` (engine, refactoring) — goals/facts/effects planner over
+- `knowledge` (engine, refactoring, rules) — goals/facts/effects planner over
   `knowledge/src/main/resources/ide/knowledge/knowledge.ref` (`Knowledge.standard(library)`); it searches a
   violation or a diagnostic with the facts each gives, backward: what an effect `needs` holds by a `fact` or is made
   first by another effect (plans of at most 4 effects, the 12 cheapest); effects run on the real Run, straight on the
-  projection; no remedy or quick fix is written in Java. Every effect is a quick fix; only one that says `keeps meaning`
+  projection; no remedy or quick fix is written in Java. How Java is lives in `java.rules`: definitions (`def`, Datalog
+  evaluated by `rules`; `order` gives ordered values, `say` how a change is said). A predicate that definitions say is
+  made true by abduction (`Abduction`): the body read left to right, the graph (`GraphFacts`, a view of Program in no
+  language) binding variables, and a fact with known arguments that does not hold changed by the primitive that
+  changes it (visibility, parent, place, what a use binds, a constructor nobody has). Every effect is a quick fix; only one that says `keeps meaning`
   may also repair a refactoring by itself (a Plan that `changesMeaning` is never taken by the Repairer).
 - `maven` (nothing) — what Maven says about a project: `Maven.project(folder)` is the nearest folder with a pom.xml,
   and `classpath(cache)` is what `dependency:build-classpath` answers (test scope, every module of a reactor),

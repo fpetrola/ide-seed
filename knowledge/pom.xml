@@ -22,6 +22,10 @@
             <groupId>ide</groupId>
             <artifactId>ide-refactoring</artifactId>
         </dependency>
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-rules</artifactId>
+        </dependency>
         <!-- the planner is tested alone, over a projection with no language -->
         <dependency>
             <groupId>ide</groupId>
