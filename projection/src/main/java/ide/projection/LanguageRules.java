@@ -14,6 +14,12 @@ public interface LanguageRules {
     /** Visibility values from most to least restrictive. */
     List<String> visibilities();
 
+    /**
+     * The value a field of {@code type} (as written) holds while nothing assigns it, as the language writes it; empty
+     * if the language cannot write one.
+     */
+    String defaultValue(String type);
+
     /** The visibilities this element may have, from most to least restrictive. */
     default List<String> visibilities(Program graph, ElementId element) {
         return visibilities();

@@ -40,6 +40,12 @@ public final class MemoryProjection implements Projection {
         public List<String> visibilities() {
             return List.of("private", "package", "protected", "public");
         }
+
+        /** There is no language to write a value in. */
+        @Override
+        public String defaultValue(String type) {
+            return "";
+        }
     };
 
     /** Like {@link #OPEN}, except that a private member is accessible from its own top-level type only. */
@@ -53,6 +59,11 @@ public final class MemoryProjection implements Projection {
         @Override
         public List<String> visibilities() {
             return OPEN.visibilities();
+        }
+
+        @Override
+        public String defaultValue(String type) {
+            return OPEN.defaultValue(type);
         }
     };
 

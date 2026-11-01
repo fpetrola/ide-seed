@@ -47,14 +47,9 @@ final class ScriptFunctions {
                     .flatMap(t -> graph.members(t.id()).stream())
                     .filter(m -> m.kind().name().equals("FIELD") && m.name().equals(text(args, 1)))
                     .map(m -> elem(m.id())).findFirst().orElse(null);
-            case "default-value" -> text(switch (text(args, 0)) {
-                case "byte", "short", "int", "long", "float", "double" -> "0";
-                case "boolean" -> "false";
-                case "char" -> "'\\0'";
-                default -> "null";
-            });
             case "top-in" -> elem(graph.typesIn(text(args, 0)).getFirst().id());
             // language
+            case "default-value" -> text(rules.defaultValue(text(args, 0)));
             case "wider" -> {
                 var all = rules.visibilities(graph, element(args, 0).id());
                 yield texts(all.subList(all.indexOf(element(args, 0).fact(Fact.VISIBILITY)) + 1, all.size()));

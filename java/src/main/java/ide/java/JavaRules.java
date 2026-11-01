@@ -8,7 +8,7 @@ import ide.program.Program;
 
 import java.util.List;
 
-/** Java semantics: access control. */
+/** Java semantics: access control, and the value a field holds before anything is assigned to it. */
 public final class JavaRules implements LanguageRules {
 
     @Override
@@ -27,6 +27,17 @@ public final class JavaRules implements LanguageRules {
     @Override
     public List<String> visibilities() {
         return List.of("private", "package", "protected", "public");
+    }
+
+    /** A primitive's zero, {@code false} or {@code '\0'}; {@code null} for any other type. */
+    @Override
+    public String defaultValue(String type) {
+        return switch (type) {
+            case "byte", "short", "int", "long", "float", "double" -> "0";
+            case "boolean" -> "false";
+            case "char" -> "'\\0'";
+            default -> "null";
+        };
     }
 
     /** Top-level types are package-private or public; members may be anything. */

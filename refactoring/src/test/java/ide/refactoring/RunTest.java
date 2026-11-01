@@ -6,8 +6,10 @@ import ide.program.ElementId;
 import ide.program.Fact;
 import ide.program.Mode;
 import ide.program.Program;
+import ide.projection.LanguageRules;
 import ide.projection.PrimitiveRejected;
 import ide.projection.kit.MemoryProjection;
+import ide.refactoring.script.Script;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -149,6 +151,33 @@ class RunTest {
     /** package a: class A { int x; } */
     private static MemoryProjection lone() {
         return MemoryProjection.builder().type("a.A").field("a.A", "x", "int").build();
+    }
+
+    /** A script knows no language: what only a language knows, such as how it writes a value, it asks the rules. */
+    @Test
+    void whatOnlyALanguageKnowsAScriptAsksItsRules() {
+        var rules = new LanguageRules() {
+            @Override
+            public boolean accessible(Program program, ElementId site, ElementId target) {
+                return true;
+            }
+
+            @Override
+            public List<String> visibilities() {
+                return List.of("hidden", "shown");
+            }
+
+            @Override
+            public String defaultValue(String type) {
+                return type.equals("int") ? "zero" : "nothing";
+            }
+        };
+        var projection = MemoryProjection.builder().rules(rules).type("a.A").field("a.A", "x", "int").build();
+        var field = new Value.Elem(id(projection.program(), "a.A#x"));
+
+        var text = Script.render("${default-value(type(field))}", Run.on(projection, Library.standard()), Map.of("field", field));
+
+        assertThat(text).isEqualTo("zero");
     }
 
     @Test
