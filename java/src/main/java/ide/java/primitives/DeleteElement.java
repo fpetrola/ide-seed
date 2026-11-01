@@ -27,8 +27,9 @@ import java.util.List;
 
 /**
  * Deletes an element nothing references: a member's lines (its comment included), a parameter the body does not use
- * (and its argument in every call), a local declared alone on its lines whose value has no effects, or a type, with
- * the imports that name it: a top-level type's file, a nested type's lines. A member deleted into another leaves its uses to it: they name it, if it has another name, in the
+ * (and its argument in every call), a local declared alone on its lines whose value has no effects, a statement alone
+ * on its lines with the locals it declares, or a type, with the imports that name it: a top-level type's file, a
+ * nested type's lines. A member deleted into another leaves its uses to it: they name it, if it has another name, in the
  * same edit that removes the member, so they never bind something in between.
  */
 final class DeleteElement {
@@ -41,6 +42,7 @@ final class DeleteElement {
         var element = before.element(delete.element());
         var change = delete.intent(before, null);
         if (element.kind() == Kind.LOCAL) for (var gone : deleteLocal(c, before, element)) change = change.expect(gone);
+        else if (element.kind() == Kind.STATEMENT) deleteStatement(c, before, element);
         else if (element.kind() == Kind.PARAM) deleteParam(c, element);
         else if (element.kind().isType()) deleteType(c, before, element);
         else deleteMember(c, before, element, delete.into() == null ? null : before.element(delete.into()));
@@ -59,8 +61,7 @@ final class DeleteElement {
         var statement = variable.getParentNode().filter(d -> ((VariableDeclarationExpr) d).getVariables().size() == 1)
                 .flatMap(Node::getParentNode).filter(ExpressionStmt.class::isInstance).orElse(null);
         var unit = declaration.unit();
-        if (statement == null || !unit.lines(statement.getBegin().orElseThrow().line, statement.getEnd().orElseThrow().line).strip()
-                .equals(unit.textOf(statement).strip())) {
+        if (statement == null || !ide.java.syntax.Statements.alone(unit, statement)) {
             throw new PrimitiveRejected("delete.unsupported", local.qualified() + " is not declared alone on its lines");
         }
         var effect = variable.getInitializer().map(Bodies::effect).orElse(null);
@@ -85,6 +86,34 @@ final class DeleteElement {
             c.ids().placeStatements(local.parent(), own.stream().filter(s -> !s.equals(own.get(place))).toList());
         }
         return gone;
+    }
+
+    /**
+     * A statement alone on its lines, with the locals it declares: the uses made in it go with it (the intent says so),
+     * and the statements and locals after it close ranks. What read its locals afterwards binds nothing, which the
+     * verifier sees.
+     */
+    private static void deleteStatement(Context c, Program before, Element statement) {
+        var declaration = c.declaration(statement);
+        var unit = declaration.unit();
+        var node = declaration.node();
+        if (!ide.java.syntax.Statements.alone(unit, node)) throw new PrimitiveRejected("delete.unsupported", statement.qualified() + " shares its lines");
+        CallableDeclaration<?> callable = node.findAncestor(CallableDeclaration.class).orElseThrow();
+        var gone = new ArrayList<ElementId>();
+        var others = new LinkedHashMap<ElementId, String>();
+        for (var local : Bodies.locals(callable)) {
+            if (node.isAncestorOf(local)) gone.add(c.reader().local(local));
+            else others.put(c.reader().local(local), local.getNameAsString());
+        }
+        var left = before.children(statement.parent()).stream().filter(e -> e.kind() == Kind.STATEMENT && !e.id().equals(statement.id()))
+                .map(Element::id).toList();
+        var edits = new EditSet();
+        Members.remove(edits, unit, node);
+        c.sources().apply(edits);
+        c.ids().forget(statement.id());
+        gone.forEach(c.ids()::forget);
+        c.ids().placeLocals(statement.parent(), others);
+        c.ids().placeStatements(statement.parent(), left);
     }
 
     private static void deleteMember(Context c, Program before, Element element, Element into) {

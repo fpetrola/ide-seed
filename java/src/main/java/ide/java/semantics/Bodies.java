@@ -53,9 +53,14 @@ public final class Bodies {
 
     /** The statements of a method's or constructor's body, in order; none if it has no body. */
     public static List<Statement> statements(CallableDeclaration<?> callable) {
-        var body = callable instanceof MethodDeclaration method ? method.getBody().orElse(null)
-                : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
+        var body = body(callable);
         return body == null ? List.of() : body.getStatements();
+    }
+
+    /** A method's or constructor's body; null for a method without one. */
+    public static BlockStmt body(CallableDeclaration<?> callable) {
+        return callable instanceof MethodDeclaration method ? method.getBody().orElse(null)
+                : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
     }
 
     /** Where a statement is among its body's, by what it is and not by how it looks; -1 if it is none of them. */

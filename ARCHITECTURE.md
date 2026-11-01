@@ -209,10 +209,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     idos, hechos cambiados. Es lo que consumen las vistas del motor.
   - Vocabulario de cambio. `Primitive`, un tipo sellado de records:
     - `Create(kind, parent, name, spec)`: `spec` trae hechos textuales iniciales (type, default para parámetros,
-      body), así la creación es un paso y no dos con marcadores.
+      body), así la creación es un paso y no dos con marcadores. Una sentencia se crea dicha en el lenguaje de
+      cuerpos, al final del cuerpo, y hace los usos que nombra.
     - `Delete(element, into)`: sin `into`, borra lo que nada usa; con `into`, fusiona: un campo en un campo, un
       método en un método, y los usos del borrado pasan al otro.
-    - `Move(element, parent, before)`: también reordena parámetros.
+    - `Move(element, parent, before)`: también reordena parámetros, y lleva una sentencia antes de otra o al final de
+      un cuerpo, en su método o en otro; entre métodos, los usos hechos en ella pasan a ser del otro.
     - `Rename(element, name)`.
     - `Set(element, fact, value)`: hechos cerrados y hechos textuales (type textual, initializer). Un cuerpo se
       dice en el lenguaje de cuerpos.
@@ -1316,6 +1318,20 @@ que esto no escala solo:
    nuevo con su identidad y con los usos hechos en ellas, y una sentencia que lo llama ocupa su lugar. El contrato ya
    extrae del fixture sin un fragmento en los términos de cada driver. Las líneas y el tramo de una expresión quedan
    para lo que selecciona una persona.
+
+   **Ciclo 4 hecho el 2026-11-01, y con él la fase 2**: `Create`, `Delete` y `Move` de sentencias, en los dos drivers.
+   - Ningún primitivo nuevo. Una sentencia se crea dicha en el lenguaje de cuerpos al final del cuerpo, y `Move` la
+     pone antes de otra; componer es mejor que darle a `Create` un lugar.
+   - La intención la dice `program`, sin lenguaje: crear dice los usos que la sentencia nombra (`Added`, así una
+     captura es un `binding.rebound`); mover a otro método, que sus usos son del otro (`Resited`); borrar se lleva los
+     usos hechos en ella (`UsesGone`).
+   - Java escribe la sentencia como un cuerpo que conserva lo que el método hace, y la mueve o la borra por sus líneas,
+     con su comentario.
+   - Lo que queda afuera: mover una sentencia que declara locales (tendrían que ir con ella; se rechaza), y una
+     sentencia que no está sola en sus líneas.
+   - Mover o borrar una sentencia puede cambiar lo que hace el programa sin cambiar ningún vínculo (un orden de
+     escrituras). Pasa lo mismo que con un cuerpo escrito de nuevo: esos primitivos cambian lo que un refactoring o un
+     fix quiere cambiar, y quien sabe si se conserva el sentido es el conocimiento (`keeps meaning`), no el primitivo.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.

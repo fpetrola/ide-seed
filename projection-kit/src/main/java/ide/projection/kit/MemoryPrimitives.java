@@ -32,6 +32,7 @@ final class MemoryPrimitives {
     static Change apply(MemoryGraph graph, Primitive primitive, Program before) {
         PrimitiveRejected.unlessInWorkspace(before, primitive);
         return switch (primitive) {
+            case Primitive.Create c when c.kind() == Kind.STATEMENT -> c.intent(before, statement(graph, c.parent(), c.facts().get(Fact.BODY)));
             case Primitive.Create c -> {
                 var created = create(graph, c.kind(), c.parent(), c.name(), c.argument());
                 c.facts().forEach((fact, value) -> set(graph, created, fact.label(), value)); // born with them
@@ -94,6 +95,21 @@ final class MemoryPrimitives {
         return id;
     }
 
+    /** A statement at the end of a body, said in no language: the uses it names are made in it. */
+    private static ElementId statement(MemoryGraph graph, ElementId method, String said) {
+        var body = said == null ? null : Body.parse(said, graph.read(), method);
+        if (body != null && (body.statements().size() != 1 || body.keeps())) {
+            throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
+        }
+        var statement = create(graph, Kind.STATEMENT, method, "", null);
+        if (body == null) return statement;
+        for (var use : Body.uses(body.statements().getFirst())) {
+            graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()).in(statement));
+        }
+        graph.nodes.put(statement, graph.nodes.get(statement).with(Fact.BODY, said));
+        return statement;
+    }
+
     /** An element nothing uses goes; one deleted {@code into} another leaves its uses to it first. */
     private static void delete(MemoryGraph graph, ElementId element, ElementId into) {
         var doomed = graph.subtree(element);
@@ -106,11 +122,12 @@ final class MemoryPrimitives {
         for (var use : graph.uses) if (doomed.contains(use.target()) && !doomed.contains(use.site())) users.add(graph.render(use.site()));
         if (!users.isEmpty()) throw new PrimitiveRejected("delete.referenced", graph.render(element) + " is used by " + users);
         var node = graph.nodes.get(element);
-        graph.uses.removeIf(use -> doomed.contains(use.site()));
+        graph.uses.removeIf(use -> doomed.contains(use.site()) || use.statement() != null && doomed.contains(use.statement()));
         graph.order.removeAll(doomed);
         doomed.forEach(graph.nodes::remove);
         graph.ids.forget(element);
         if (node.kind() == Kind.PARAM) graph.resign(node.parent());
+        if (node.kind() == Kind.STATEMENT) graph.ids.placeStatements(node.parent(), graph.statements(node.parent())); // those after close ranks
     }
 
     private static void move(MemoryGraph graph, ElementId element, ElementId parent, ElementId before) {
@@ -124,6 +141,10 @@ final class MemoryPrimitives {
             ids.rebindType(((Address.Type) ids.address(element)).qualified(), now);
         } else if (node.kind() == Kind.PARAM) {
             if (!parent.equals(node.parent())) throw new PrimitiveRejected("projection.unsupported", "parameters move within their method");
+        } else if (node.kind() == Kind.STATEMENT) {
+            if (before != null && !parent.equals(graph.nodes.get(before).parent())) {
+                throw new PrimitiveRejected("move.before", graph.render(before) + " is not a statement of " + graph.render(parent));
+            }
         } else {
             var moved = ids.address(element).withOwner(parent);
             if (ids.has(moved)) throw duplicate(ids.render(moved));
@@ -133,6 +154,11 @@ final class MemoryPrimitives {
         graph.order.remove(element);
         graph.order.add(before == null ? graph.order.size() : graph.order.indexOf(before), element);
         if (node.kind() == Kind.PARAM) graph.resign(parent);
+        if (node.kind() == Kind.STATEMENT) { // its place among the body's statements, and the uses made in it, go with it
+            graph.ids.placeStatements(parent, graph.statements(parent));
+            if (!parent.equals(node.parent())) graph.ids.placeStatements(node.parent(), graph.statements(node.parent()));
+            graph.uses.replaceAll(use -> element.equals(use.statement()) ? use.moved(parent, use.target(), use.name()) : use);
+        }
     }
 
     private static void rename(MemoryGraph graph, ElementId element, String name) {

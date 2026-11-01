@@ -8,7 +8,9 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import ide.java.syntax.Imports;
 import ide.java.syntax.Lists;
+import ide.java.semantics.Bodies;
 import ide.java.syntax.Members;
+import ide.java.syntax.Statements;
 import ide.java.text.EditSet;
 import ide.java.text.Unit;
 import ide.program.Change;
@@ -30,7 +32,8 @@ import static ide.java.semantics.Resolution.resolveType;
 /**
  * Moves an element, keeping its identity: a member into another type (with its comment, just before another member
  * or at the end), a parameter within its method (the calls' arguments follow), a top-level type to another package
- * (a new file, and the imports that follow).
+ * (a new file, and the imports that follow), a statement before another of a body or at its end, in its method or
+ * another one (one that declares locals stays: they would have to go with it).
  */
 final class MoveElement {
 
@@ -43,6 +46,7 @@ final class MoveElement {
         var anchor = move.before() == null ? null : before.element(move.before());
         if (target.kind() == Kind.PACKAGE) moveType(c, before, element, target);
         else if (element.kind() == Kind.PARAM) moveParam(c, element, target, anchor);
+        else if (element.kind() == Kind.STATEMENT) moveStatement(c, before, element, target, anchor);
         else moveMember(c, element, target, anchor);
         return move.intent(before, null);
     }
@@ -60,6 +64,40 @@ final class MoveElement {
         else Members.insertBefore(edits, destination.unit(), c.declaration(anchor).node(), text);
         c.sources().apply(edits);
         c.ids().move(member.id(), target.id());
+    }
+
+    private static void moveStatement(Context c, Program before, Element statement, Element method, Element anchor) {
+        if (anchor != null && !method.id().equals(anchor.parent())) {
+            throw new PrimitiveRejected("move.before", anchor.qualified() + " is not a statement of " + method.qualified());
+        }
+        if (anchor != null && anchor.id().equals(statement.id())) return;
+        var declaration = c.declaration(statement);
+        var unit = declaration.unit();
+        var node = declaration.node();
+        if (!Statements.alone(unit, node)) throw new PrimitiveRejected("move.unsupported", statement.qualified() + " shares its lines");
+        if (!node.findAll(com.github.javaparser.ast.expr.VariableDeclarationExpr.class).isEmpty()) {
+            throw new PrimitiveRejected("move.unsupported", statement.qualified() + " declares locals, which would have to go with it");
+        }
+        var destination = c.declaration(method);
+        CallableDeclaration<?> callable = destination.as(CallableDeclaration.class);
+        var statements = Bodies.statements(callable);
+        var at = destination.unit();
+        var indent = statements.isEmpty() ? at.indentation(callable.getBegin().orElseThrow().line) + "    "
+                : at.indentation(statements.getFirst().getBegin().orElseThrow().line);
+        var text = Members.text(unit, node, indent);
+        var edits = new EditSet();
+        Members.remove(edits, unit, node);
+        if (anchor == null) Statements.append(edits, at, Bodies.body(callable), indent, text);
+        else Statements.insertBefore(edits, at, c.declaration(anchor).node(), text);
+        var source = statement.parent();
+        var left = before.children(source).stream().filter(e -> e.kind() == Kind.STATEMENT && !e.id().equals(statement.id()))
+                .map(Element::id).toList();
+        var placed = new ArrayList<>(source.equals(method.id()) ? left : before.children(method.id()).stream()
+                .filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList());
+        placed.add(anchor == null ? placed.size() : placed.indexOf(anchor.id()), statement.id());
+        c.sources().apply(edits);
+        c.ids().placeStatements(method.id(), placed);
+        if (!source.equals(method.id())) c.ids().placeStatements(source, left);
     }
 
     private static void moveParam(Context c, Element param, Element method, Element anchor) {

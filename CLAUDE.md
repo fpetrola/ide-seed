@@ -41,7 +41,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   local is part of. Reconciliation also pairs a body's statements after an edit by hand by their order and text. The vocabulary of
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
   its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
-  baseline; an Extract's fragment names statements by their ids, or is what only the projection understands), Change (produced element, expectations, pins: what a repair may not take back) and Body (what a method
+  baseline; an Extract's fragment names statements by their ids, or is what only the projection understands; a
+  statement is created said in the body language at the end of a body, moved before another or into another method
+  with the uses made in it, and deleted with them), Change (produced element, expectations, pins: what a repair may not take back) and Body (what a method
   does in no language: return, assign a field, new, a call, the type's default, `...` first to keep what it does and
   add after it, over elements named `#{id}`; its
   parameters are values, not uses; a Set of a body expects the old body's uses Dropped and the ones it names Added).

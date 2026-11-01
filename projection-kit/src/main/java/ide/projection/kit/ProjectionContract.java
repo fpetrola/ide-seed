@@ -102,6 +102,11 @@ public abstract class ProjectionContract {
                 new Scenario("extract a statement", p -> new Primitive.Extract(id(p, "a.A#total()"), fragmentOfTotalCallingM(), "add")),
                 new Scenario("extract statements by their ids", p -> new Primitive.Extract(id(p, "a.A#total()"),
                         id(p, "a.A#total()[2]").value() + "," + id(p, "a.A#total()[3]").value(), "finish")),
+                new Scenario("create a statement", p -> new Primitive.Create(Kind.STATEMENT, id(p, "a.A#k(int)"), "",
+                        Map.of(Fact.BODY, "return " + Body.name(id(p, "a.A#x"))), null)),
+                new Scenario("move a statement into another method", p -> new Primitive.Move(id(p, "a.B#n()[1]"), id(p, "a.A#k(int)"),
+                        id(p, "a.A#k(int)[1]"))),
+                new Scenario("delete a statement", p -> new Primitive.Delete(id(p, "a.A#total()[2]"))),
                 new Scenario("rename a type", p -> new Primitive.Rename(id(p, "a.A"), "Base")),
                 new Scenario("move a type", p -> new Primitive.Move(id(p, "a.I"), id(p, "b"), null)),
                 new Scenario("bind an unresolved use", p -> new Primitive.Retarget(unresolved(p, "b.C#price"), id(p, "a.A"))),
@@ -236,6 +241,43 @@ public abstract class ProjectionContract {
         assertThat(after.referencesIn(own.get(1).id())).anyMatch(r -> r.target().equals(added) && r.mode() == Mode.CALL);
         assertThat(p.expecting(change).diff(after).lost()).isEmpty();
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+    }
+
+    /**
+     * Obligation 14 too: a statement is created said in no language at the end of a body, making the uses it names; it
+     * moves before another, or into another method with the uses made in it, and stays who it is; and it goes with them.
+     */
+    @Test
+    void aStatementIsCreatedMovedAndDeletedWithTheUsesMadeInIt() {
+        var projection = fixture();
+        var p = projection.program();
+        var k = id(p, "a.A#k(int)");
+        var n = id(p, "a.B#n()");
+        var own = id(p, "a.A#k(int)[1]");
+
+        var created = projection.apply(new Primitive.Create(Kind.STATEMENT, k, "", Map.of(Fact.BODY, "return " + Body.name(id(p, "a.A#x"))), null))
+                .produced();
+        projection.apply(new Primitive.Move(created, k, own));
+
+        var placed = projection.program();
+        assertThat(placed.children(k)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id).containsExactly(created, own);
+        assertThat(placed.referencesIn(created)).extracting(r -> placed.element(r.target()).qualified() + " " + r.mode().label())
+                .containsExactly("a.A#x read");
+        assertThat(placed.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+
+        var moved = projection.apply(new Primitive.Move(created, n, null));
+
+        var away = projection.program();
+        assertThat(away.children(n)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id).endsWith(created);
+        assertThat(away.referencesIn(created)).extracting(r -> r.site()).containsExactly(n);
+        assertThat(placed.expecting(moved).diff(away).lost()).isEmpty();
+
+        projection.apply(new Primitive.Delete(created));
+
+        var gone = projection.program();
+        assertThat(gone.contains(created)).isFalse();
+        assertThat(gone.children(n)).filteredOn(e -> e.kind() == Kind.STATEMENT).hasSize(1);
+        assertThat(gone.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
     /** Obligation 8 too: a body that starts with {@code ...} keeps what the method does, and adds what follows at its end. */

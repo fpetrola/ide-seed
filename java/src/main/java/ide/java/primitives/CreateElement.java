@@ -29,9 +29,24 @@ final class CreateElement {
     }
 
     static Change apply(Primitive.Create create, Context c, Program before) {
+        if (create.kind() == Kind.STATEMENT) return create.intent(before, statement(c, before, create.parent(), create.facts().get(ide.program.Fact.BODY)));
         var created = create(c, create.kind(), create.parent(), create.name(), create.argument());
         create.facts().forEach((fact, value) -> SetAttribute.set(c, created, fact.label(), value));
         return create.intent(before, created);
+    }
+
+    /** A statement at the end of a body, said in no language: written in Java as a body that keeps what the method does. */
+    private static ElementId statement(Context c, Program before, ElementId method, String said) {
+        if (said == null) throw new PrimitiveRejected("create.statement", "a statement is said in no language, as its body");
+        var body = ide.program.Body.parse(said, before, method);
+        var callable = before.element(method);
+        var nothing = body.statements().size() == 1 && body.statements().getFirst() instanceof ide.program.Body.Return answer
+                && answer.value() instanceof ide.program.Body.Default
+                && (callable.kind() == Kind.CONSTRUCTOR || "void".equals(callable.fact(ide.program.Fact.TYPE))); // Java writes nothing for it
+        if (body.statements().size() != 1 || body.keeps() || nothing) throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
+        var count = (int) before.children(method).stream().filter(e -> e.kind() == Kind.STATEMENT).count();
+        WriteBody.apply(c, method, "...\n" + said);
+        return c.ids().of(new Address.Statement(method, count), Kind.STATEMENT);
     }
 
     private static ElementId create(Context c, Kind kind, ElementId parent, String name, String argument) {

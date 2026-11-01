@@ -1,6 +1,8 @@
 package ide.java;
 
+import ide.program.Body;
 import ide.program.ElementId;
+import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
@@ -65,4 +67,53 @@ class StatementsTest {
         assertThat(after.get(4)).isEqualTo(before.get(3));
         assertThat(List.of(after.get(0), after.get(3))).doesNotContainAnyElementsOf(before);
     }
+
+    @Test
+    void aStatementIsWrittenWhereItGoesAndItsLinesGoWithIt() {
+        var projection = JavaProjection.of(Map.of("a/B.java", """
+                package a;
+
+                class B {
+                    int x;
+
+                    int k(int p) {
+                        return p;
+                    }
+
+                    void n() {
+                        x = 1;
+                    }
+                }
+                """));
+        var p = projection.program();
+        var k = p.find("a.B#k(int)").orElseThrow().id();
+        var n = p.find("a.B#n()").orElseThrow().id();
+
+        var created = projection.apply(new Primitive.Create(Kind.STATEMENT, k, "",
+                Map.of(Fact.BODY, "return " + Body.name(p.find("a.B#x").orElseThrow().id())), null)).produced();
+        projection.apply(new Primitive.Move(created, k, p.find("a.B#k(int)[1]").orElseThrow().id()));
+        projection.apply(new Primitive.Move(p.find("a.B#n()[1]").orElseThrow().id(), k, null));
+
+        assertThat(projection.source("a/B.java")).contains("""
+                    int k(int p) {
+                        return x;
+                        return p;
+                        x = 1;
+                    }
+
+                    void n() {
+                    }
+                """);
+
+        projection.apply(new Primitive.Delete(created));
+
+        assertThat(projection.source("a/B.java")).contains("""
+                    int k(int p) {
+                        return p;
+                        x = 1;
+                    }
+                """);
+        assertThat(statements(projection.program(), "a.B#k(int)")).hasSize(2);
+    }
 }
+

@@ -40,10 +40,20 @@ public sealed interface Primitive {
             case Create c -> {
                 if (c.kind() == Kind.PACKAGE) yield Change.produced(produced);
                 var change = Change.produced(produced).pin(produced, Change.Aspect.PARENT, Change.Aspect.NAME);
+                if (c.kind() == Kind.STATEMENT && c.facts().containsKey(Fact.BODY)) { // what the statement says, its method makes
+                    for (var made : body(before, c.parent(), "...\n" + c.facts().get(Fact.BODY)).expectations()) change = change.expect(made);
+                }
                 yield c.facts().containsKey(Fact.VISIBILITY) ? change.pin(produced, Change.Aspect.VISIBILITY) : change;
             }
             case Delete d -> Change.NONE.expect(d.into() == null ? new Change.UsesGone(d.element()) : new Change.Merged(d.element(), d.into()));
-            case Move m -> Change.NONE.pin(m.element(), Change.Aspect.PARENT);
+            case Move m -> {
+                var change = Change.NONE.pin(m.element(), Change.Aspect.PARENT);
+                var moved = before.element(m.element());
+                if (moved.kind() == Kind.STATEMENT && !m.parent().equals(moved.parent())) { // the uses made in it are the other method's
+                    for (var use : before.referencesIn(m.element())) change = change.expect(new Change.Resited(use.target(), use.site(), m.parent()));
+                }
+                yield change;
+            }
             case Rename r -> Change.NONE.pin(r.element(), Change.Aspect.NAME);
             case Set s -> {
                 if (Fact.BODY.label().equals(s.attribute())) yield body(before, s.element(), s.value());
