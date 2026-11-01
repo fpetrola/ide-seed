@@ -27,9 +27,12 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
   parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
-  its `intent`) and Change (produced element, expectations, pins).
+  its `intent`), Change (produced element, expectations, pins) and Body (what a method does in no language: return,
+  assign a field, new, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
+  the old body's uses Dropped and the ones it names Added).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
-  typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`), LanguageRules, Diagnostic,
+  typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`), LanguageRules (access, visibilities, how
+  the language writes a field's default value), Diagnostic,
   CompletionContext, PrimitiveRejected (and the rule every driver applies: nothing changes a library element).
 - `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
@@ -39,7 +42,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses),
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
   `ide.java.semantics` (Reader: program + declarations + use nodes; Resolution, Keys, WorkspaceTypeSolver,
-  JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
+  JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a
+  Body in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. An edit by hand reconciles identity (types, members, parameters,
@@ -51,15 +55,16 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `engine` (projection) — Transaction (born with its Repairer; intercepts `apply`, folds each declared Change into
   the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins
   too; `commit()` verifies and repairs),
-  Verifier (a list of Views compared through a Comparison: BindingView, AccessView, DispatchView, and CompilerView,
-  costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
+  Verifier (a list of Views compared through a Comparison: BindingView, which also sees a written body binding
+  something else than it names, AccessView, DispatchView, and CompilerView, costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
   only place that writes sigils), Result, Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
 - `refactoring` (projection, engine) — Refactoring (`apply(Run, Args)` answers an ElementId), Library, Run (one
   kind, two places: `Run.in(tx, library)` inside a transaction; `Run.on(projection, library)` with no
   engine, which is how scripts are tested), Args (the one place an id-or-address is resolved), Value (Elem, Ref,
   Text, Bool, Items), Primitives (read off the Primitive records: nothing registered by hand), ChangeSignature (the
-  only Java composite); the `.ref` language in `ide.refactoring.script`; the catalog
-  `refactoring/src/main/resources/ide/refactoring/standard.ref`.
+  only Java composite); the `.ref` language in `ide.refactoring.script` (in a text, `${expr}` writes a value and
+  `#{expr}` writes elements as a body names them); the catalog
+  `refactoring/src/main/resources/ide/refactoring/standard.ref`, which writes no code of any language.
 - `knowledge` (engine, refactoring) — goals/effects planner over
   `knowledge/src/main/resources/ide/knowledge/knowledge.ref` (`Knowledge.standard(library)`); it searches a
   violation or a diagnostic with the facts each gives; effects run on the real Run, straight on the projection; no
@@ -92,7 +97,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - Product tests live in each module and use the product alone, in its own vocabulary; acceptance scenarios live in
   `acceptance`. The proposed double loop is in ARCHITECTURE.md, section "Cómo se testea".
 - A new dependency between products is a pom change, made in the same commit and reflected in ARCHITECTURE.md.
-- Catalog scripts stay within 20 statements, and every Java body in them is marked `# leak: Java body` (CatalogTest).
+- Catalog scripts stay within 20 statements and write no code of any language: a body is said in the body language
+  (`ide.program.Body`), and what only a language can write is asked of its rules (CatalogTest runs the bodies on the
+  memory projection).
 - UI and MCP come last.
 
 ## Architecture and migration

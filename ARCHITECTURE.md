@@ -188,17 +188,23 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     - `Delete(element)`.
     - `Move(element, parent, before)`: también reordena parámetros.
     - `Rename(element, name)`.
-    - `Set(element, fact, value)`: hechos cerrados y hechos textuales (type textual, body, initializer).
+    - `Set(element, fact, value)`: hechos cerrados y hechos textuales (type textual, initializer). Un cuerpo se
+      dice en el lenguaje de cuerpos.
     - `Link(element, mode, target)`: extends, implements, declared hacia un tipo del workspace. Reemplaza
       `set superclass`, `set implements` y `set type` con tipo del workspace.
     - `Retarget(reference, target)`.
     - `Extract(method, fragment, name)` e `Inline(reference)`: el fragmento es una dirección opaca que entiende la
       proyección (hoy `primera-última` en líneas).
+  - `Body`: lo que hace un método, en ningún lenguaje. Sentencias (`return`, asignar un campo) sobre expresiones (el
+    valor de un campo o de un parámetro, un objeto nuevo), con cada elemento nombrado por id como `#{id}`. Es el
+    cuerpo de un método: sus parámetros son valores del cuerpo, no usos entre elementos. `uses()` dice qué usos hace
+    de lo que está fuera del método. Como `Fact`, crece solo cuando una plantilla necesita decir algo que no puede.
   - `Change`: lo que un primitivo devuelve. `produced` (el elemento creado, si hay), `expectations` y `pins`.
     `Expectation`: `Retargeted(site, from, to)`, `Resited(target, from, to)`, `Dropped(site, target)`,
-    `UsesGone(element)`. `Pin(element, aspect)` con aspecto parent, name o visibility: lo que el refactoring hizo a
-    propósito y una reparación no puede deshacer.
-- **Qué ignora.** Texto, posiciones, archivos, parser, compilador, cuerpos de métodos.
+    `Added(site, target, name, mode)`, `Bound(use, to)`, `UsesGone(element)`. `Pin(element, aspect)` con aspecto
+    parent, name o visibility: lo que el refactoring hizo a propósito y una reparación no puede deshacer.
+- **Qué ignora.** Texto, posiciones, archivos, parser, compilador, y los cuerpos como los escribe un lenguaje: de un
+  cuerpo sabe solo lo que dice `Body`.
 - **Prueba de autonomía.** Un test arma un grafo con tres elementos y dos referencias y ejercita consultas, diff y
   direcciones, sin parser.
 - **Estado actual** (fases 1 y 2 cerradas, 2026-10-31). El vocabulario de cambio existe: `Primitive` con `Create`
@@ -215,7 +221,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `Reconciliation` empareja, después de una edición a mano, cada elemento nuevo con el de antes que es (renombrado,
   con otra firma o movido de paquete), solo cuando la estructura no deja dudas: el tipo de un campo, el nombre o el
   cuerpo de un método, el lugar de un parámetro, lo que contiene un tipo, o ser el único de su clase que se fue de un
-  padre mientras llegaba otro. `Identity.transfer` le da al id viejo la dirección nueva.
+  padre mientras llegaba otro. `Identity.transfer` le da al id viejo la dirección nueva. Desde el ítem 4 de la
+  etapa 2 el vocabulario de cambio dice cuerpos: `Body`, y un `Set` de cuerpo declara que los usos del cuerpo viejo se
+  van (`Dropped`) y que el método hace los que el nuevo nombra (`Added`).
 - **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
   enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
 
@@ -232,8 +240,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `edit(path, text)`: edición manual; el texto del usuario es la autoridad; rechaza lo que no parsea.
   - `List<Diagnostic> diagnostics()`: la vista del compilador.
   - `Optional<CompletionContext> completion(path, text, offset)`.
-  - `LanguageRules rules()`: accesibilidad y visibilidades posibles de un elemento. Ya no ofrece candidatos de
-    import: el programa tiene los tipos que un uso podría nombrar.
+  - `LanguageRules rules()`: accesibilidad, visibilidades posibles de un elemento, y cómo escribe el lenguaje el
+    valor que tiene un campo que nadie asignó. Ya no ofrece candidatos de import: el programa tiene los tipos que un
+    uso podría nombrar.
 - **Obligaciones del driver**, que el kit de conformidad (un test abstracto que corre contra cada implementación)
   verifica:
   1. Identidad: un elemento conserva su id a través de rename, move, set y link; lo creado recibe un id nuevo; lo
@@ -246,6 +255,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   6. Un elemento de biblioteca nunca cambia: todo primitivo que lo cambiaría se rechaza (`projection.library`, la
      regla vive en `PrimitiveRejected.unlessInWorkspace` y la usan los dos drivers).
   7. Un retarget de un uso sin resolver lo liga: desde ahí es una referencia.
+  8. Un cuerpo dicho sin lenguaje (`Body`) se escribe en el del driver, y el método hace los usos que el cuerpo
+     nombra, en ese orden. Sus parámetros son valores, no usos.
 - **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
   el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
   mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo
@@ -257,7 +268,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   lo usa la sesión, que lo conoce. El contrato verifica las cinco obligaciones más los parámetros (se crean con el
   argumento que pasan las llamadas y se mueven dentro de su método). Corre contra `MemoryProjection` y contra el
   driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba. En la etapa 2 el
-  fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7.
+  fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7. El ítem 4 suma
+  la obligación 8 y dos escenarios para las obligaciones 2 y 3: escribir un cuerpo, y reemplazar uno que tenía usos.
+  La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
   hasta que estorbe.
 
@@ -290,7 +303,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Estado actual** (fase 3 cerrada, 2026-10-31). Las cinco capas existen y ningún archivo pasa de 275 líneas.
   Cada capa tiene tests propios: `SourcesTest` (texto), `SyntaxTest` (sintaxis), el contrato (el driver entero) y
   `LayersTest`. Un miembro movido lleva su comentario. Un texto que no parsea se rechaza como
-  `projection.unparsable`, en vez de romper. `set` todavía tiene un caso que solo entiende Java: `initializer`. Desde
+  `projection.unparsable`, en vez de romper. `set` todavía tiene un caso que solo entiende Java: `initializer`, el
+  valor inicial como se escribe, que viene del usuario o de las reglas (`JavaRules.defaultValue`). Desde
   la etapa 2 el Reader suma los tipos de biblioteca que el código nombra (con id `lib:` y su nombre, fuera de la
   tabla de identidad, donde cambiarían las claves de los miembros) y los tipos escritos que no ligan nada, con los
   tipos del JDK que podrían nombrar. Ligar uno escribe el nombre del destino y lo importa si hace falta. Reemplazar
@@ -301,8 +315,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   solo si pueden ligar distinto (todos, cuando cambió un tipo; si no, los que se llaman como un miembro cuya
   declaración cambió y ligaban un miembro de su tipo, de un supertipo o de un subtipo, o están dentro de su tipo o de
   un subtipo, o no ligaban nada, o ligaban algo que el programa no sigue). La forma de lo declarado se lee del texto
-  (`syntax.Shape`); `resolvedLastTime()` dice qué archivos resolvió la última lectura.
-- **Abierto.** javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez. Borrado de
+  (`syntax.Shape`); `resolvedLastTime()` dice qué archivos resolvió la última lectura. Desde el ítem 4 escribe en Java
+  los cuerpos dichos sin lenguaje (`primitives.WriteBody`, con las formas de Java en `syntax.Render`): un campo o un
+  parámetro por su nombre, un campo a través de `this` (o de su tipo, si es estático) cuando un parámetro del mismo
+  nombre lo tapa, y un objeto nuevo por el nombre simple de su tipo, importado si hace falta.
+- **Abierto.** Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
+  cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez. Borrado de
   tipos anidados. Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
   cuerpo, porque esos usos no son referencias del grafo.
@@ -346,7 +364,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   cada vista sola. En la fase 5 el intento pasó de la sesión a la transacción, y remedios y quick fixes dejaron de
   recibir las reglas aparte de la proyección. En la fase 6 la transacción nació con su reparador (decisión 17). En
   la etapa 2 el paso de una edición a mano dice qué se entendió de ella: cada elemento que conserva su id con otra
-  dirección (`a.P#x -> a.P#count`).
+  dirección (`a.P#x -> a.P#count`). Desde el ítem 4 la línea base sabe qué usos hace un cuerpo nuevo (`Added`), y la
+  vista de ligaduras ve si lo que escribió el lenguaje liga otra cosa (`binding.rebound`) o nada; nombra también un
+  destino nacido con el cambio.
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
@@ -368,9 +388,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     `Items`. La ambigüedad "¿es un id o una dirección?" se resuelve una vez, en `Args`. Dentro de un script, un
     texto donde se espera un elemento es una dirección: los ids no se escriben a mano.
   - El lenguaje: `ScriptParser`, `Stmt` (let, call, for, if, try, require, oblige, fail, return), `Expr` (literal,
-    variable, función, filtro) y `ScriptFunctions` (consultas sobre el programa y las reglas). Quien embebe scripts,
-    como los efectos de `knowledge`, le pregunta al lenguaje dónde termina un bloque (`ScriptParser.blockLength`).
-  - El catálogo `standard.ref`, con presupuesto de 20 sentencias por script y sus fugas marcadas (`CatalogTest`).
+    variable, función, filtro) y `ScriptFunctions` (consultas sobre el programa y las reglas). En un texto, `${expr}`
+    escribe un valor (un elemento, por su id) y `#{expr}` escribe elementos como los nombra un cuerpo. Quien embebe
+    scripts, como los efectos de `knowledge`, le pregunta al lenguaje dónde termina un bloque
+    (`ScriptParser.blockLength`).
+  - El catálogo `standard.ref`, con presupuesto de 20 sentencias por script y sin código de ningún lenguaje: sus
+    cuerpos corren sobre la proyección en memoria (`CatalogTest`).
   - `ChangeSignature`: el único compuesto escrito en Java, porque su parámetro es una lista de registros.
 - **Qué ignora.** Lenguajes y sesión. De la verificación sabe solo que existe: la pide a la transacción en la que
   corre.
@@ -378,11 +401,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   transacción su expansión da la secuencia esperada; y `try` y `oblige` se comportan como se espera en cada lugar.
 - **Estado actual** (fase 5 cerrada, 2026-10-31). `ide.refactoring` (`Refactoring`, `Library`, `Run`, `Args`,
   `Value`, `Primitives`, `ChangeSignature`) e `ide.refactoring.script`. Los primitivos se leen del vocabulario:
-  nada se registra a mano. Fugas de Java, marcadas donde están: las plantillas de cuerpo de generate-getter,
-  generate-setter e introduce-factory en el catálogo, e `initializer` en el conocimiento. `import` dejó de ser una
-  fuga en la etapa 2: es un retarget (funciones `unresolved-in` y `types-named`).
-- **Abierto.** Un lenguaje neutral de cuerpos para las plantillas (`return field`, `assign field param`,
-  `return new owner(params)`) que la proyección renderice (decisión 12, etapa 2).
+  nada se registra a mano. Desde la etapa 2 no quedan fugas de Java en el catálogo. `import` dejó de ser una en el
+  ítem 1: es un retarget (funciones `unresolved-in` y `types-named`). En el ítem 4 los cuerpos de generate-getter,
+  generate-setter e introduce-factory pasaron al lenguaje de cuerpos (decisión 12), y generate-setter perdió su rama
+  para estáticos: cómo se califica un campo lo decide el lenguaje. `default-value` le pregunta a las reglas.
+- **Abierto.** Quedan dos convenciones de Java fuera de los drivers: `is-type-name` (un nombre con mayúscula es un
+  tipo) y el `int` que create-field propone en el conocimiento. Las resuelve lo abierto del ítem 1, cuando el uso sin
+  resolver diga qué es y qué tipo espera. El rastro muestra los cuerpos con ids, no con direcciones.
 
 ### 5.7 `knowledge`: planificador por metas
 
@@ -401,7 +426,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   propios (`KnowledgeTest`) con metas y efectos escritos en el test. Desde la fase 6 trae su base estándar
   (`Knowledge.standard`) y sabe qué hechos da una violación o un diagnóstico (`search(Violation)`,
   `search(Diagnostic)`); antes la sesión cargaba la base por su ruta y armaba esos hechos. Desde la etapa 2 el fix de
-  import liga el uso sin resolver al que apunta el diagnóstico con un tipo de ese nombre: un retarget, sin Java.
+  import liga el uso sin resolver al que apunta el diagnóstico con un tipo de ese nombre: un retarget, sin Java. Desde
+  el ítem 4 el valor que propone el fix de un `final` sin inicializar lo dan las reglas del lenguaje, y el que se
+  escribe es el del usuario, en su lenguaje: la base no escribe código.
 - **Abierto.** Encadenamiento hacia atrás en varios niveles (la spec pedía 8 niveles, 4 pasos y 12 planes; hoy hay
   un nivel); `fact` e `invariant` del lenguaje de conocimiento.
 
@@ -479,17 +506,17 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 |
-|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|
-| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   |
-| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   |
-| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   |
-| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   |
-| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    |
-| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    |
-| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   |
-| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 | Etapa 2, ítem 4 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|-----------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   | 24              |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   | 11              |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   | 39              |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   | 20              |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   | 12              |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    | 6               |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    | 0               |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   | 22              |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  | 108             |
 
 ## 7. Decisiones
 
@@ -506,13 +533,14 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 9  | Rastro                   | `Trace` como árbol de datos; un único render a líneas                                      | tomada, 2026-10-31 (34a3b0e) |
 | 10 | Conformidad              | `projection-kit`: `MemoryProjection` y `ProjectionContract`, que corre contra cada driver   | tomada, 2026-10-31 (f64f7dd) |
 | 11 | Referencias no resueltas | entran al programa como usos sin resolver, aparte de las referencias; import pasa a ser retarget | tomada, 2026-10-31 (0b40a6c, 0a738bf) |
-| 12 | Cuerpos en plantillas    | lenguaje neutral de cuerpos renderizado por la proyección                                  | diferida, etapa 2 |
+| 12 | Cuerpos en plantillas    | lenguaje de cuerpos (`Body`, en `program`): return, asignación y new sobre elementos `#{id}`; cada proyección lo escribe en el suyo y la línea base espera los usos que nombra | tomada, 2026-10-31 (37c903e, 05de013) |
 | 13 | Módulos Maven            | un módulo por producto, más `acceptance` para los escenarios transversales                  | tomada, 2026-10-31 (5d641a2) |
 | 14 | Tests                    | producto, contrato y aceptación, en doble ciclo (sección 6)                                | tomada, 2026-10-31 |
 | 15 | Ejecución                | un único `Run`, dentro de una transacción o directo sobre una proyección; reemplaza a `Ctx` | tomada, 2026-10-31 (6911992) |
 | 16 | Valores de scripts       | `Value` tipado (`Elem`, `Ref`, `Text`, `Bool`, `Items`); id o dirección se resuelve en `Args` | tomada, 2026-10-31 (fb7e3e9) |
 | 17 | Transacción y reparador  | la transacción nace con su reparador; `attempt(label, body)`, `commit()`, `Run.in(tx, library)` | tomada, 2026-10-31 (85bb676) |
 | 18 | Tipos de biblioteca      | los que el workspace nombra son elementos `LIBRARY`, con su nombre como identidad; nada los cambia y la jerarquía es la del workspace | tomada, 2026-10-31 (a5fdf89) |
+| 19 | Código en el catálogo    | el catálogo y el conocimiento no escriben código de ningún lenguaje: dicen cuerpos en el lenguaje de cuerpos, pasan lo que el usuario escribe y le preguntan a las reglas lo que solo el lenguaje sabe escribir | tomada, 2026-10-31 (37c903e, 77e0742) |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -530,14 +558,15 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | La Transaction interpreta atributos para deducir la intención (resuelto en 1524f0c y 5cceb1a) | `ide.engine`    | 2    |
 | Registro manual de los primitivos como refactorings (resuelto en 351d5c2)          | `ide.refactoring`      | 2    |
 | Dos mecanismos de edición; `changed()` reimprime todas las unidades (resuelto en 3f994c2) | `ide.java` | 3 |
-| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; `import` en 0a738bf; queda `initializer`) | `ide.java.primitives.SetAttribute` | etapa 2 |
+| `set` como switch de operaciones (marcadores, `default` y `order` resueltos en 8f0ed6a; `import` en 0a738bf; `body` escribe el lenguaje de cuerpos desde 37c903e; queda `initializer`, que solo Java entiende) | `ide.java.primitives.SetAttribute` | etapa 2 |
 | `MemoryProjection` en un solo archivo grande (resuelto en 9c507a0)                  | `projection-kit`       | 3    |
 | Búsqueda de declaración, unidad y ruta repetida por primitivo (resuelto en 646c9bc) | `ide.java`             | 3    |
 | Vistas no enchufables; vista del compilador dentro del reparador (resuelto en 6bbf600) | `ide.engine`       | 4    |
 | Rastro como strings con sigilos (resuelto en 34a3b0e)                              | `ide.engine`           | 4    |
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge (resuelto en 6911992) | `ide.session`, `ide.knowledge` | 5 |
 | Valores de scripts como strings; id o dirección resuelto en cada función (resuelto en fb7e3e9) | `ide.refactoring.script` | 5 |
-| Plantillas de cuerpo en Java dentro del catálogo e `initializer` en el conocimiento (marcadas donde están en fb7e3e9; `CatalogTest` las cuida; `set import` se fue en 0a738bf) | `standard.ref`, `knowledge.ref` | etapa 2 |
+| Plantillas de cuerpo en Java dentro del catálogo e `initializer` en el conocimiento (marcadas en fb7e3e9; `set import` se fue en 0a738bf; resuelto en 37c903e y 77e0742) | `standard.ref`, `knowledge.ref` | etapa 2 |
+| Convenciones de Java fuera de los drivers: `is-type-name` y el `int` que propone create-field | `ScriptFunctions`, `knowledge.ref` | etapa 2, ítem 1 |
 | Los usos de bibliotecas no se verificaban: un rename podía capturar los usos de un import con comodín (resuelto en a5fdf89) | `ide.java`, `ide.engine` | etapa 2 |
 | El reparador entra dos veces en el código que coordina (decisión 17; resuelto en 85bb676) | `ide.engine`, `ide.session` | 6 |
 | La sesión carga `knowledge.ref` por su ruta y arma los hechos de un diagnóstico (resuelto en a288c2e) | `ide.session` | 6 |
@@ -707,7 +736,20 @@ etapa 2, por valor.
 
    Abierto: un cambio de tipo (nombre, paquete, cabecera) relee todo, también lo que no lo nombra; javac
    incremental.
-4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo.
+4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo. Hecho en tres ciclos:
+   - 37c903e: un cuerpo se dice sin lenguaje (`Body`, en `program`) y cada proyección lo escribe en el suyo. La de
+     memoria hace los usos que nombra; Java escribe nombres, califica un campo que un parámetro tapa e importa el
+     tipo de un objeto nuevo. Los scripts nombran elementos con `#{expr}`. Los cuerpos de getter, setter y factory
+     ya no tienen Java, y el setter perdió la rama de los estáticos, que era una decisión de Java.
+   - 05de013: lo que un cuerpo nombra es lo que el cuerpo escrito tiene que ligar. Un `Set` de cuerpo declara los
+     usos del viejo como idos y los del nuevo como agregados; la vista de ligaduras compara. Un nombre que el
+     lenguaje resuelve a otro elemento ya no es una captura callada sino `binding.rebound`: el caso de prueba es una
+     clase interna que tapa un campo de la externa, que antes se aplicaba ligando el de la interna.
+   - 77e0742: cómo escribe un lenguaje el valor de un campo sin asignar es una pregunta a sus reglas. El fix de un
+     `final` sin inicializar escribe lo que dice el usuario.
+
+   Abierto: el lenguaje tiene solo lo que el catálogo pide (no hay llamadas, literales ni variables locales); Java no
+   escribe `Outer.this.x`, y ese caso se rechaza; quedan dos convenciones de Java fuera de los drivers (sección 8).
 5. Lo que falta del catálogo: pull-up-unifying, borrado de tipos anidados, encadenamiento en varios niveles del
    conocimiento.
 6. Adaptadores: CLI, luego UI, luego MCP, cada uno como módulo que declara solo `session` y `core`.
@@ -725,6 +767,8 @@ etapa 2, por valor.
   a mano.
 - **Reconciliación**: emparejar lo que una edición a mano cambió de dirección con lo que era, sin adivinar.
 - **Primitivo**: un pedido de cambio abstracto, record de `Primitive`.
+- **Cuerpo**: lo que hace un método, dicho sin lenguaje sobre elementos (`Body`); cada proyección lo escribe en el
+  suyo, y el motor verifica que lo escrito liga lo que el cuerpo nombró.
 - **Change**: lo que un primitivo devuelve: producido, expectativas, pins.
 - **Expectativa**: una diferencia entre antes y después que el cambio hizo a propósito; el verificador la espera.
 - **Pin**: un aspecto que el refactoring fijó a propósito; una reparación no puede moverlo.
