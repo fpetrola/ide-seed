@@ -99,7 +99,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.
 - Adapters (session, core; each with an `AdapterTest` that keeps it from anything else): they talk to the IDE only
   through capabilities, in JSON, and decide nothing. `cli` (Command binds words to a capability's schema, Text writes
-  JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea and Eclipse's keys:
+  JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea, IntelliJ's menus, both IDEs' keys:
   Workbench, Editors, Views, Form from a capability's schema, Dialogs as an interface the tests script, Keymap; tested
   with no screen), `mcp` (Server: JSON-RPC 2.0 on stdio, each capability a tool with a JSON Schema, list_changed after
   a call that changes the tools).
