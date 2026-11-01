@@ -16,7 +16,8 @@ import ide.projection.PrimitiveRejected;
 import java.util.stream.Collectors;
 
 /**
- * Moves the statements of a method on lines {@code first-last} into a new private method that the method calls:
+ * Moves the statements of a method on lines {@code first-last}, or the expression that is exactly the stretch
+ * {@code line:column-line:column}, into a new private method that the method calls:
  * inputs become parameters, at most one value used afterwards becomes the result. A fragment that ends the method with
  * its last return answers what the method answers, and the method returns what it answers. Refuses fragments that
  * are not whole statements of one block, that jump out otherwise, or that have more than one output. The change also says which uses
@@ -24,7 +25,57 @@ import java.util.stream.Collectors;
  */
 final class ExtractFragment {
 
+    private static final java.util.regex.Pattern STRETCH = java.util.regex.Pattern.compile("(\\d+):(\\d+)-(\\d+):(\\d+)");
+
     private ExtractFragment() {
+    }
+
+    /** An expression into a method that answers it (or just evaluates it, if it answers nothing), called in its place. */
+    private static Change expression(Primitive.Extract extract, Context c, Program before, ide.program.Element source,
+                                     ide.program.Element owner, ide.java.syntax.Decl declaration, MethodDeclaration method,
+                                     java.util.regex.Matcher stretch) {
+        var name = extract.name();
+        var begin = new com.github.javaparser.Position(Integer.parseInt(stretch.group(1)), Integer.parseInt(stretch.group(2)));
+        var end = new com.github.javaparser.Position(Integer.parseInt(stretch.group(3)), Integer.parseInt(stretch.group(4)));
+        var expression = method.findAll(com.github.javaparser.ast.expr.Expression.class,
+                        e -> e.getBegin().filter(begin::equals).isPresent() && e.getEnd().filter(end::equals).isPresent())
+                .stream().findFirst().orElseThrow(() -> new PrimitiveRejected("extract.fragment", extract.fragment() + " is not an expression"));
+        var writes = !expression.findAll(com.github.javaparser.ast.expr.AssignExpr.class).isEmpty()
+                || !expression.findAll(com.github.javaparser.ast.expr.UnaryExpr.class, u -> u.getOperator().name().endsWith("CREMENT")).isEmpty();
+        if (writes) throw new PrimitiveRejected("extract.writes", "'" + expression + "' changes a variable");
+        var inputs = Bodies.inputs(method, expression);
+        for (var input : inputs.values()) {
+            if (input.isVarType()) throw new PrimitiveRejected("extract.var-type", "cannot name the type of a 'var' input");
+        }
+        var unit = declaration.unit();
+        String type;
+        try {
+            type = expression.calculateResolvedType().isVoid() ? "void" : ide.java.semantics.UseNeeds.written(expression.calculateResolvedType(), unit.tree());
+        } catch (RuntimeException unknown) {
+            throw new PrimitiveRejected("extract.type", "cannot tell the type of '" + expression + "'");
+        }
+        var params = inputs.entrySet().stream().map(e -> e.getValue().asString() + " " + e.getKey()).collect(Collectors.joining(", "));
+        var typeDeclaration = c.declaration(owner).as(TypeDeclaration.class);
+        var indent = Members.indentation(unit, typeDeclaration);
+        var modifiers = method.isStatic() ? "private static " : "private ";
+        var body = indent + "    " + (type.equals("void") ? "" : "return ") + unit.textOf(expression) + ";\n";
+        var edits = new EditSet();
+        edits.replace(unit, expression, name + "(" + String.join(", ", inputs.keySet()) + ")");
+        Members.append(edits, unit, typeDeclaration, modifiers + type + " " + name + "(" + params + ") {\n" + body + indent + "}");
+        c.sources().apply(edits);
+        return created(extract, c, before, source, owner, unit, name);
+    }
+
+    /** What an extraction made: the new method, which the uses moved into it are made from now. */
+    private static Change created(Primitive.Extract extract, Context c, Program before, ide.program.Element source,
+                                  ide.program.Element owner, ide.java.text.Unit unit, String name) {
+        var created = Shared.typeIn(c.sources().unit(unit.path()), owner.qualified()).getMethodsByName(name).getFirst();
+        var id = c.ids().of(new Address.Callable(owner.id(), name, c.keys().of(created)), Kind.METHOD);
+        var change = extract.intent(before, id);
+        for (var moved : c.program().referencesFrom(id)) { // the fragment's uses are made from the new method
+            change = change.expect(new Change.Resited(moved.target(), source.id(), id));
+        }
+        return change;
     }
 
     static Change apply(Primitive.Extract extract, Context c, Program before) {
@@ -34,6 +85,8 @@ final class ExtractFragment {
         var owner = before.element(source.parent());
         var declaration = c.declaration(source);
         var method = declaration.as(MethodDeclaration.class);
+        var stretch = STRETCH.matcher(extract.fragment().strip());
+        if (stretch.matches()) return expression(extract, c, before, source, owner, declaration, method, stretch);
         var dash = extract.fragment().indexOf('-');
         var first = Integer.parseInt(extract.fragment().substring(0, dash).strip());
         var last = Integer.parseInt(extract.fragment().substring(dash + 1).strip());
@@ -70,13 +123,6 @@ final class ExtractFragment {
         var edits = new EditSet().replaceLines(unit, begin, end, unit.indentation(begin) + callLine + "\n");
         Members.append(edits, unit, type, modifiers + outputType + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
-
-        var created = Shared.typeIn(c.sources().unit(unit.path()), owner.qualified()).getMethodsByName(name).getFirst();
-        var id = c.ids().of(new Address.Callable(owner.id(), name, c.keys().of(created)), Kind.METHOD);
-        var change = extract.intent(before, id);
-        for (var moved : c.program().referencesFrom(id)) { // the fragment's uses are made from the new method
-            change = change.expect(new Change.Resited(moved.target(), source.id(), id));
-        }
-        return change;
+        return created(extract, c, before, source, owner, unit, name);
     }
 }

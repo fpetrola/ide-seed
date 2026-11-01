@@ -322,11 +322,25 @@ final class Editors extends JTabbedPane {
         return current().map(this::editor).filter(e -> e.bulb != null).map(e -> e.bulb.getIcon() == Icons.of("FIX") ? "FIX" : "INTENTION");
     }
 
-    /** The lines the selection covers, {@code first-last}, if anything is selected. */
+    /**
+     * What is selected, as a refactoring takes a fragment: the lines it covers, {@code first-last}; or, for a part of
+     * one line, its stretch {@code line:column-line:column} (to the last character, spaces at its ends left out).
+     */
     Optional<String> selectedLines() {
         return current().map(this::editor).filter(e -> e.area.getSelectionStart() != e.area.getSelectionEnd()).map(e -> {
             try {
                 var area = e.area;
+                var text = area.getText();
+                var from = area.getSelectionStart();
+                var to = area.getSelectionEnd();
+                while (from < to && Character.isWhitespace(text.charAt(from))) from++;
+                while (to > from && Character.isWhitespace(text.charAt(to - 1))) to--;
+                var line = area.getLineOfOffset(from);
+                var start = area.getLineStartOffset(line);
+                var whole = text.substring(start, area.getLineEndOffset(line)).strip();
+                if (area.getLineOfOffset(Math.max(from, to - 1)) == line && !text.substring(from, to).equals(whole)) {
+                    return (line + 1) + ":" + (from - start + 1) + "-" + (line + 1) + ":" + (to - start);
+                }
                 var first = area.getLineOfOffset(area.getSelectionStart()) + 1;
                 var end = area.getSelectionEnd();
                 var last = area.getLineOfOffset(end) + (end > 0 && area.getLineStartOffset(area.getLineOfOffset(end)) == end ? 0 : 1);

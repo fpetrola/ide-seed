@@ -84,6 +84,21 @@ class ExtractMethodTest {
     }
 
     @Test
+    void anExpressionIsExtractedIntoAMethodThatAnswersIt() {
+        var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
+
+        var result = ws.invoke("extract-method", Map.of("method", "a.Invoice#total(double,int)", "lines", "8:22-8:33", "name", "taxOf"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Invoice.java")).contains("double tax = taxOf(gross);", """
+                    private double taxOf(double gross) {
+                        return gross * rate;
+                    }
+                """);
+    }
+
+    @Test
     void aFragmentWithAJumpOutOfItIsRefused() {
         var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
 

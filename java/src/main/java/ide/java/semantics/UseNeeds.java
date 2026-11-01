@@ -129,7 +129,7 @@ public final class UseNeeds {
     }
 
     /** A type as the file writes it: by its simple name where the file can name it so, else qualified. */
-    static String written(ResolvedType type, CompilationUnit unit) {
+    public static String written(ResolvedType type, CompilationUnit unit) {
         if (type.isPrimitive()) return type.asPrimitive().describe();
         if (type.isVoid()) return "void";
         if (type.isArray()) return written(type.asArrayType().getComponentType(), unit) + "[]";

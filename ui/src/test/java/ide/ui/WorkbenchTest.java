@@ -254,4 +254,17 @@ class WorkbenchTest {
         assertThat(workbench.text("a/B.java")).contains("return total;");
         assertThat(workbench.views().changes()).isEmpty();
     }
+
+    @Test
+    void aSelectedExpressionIsExtractedIntoAMethodThatAnswersIt() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 7, 16);
+        workbench.select(7, 16, 7, 20); // x + p
+        dialogs.fill(Map.of("name", "sum"));
+
+        workbench.act("extract-method");
+
+        assertThat(dialogs.filled.getFirst().fields()).extracting(f -> f.param().name() + "=" + f.value()).contains("lines=7:16-7:20");
+        assertThat(workbench.text("a/A.java")).contains("return sum(p);", "private int sum(int p) {");
+    }
 }

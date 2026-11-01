@@ -114,6 +114,27 @@ public final class Bodies {
         }
     }
 
+    /**
+     * The locals and parameters an expression reads, declared before it, by name and in the order it reads them; the
+     * parameters of a lambda inside it are its own.
+     */
+    public static Map<String, Type> inputs(MethodDeclaration method, com.github.javaparser.ast.expr.Expression expression) {
+        var start = expression.getBegin().orElseThrow();
+        var before = new LinkedHashMap<String, Type>();
+        method.getParameters().forEach(p -> before.put(p.getNameAsString(), p.getType()));
+        for (var v : method.findAll(VariableDeclarator.class)) {
+            if (v.getEnd().orElseThrow().isBefore(start)) before.put(v.getNameAsString(), v.getType());
+        }
+        var own = expression.findAll(com.github.javaparser.ast.body.Parameter.class).stream().map(p -> p.getNameAsString()).toList();
+        var inputs = new LinkedHashMap<String, Type>();
+        var names = new java.util.ArrayList<>(expression.findAll(NameExpr.class));
+        for (var name : names) {
+            var n = name.getNameAsString();
+            if (before.containsKey(n) && !own.contains(n)) inputs.putIfAbsent(n, before.get(n));
+        }
+        return inputs;
+    }
+
     public static Flow flow(MethodDeclaration method, List<Statement> fragment) {
         var start = fragment.getFirst().getBegin().orElseThrow();
         var end = fragment.getLast().getEnd().orElseThrow();
