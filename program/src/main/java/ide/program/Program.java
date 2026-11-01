@@ -420,6 +420,7 @@ public final class Program {
 
     /** Whether {@code element} is {@code container} or is inside it. */
     public boolean within(ElementId element, ElementId container) {
+        if (element.equals(container)) return true; // also when this program does not know it: one a change made
         for (var e = elements.get(element); e != null; e = e.parent() == null ? null : elements.get(e.parent())) {
             if (e.id().equals(container)) return true;
         }

@@ -279,4 +279,12 @@ class ProgramTest {
         assertThat(Mode.DECLARED.isTypeUse()).isTrue();
         assertThat(Mode.CALL.isTypeUse()).isFalse();
     }
+
+    @Test
+    void theUsesFromAnElementAChangeMadeGoWithIt() {
+        var born = new ElementId("method:99");
+        var p = new Program(List.of(), List.of(new Reference("method:99@0", born, born, "self", Mode.CALL)), List.of());
+
+        assertThat(p.expecting(new Change.UsesGone(born)).references()).isEmpty();
+    }
 }

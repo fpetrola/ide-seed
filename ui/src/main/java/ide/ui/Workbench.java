@@ -200,7 +200,7 @@ final class Workbench extends JPanel {
                 case "context-actions" -> contextActions();
                 case "complete" -> editors.complete();
                 case "rename" -> rename();
-                case "change-signature", "move", "extract-method", "introduce-constant", "safe-delete" -> refactor(action);
+                case "change-signature", "move", "extract-method", "introduce-constant", "introduce-field", "safe-delete" -> refactor(action);
                 case "inline" -> refactor("inline-method");
                 case "refactor" -> {
                     var offered = refactorings(candidates()).stream()
@@ -360,7 +360,7 @@ final class Workbench extends JPanel {
         refactor.addSeparator();
         var ids = ide.list("library", Map.of()).stream().map(line -> line.substring(line.indexOf(' ') + 1)).toList();
         var placed = new java.util.HashSet<String>();
-        for (var group : List.of(List.of("rename", "change-signature", "move-type"), List.of("extract-method", "introduce-constant", "extract-superclass", "extract-interface"),
+        for (var group : List.of(List.of("rename", "change-signature", "move-type"), List.of("extract-method", "introduce-constant", "introduce-field", "extract-superclass", "extract-interface"),
                 List.of("inline-method", "collapse-hierarchy"), List.of("pull-up-method", "pull-up-field", "push-down-member", "encapsulate-fields", "introduce-factory"),
                 List.of("safe-delete"))) {
             for (var id : group) {

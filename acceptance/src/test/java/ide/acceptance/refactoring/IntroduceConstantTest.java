@@ -52,4 +52,25 @@ class IntroduceConstantTest {
                 .isFalse();
         assertThat(ws.source("a/Prices.java")).isEqualTo(PRICES.replace("21 / 100.0", "net / 100.0"));
     }
+
+    @Test
+    void anExpressionOfTheObjectBecomesAFieldThePlaceReads() {
+        var ws = Workspace.of(Map.of("a/Prices.java", """
+                package a;
+
+                class Prices {
+                    double rate = 0.21;
+
+                    double withTax(double net) {
+                        return net * (1 + rate);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-field", Map.of("method", "a.Prices#withTax(double)", "lines", "7:23-7:30", "name", "factor"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Prices.java")).contains("private final double factor = 1 + rate;", "return net * (factor);");
+    }
 }

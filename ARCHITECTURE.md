@@ -482,7 +482,7 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   spec faltan annotate, use-supertype-where-possible,
   extract-interface-and-use, fold-constructors y delete-tree; y lo que trabaja sobre locales (extract variable,
   inline variable, introduce parameter desde una expresión), que el grafo no tiene. Introduce field se haría como
-  introduce-constant, con el campo de instancia.
+  introduce-constant, con el campo de instancia; así se hizo introduce-field.
 
 ### 5.7 `knowledge`: planificador por metas
 

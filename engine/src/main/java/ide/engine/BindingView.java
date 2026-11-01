@@ -39,6 +39,7 @@ public final class BindingView implements View {
 
     /** An element as one program names it, or the other: a change may have meant one born with it, or gone. */
     private static String qualified(ElementId element, Program first, Program second) {
+        if (!first.contains(element) && !second.contains(element)) return element.value(); // born and gone within the change
         return (first.contains(element) ? first : second).element(element).qualified();
     }
 

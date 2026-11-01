@@ -338,3 +338,24 @@ refactoring introduce-constant "Moves an expression into a constant, a static fi
   delete ${m}
   return ${f}
 end
+
+refactoring introduce-field "Moves an expression into a field that starts with it and that the place reads, as IntelliJ's Introduce Field"
+  param method : element(METHOD) "the method the expression is in"
+  param lines : lines "the expression's stretch"
+  param name : text "name of the field" default "value"
+  m := extract ${method} ${lines} ${concat("compute", cap(name))}
+  f := create FIELD ${owner(method)} ${name}
+  set ${f} visibility private
+  set ${f} static ${attr(method, "static")}
+  set ${f} final true
+  set ${f} type ${type(m)}
+  set ${f} initializer "#{m}()"
+  for r in refs(m) | within method
+    retarget ${r} ${f}
+  end
+  for r in refs(m) | within f
+    inline ${r}
+  end
+  delete ${m}
+  return ${f}
+end
