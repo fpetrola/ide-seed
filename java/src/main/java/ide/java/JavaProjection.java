@@ -55,6 +55,8 @@ public final class JavaProjection implements Projection {
     private final Sources sources;
     private final Context context;
     private Set<String> emptyPackages = new TreeSet<>();
+    private final Set<String> changed = new TreeSet<>(); // files changed since the last reading
+    private boolean afresh = true; // read every file anew: at first, and after identity changed without the text
     private Reader.Reading reading;
     private List<Diagnostic> diagnostics;
 
@@ -101,7 +103,7 @@ public final class JavaProjection implements Projection {
             @Override
             public void declarePackage(String name) {
                 emptyPackages.add(name);
-                invalidate();
+                invalidate(Set.of());
             }
         };
     }
@@ -154,7 +156,8 @@ public final class JavaProjection implements Projection {
             var pairs = Reconciliation.pairs(before, program());
             if (pairs.isEmpty()) break;
             pairs.forEach(ids::transfer);
-            invalidate();
+            afresh = true; // what was read under the new ids, in any file, names ids that are gone
+            invalidate(Set.of());
         }
         var after = program();
         for (var element : before.elements()) {
@@ -173,7 +176,8 @@ public final class JavaProjection implements Projection {
         sources.restore(snapshot.sources());
         ids.restore(snapshot.identity());
         emptyPackages = new TreeSet<>(snapshot.emptyPackages());
-        invalidate();
+        afresh = true;
+        invalidate(Set.of());
     }
 
     @Override
@@ -193,9 +197,21 @@ public final class JavaProjection implements Projection {
         return Completion.at(sources, reader, ids, text, offset);
     }
 
+    /**
+     * The files whose uses the last reading resolved: every file at first, after a type changed, or after identity
+     * changed without the text; otherwise the files a change touched and the files that name what it changed.
+     */
+    public Set<String> resolvedLastTime() {
+        return reading().resolved();
+    }
+
     /** The program as last read, with where each element is declared and the node of each use. */
     private Reader.Reading reading() {
-        if (reading == null) reading = reader.read(sources.units(), emptyPackages);
+        if (reading == null) {
+            reading = reader.read(sources.units(), emptyPackages, afresh ? null : Set.copyOf(changed));
+            changed.clear();
+            afresh = false;
+        }
         return reading;
     }
 
@@ -203,8 +219,9 @@ public final class JavaProjection implements Projection {
         return sources.trees();
     }
 
-    /** After any change: what was read or resolved before describes another program. */
-    private void invalidate() {
+    /** After any change: what was resolved before describes another program, and the files at {@code paths} changed. */
+    private void invalidate(Set<String> paths) {
+        changed.addAll(paths);
         JavaParserFacade.clearInstances(); // resolution caches point into replaced trees
         sources.trees().forEach(JavaProjection::forgetResolvedTypes);
         typeSolver.reset();

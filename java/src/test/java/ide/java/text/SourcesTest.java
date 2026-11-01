@@ -31,7 +31,7 @@ class SourcesTest {
             """;
 
     private final ArrayList<String> changes = new ArrayList<>();
-    private final Sources sources = new Sources(new ParserConfiguration(), () -> changes.add("changed"));
+    private final Sources sources = new Sources(new ParserConfiguration(), paths -> changes.add("changed " + paths));
 
     private static TypeDeclaration<?> type(Unit unit) {
         return unit.tree().getType(0);
@@ -83,7 +83,7 @@ class SourcesTest {
         assertThat(sources.unit("a/B.java")).isSameAs(b);
         assertThat(sources.unit("a/A.java").tree()).isNotSameAs(a.tree());
         assertThat(sources.unitOf(sources.unit("a/A.java").tree().getType(0)).path()).isEqualTo("a/A.java");
-        assertThat(changes).containsExactly("changed");
+        assertThat(changes).containsExactly("changed [a/A.java]"); // with the files it touched
     }
 
     @Test

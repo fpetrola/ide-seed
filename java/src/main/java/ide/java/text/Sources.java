@@ -13,6 +13,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.function.Consumer;
+import java.util.TreeSet;
+import java.util.Set;
 
 /**
  * The source files of a workspace. They change only as text: whole files put or removed, or an {@link EditSet}.
@@ -22,15 +25,15 @@ import java.util.TreeMap;
 public final class Sources {
 
     private final JavaParser parser;
-    private final Runnable changed;
+    private final Consumer<Set<String>> changed;
     private final Map<String, Unit> units = new TreeMap<>();
     private final Map<CompilationUnit, Unit> byTree = new IdentityHashMap<>();
 
     /**
      * @param configuration how to parse (and resolve names in) the trees
-     * @param changed       told after every change
+     * @param changed       told after every change, with the paths of the files it added, replaced or removed
      */
-    public Sources(ParserConfiguration configuration, Runnable changed) {
+    public Sources(ParserConfiguration configuration, Consumer<Set<String>> changed) {
         this.parser = new JavaParser(configuration);
         this.changed = changed;
     }
@@ -83,30 +86,34 @@ public final class Sources {
         var parsed = parse(texts);
         removed.forEach(this::forget);
         parsed.values().forEach(this::keep);
-        changed.run();
+        var paths = new TreeSet<>(texts.keySet());
+        paths.addAll(removed);
+        changed.accept(paths);
     }
 
     public void apply(EditSet edits) {
         if (edits.isEmpty()) return;
         var parsed = parse(edits.texts());
         parsed.values().forEach(this::keep);
-        changed.run();
+        changed.accept(parsed.keySet());
     }
 
     /** A file moves to another path; its text and tree stay. */
     public void rename(String from, String to) {
         var unit = forget(from);
         keep(new Unit(to, unit.text(), unit.tree()));
-        changed.run();
+        changed.accept(Set.of(from, to));
     }
 
     /** Back to exactly these files. */
     public void restore(Map<String, String> texts) {
         var parsed = parse(texts);
+        var paths = new TreeSet<>(units.keySet());
+        paths.addAll(texts.keySet());
         units.clear();
         byTree.clear();
         parsed.values().forEach(this::keep);
-        changed.run();
+        changed.accept(paths);
     }
 
     /** A unit for a text in the making: parsed like the sources, but not one of them. */

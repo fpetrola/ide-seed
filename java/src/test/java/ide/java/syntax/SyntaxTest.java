@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** The syntax layer as a product: Java constructs edited as text, in the layout the code already has. */
 class SyntaxTest {
 
-    private final Sources sources = new Sources(new ParserConfiguration(), () -> {
+    private final Sources sources = new Sources(new ParserConfiguration(), paths -> {
     });
 
     /** The text of a one-file program after the edits {@code edit} makes on its unit. */

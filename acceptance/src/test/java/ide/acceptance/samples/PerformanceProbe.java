@@ -18,7 +18,10 @@ class PerformanceProbe {
             var t1 = System.nanoTime();
             var result = ws.invoke("rename", Map.of("element", "big.Customer0#f0", "name", "g0"));
             var t2 = System.nanoTime();
-            System.out.printf("PROBE n=%d load=%dms rename=%dms applied=%s%n", n, (t1 - t0) / 1_000_000, (t2 - t1) / 1_000_000, result.applied());
+            var again = ws.invoke("rename", Map.of("element", "big.Customer0#f1", "name", "g1")); // with the program read
+            var t3 = System.nanoTime();
+            System.out.printf("PROBE n=%d load=%dms rename=%dms applied=%s again=%dms applied=%s%n", n, (t1 - t0) / 1_000_000,
+                    (t2 - t1) / 1_000_000, result.applied(), (t3 - t2) / 1_000_000, again.applied());
         }
     }
 }
