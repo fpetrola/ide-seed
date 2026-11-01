@@ -283,3 +283,36 @@ refactoring make-static "Makes a method static: it may use nothing of an object"
   set ${method} static true
   return ${method}
 end
+
+refactoring generate-delegates "Methods that hand each call on to what a field holds, as IntelliJ's Delegate Methods"
+  param field : element(FIELD) "the field that does the work"
+  param methods : elements(METHOD) "the methods to hand on" from "methods(declared-type(field))"
+  for m in methods
+    d := create METHOD ${owner(field)} ${name(m)}
+    set ${d} visibility public
+    set ${d} type ${type(m)}
+    for p in params(m)
+      q := create PARAM ${d} ${name(p)}
+      set ${q} type ${type(p)}
+    end
+    set ${d} body "return #{field}.#{m}(#{params(d)})"
+  end
+  return ${field}
+end
+
+refactoring rename-with-delegate "Renames a method and keeps its old name as a method that calls the new one, for who still calls it"
+  param method : element(METHOD) "the method to rename"
+  param name : text "the new name" default "${name(method)}"
+  let old = name(method)
+  rename ${method} ${name}
+  d := create METHOD ${owner(method)} ${old}
+  set ${d} visibility ${attr(method, "visibility")}
+  set ${d} static ${attr(method, "static")}
+  set ${d} type ${type(method)}
+  for p in params(method)
+    q := create PARAM ${d} ${name(p)}
+    set ${q} type ${type(p)}
+  end
+  set ${d} body "return #{method}(#{params(d)})"
+  return ${d}
+end

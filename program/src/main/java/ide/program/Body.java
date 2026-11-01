@@ -12,6 +12,8 @@ import java.util.List;
  * #{field:2} = #{param:7}                        gives a field a value
  * return new #{constructor:3}(#{param:7}, ...)   answers a new object
  * return default                                 answers what its type starts with; nothing, if it answers nothing
+ * return #{field:2}.#{method:4}(#{param:7})      answers what a call answers: on what a field or a parameter holds,
+ * return #{method:4}(#{param:7})                 or on the object itself; a method that answers nothing just calls
  * </pre>
  * A body is the body of one method: its parameters are values the body has, not uses between elements. Like
  * {@link Fact}, it grows only when a template needs to say something it cannot.
@@ -46,6 +48,13 @@ public record Body(List<Statement> statements) {
 
     /** What the method's type starts with, as a field of that type does: what a method answers that knows nothing yet. */
     public record Default() implements Expression {
+    }
+
+    /** A call of {@code method} with {@code arguments}, on what {@code receiver} holds (a field or a parameter), or on the object itself if it is null. */
+    public record Call(Expression receiver, ElementId method, List<Expression> arguments) implements Expression {
+        public Call {
+            arguments = List.copyOf(arguments);
+        }
     }
 
     /** A new object, made by {@code constructor} with {@code arguments}. */
@@ -101,6 +110,11 @@ public record Body(List<Statement> statements) {
             case Default d -> {
                 // no element at all
             }
+            case Call call -> {
+                if (call.receiver() != null) uses(call.receiver(), uses);
+                uses.add(new Use(call.method(), Mode.CALL));
+                call.arguments().forEach(argument -> uses(argument, uses));
+            }
             case New n -> {
                 uses.add(new Use(n.constructor(), Mode.NEW));
                 n.arguments().forEach(argument -> uses(argument, uses));
@@ -154,12 +168,31 @@ public record Body(List<Statement> statements) {
                 expect(')');
                 return new New(constructor, arguments);
             }
-            var element = element(Kind.FIELD, Kind.PARAM);
-            if (program.element(element).kind() == Kind.FIELD) return new Field(element);
-            if (!method.equals(program.element(element).parent())) {
-                throw new IllegalArgumentException("body: " + element + " is not a parameter of " + method + ", in: " + text);
+            var element = element(Kind.FIELD, Kind.PARAM, Kind.METHOD);
+            if (program.element(element).kind() == Kind.METHOD) return call(null, element);
+            Expression value;
+            if (program.element(element).kind() == Kind.FIELD) {
+                value = new Field(element);
+            } else {
+                if (!method.equals(program.element(element).parent())) {
+                    throw new IllegalArgumentException("body: " + element + " is not a parameter of " + method + ", in: " + text);
+                }
+                value = new Parameter(element);
             }
-            return new Parameter(element);
+            return next('.') ? call(value, element(Kind.METHOD)) : value;
+        }
+
+        /** The arguments of a call of {@code called}, after its name. */
+        private Expression call(Expression receiver, ElementId called) {
+            expect('(');
+            var arguments = new ArrayList<Expression>();
+            spaces();
+            if (!next(')')) {
+                do arguments.add(expression());
+                while (next(','));
+                expect(')');
+            }
+            return new Call(receiver, called, arguments);
         }
 
         private ElementId element(Kind... kinds) {

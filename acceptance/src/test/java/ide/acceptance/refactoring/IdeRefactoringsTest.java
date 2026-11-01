@@ -70,4 +70,53 @@ class IdeRefactoringsTest {
         assertThat(ws.source("a/Point.java")).contains("static int twice(int value) {");
         assertThat(ws.invoke("make-static", Map.of("method", "a.Point#sum()")).applied()).isFalse();
     }
+
+    @Test
+    void generateDelegatesHandsEachCallOnToWhatTheFieldHolds() {
+        var ws = Workspace.of(Map.of("a/Point.java", POINT, "a/Tracker.java", """
+                package a;
+
+                public class Tracker {
+                    private Point point;
+                }
+                """));
+
+        var result = ws.invoke("generate-delegates", Map.of("field", "a.Tracker#point", "methods", List.of("a.Point#sum()", "a.Point#twice(int)")));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Tracker.java")).contains("""
+                    public int sum() {
+                        return point.sum();
+                    }
+                """, """
+                    public int twice(int value) {
+                        return point.twice(value);
+                    }
+                """);
+    }
+
+    @Test
+    void renameWithDelegateKeepsTheOldNameCallingTheNewOne() {
+        var ws = Workspace.of(Map.of("a/Point.java", POINT, "a/User.java", """
+                package a;
+
+                class User {
+                    int use(Point p) {
+                        return p.twice(3);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("rename-with-delegate", Map.of("method", "a.Point#twice(int)", "name", "doubled"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Point.java")).contains("int doubled(int value) {", """
+                    int twice(int value) {
+                        return doubled(value);
+                    }
+                """);
+        assertThat(ws.source("a/User.java")).contains("return p.doubled(3);");
+    }
 }

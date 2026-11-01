@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  * A body in no language ({@link Body}) written in Java, in place of a method's: a field or a parameter by its name, a
  * field through {@code this} (or through its type, if static) where a parameter of the same name hides it, and a new
  * object by its type's simple name, imported if the file cannot name it yet. The default is the one of the method's
- * type, as a field would start with it; a void method answers nothing.
+ * type, as a field would start with it; a void method answers nothing, and a call it would answer is a statement.
  */
 final class WriteBody {
 
@@ -58,6 +58,7 @@ final class WriteBody {
     private String statement(Body.Statement statement) {
         return switch (statement) {
             case Body.Return r when r.value() instanceof Body.Default && type.equals("void") -> "";
+            case Body.Return r when r.value() instanceof Body.Call && type.equals("void") -> value(r.value()) + ";";
             case Body.Return r -> Render.returning(value(r.value()));
             case Body.Assign a -> Render.assignment(field(a.field()), value(a.value()));
         };
@@ -68,6 +69,8 @@ final class WriteBody {
             case Body.Field f -> field(f.field());
             case Body.Parameter p -> program.element(p.parameter()).name();
             case Body.Default d -> Render.defaultValue(type);
+            case Body.Call call -> (call.receiver() == null ? "" : value(call.receiver()) + ".") + program.element(call.method()).name()
+                    + "(" + String.join(", ", call.arguments().stream().map(this::value).toList()) + ")";
             case Body.New n -> Render.creation(type(program.element(n.constructor()).parent()),
                     n.arguments().stream().map(this::value).toList());
         };

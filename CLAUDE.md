@@ -34,7 +34,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
   its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
   baseline), Change (produced element, expectations, pins) and Body (what a method does in no language: return,
-  assign a field, new, the type's default, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
+  assign a field, new, a call, the type's default, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
   the old body's uses Dropped and the ones it names Added).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element

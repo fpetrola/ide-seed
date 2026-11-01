@@ -45,6 +45,7 @@ final class ScriptFunctions {
             case "top" -> elem(graph.topLevel(element(args, 0).id()).id());
             case "attr" -> text(element(args, 0).fact(Fact.of(text(args, 1))));
             case "type" -> text(element(args, 0).fact(Fact.TYPE));
+            case "declared-type" -> graph.declaredType(element(args, 0).id()).map(e -> elem(e.id())).orElse(null);
             case "superclass" -> graph.superclass(element(args, 0).id()).map(e -> elem(e.id())).orElse(null);
             case "enclosing" -> elem(graph.enclosingType(element(args, 0).id()).id());
             case "subclass-of" -> bool(graph.isSubclass(element(args, 0), element(args, 1)));

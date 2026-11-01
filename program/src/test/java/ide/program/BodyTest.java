@@ -59,6 +59,17 @@ class BodyTest {
     }
 
     @Test
+    void aCallIsOnWhatAFieldOrAParameterHoldsOrOnTheObjectItself() {
+        var body = Body.parse("return #{method:6}(#{param:5}); return #{field:2}.#{method:6}(#{field:2})", program(), SET);
+
+        assertThat(body.statements()).containsExactly(
+                new Body.Return(new Body.Call(null, OTHER, List.of(new Body.Parameter(VALUE)))),
+                new Body.Return(new Body.Call(new Body.Field(X), OTHER, List.of(new Body.Field(X)))));
+        assertThat(body.uses()).containsExactly(new Body.Use(OTHER, Mode.CALL), new Body.Use(X, Mode.READ),
+                new Body.Use(OTHER, Mode.CALL), new Body.Use(X, Mode.READ));
+    }
+
+    @Test
     void itsUsesAreOfWhatIsOutsideItsMethodInTheOrderTheyAreWritten() {
         var body = Body.parse("#{field:2} = #{param:5}\nreturn new #{constructor:3}(#{field:2})", program(), SET);
 
@@ -71,7 +82,8 @@ class BodyTest {
         var program = program();
 
         assertThatThrownBy(() -> Body.parse("return #{field:9}", program, SET)).hasMessageContaining("no element field:9");
-        assertThatThrownBy(() -> Body.parse("return #{method:6}", program, SET)).hasMessageContaining("method:6 is a METHOD");
+        assertThatThrownBy(() -> Body.parse("return #{method:6}", program, SET)).hasMessageContaining("expected '('");
+        assertThatThrownBy(() -> Body.parse("return #{field:2}.#{field:2}()", program, SET)).hasMessageContaining("field:2 is a FIELD");
         assertThatThrownBy(() -> Body.parse("#{param:5} = #{field:2}", program, SET)).hasMessageContaining("param:5 is a PARAM");
         assertThatThrownBy(() -> Body.parse("return new #{field:2}()", program, SET)).hasMessageContaining("field:2 is a FIELD");
         assertThatThrownBy(() -> Body.parse("return #{param:7}", program, SET)).hasMessageContaining("param:7 is not a parameter of method:4");

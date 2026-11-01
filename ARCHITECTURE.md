@@ -461,9 +461,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   bucle con `said(e)`, cómo nombra un cuerpo a un elemento, y `;` separa sentencias del lenguaje de cuerpos),
   make-final y make-static: una línea cada uno, y el compilador decide si quedan. Un parámetro puede declarar un
   valor sugerido (`default "Abstract${name(type)}"`) y un tipo `lines` (las líneas de la selección), y un refactoring
-  responde sus sugerencias (`suggestions`). Extract acepta un fragmento que termina el método con su último return.
+  responde sus sugerencias (`suggestions`) y de dónde salen sus elementos (`from "fields(type)"`, `options`). Extract
+  acepta un fragmento que termina el método con su último return. El lenguaje de cuerpos ganó la llamada
+  (`#{f}.#{m}(...)`, `#{m}(...)`; en un método que no responde nada, un return de una llamada es la llamada), y con
+  ella generate-delegates (los Delegate Methods de IntelliJ) y rename-with-delegate (el viejo nombre llama al nuevo).
 - **Abierto.** El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
-  spec faltan annotate, delegate y delegates, rename-with-delegate, use-supertype-where-possible,
+  spec faltan annotate, use-supertype-where-possible,
   extract-interface-and-use, fold-constructors y delete-tree; y lo que trabaja sobre locales (extract variable,
   inline variable, introduce parameter desde una expresión), que el grafo no tiene.
 
