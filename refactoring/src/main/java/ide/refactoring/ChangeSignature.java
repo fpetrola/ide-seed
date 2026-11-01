@@ -12,8 +12,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The one composite written in Java, because its parameter is a list of records: {@code "b, a, scale:int=1"} keeps
- * {@code b} and {@code a} in that order, adds {@code scale} (calls pass {@code 1}) and removes the rest.
+ * The one composite written in Java, because its parameter is a list of records, written as in Java:
+ * {@code "int b, int a, long scale = 1"} keeps {@code b} and {@code a} in that order, adds {@code scale} (calls pass
+ * {@code 1}) and removes the rest. A kept parameter may be written by its name alone, and {@code scale:long=1} says
+ * the same as {@code long scale = 1}. A new parameter needs a value for the calls only if there are calls.
  * Only primitives underneath: create (with the argument calls pass), move and delete of parameters.
  */
 public final class ChangeSignature implements Refactoring {
@@ -33,7 +35,8 @@ public final class ChangeSignature implements Refactoring {
 
     @Override
     public List<Param> params() {
-        return List.of(Param.of("method", "element", "METHOD"), Param.of("parameters", "text"));
+        return List.of(Param.of("method", "element", "METHOD"), new Param("parameters", "text", List.of(),
+                "the new parameters, as in Java: int b, int a, long scale = 1 (a new one gives the value calls pass)", true));
     }
 
     @Override
@@ -43,9 +46,7 @@ public final class ChangeSignature implements Refactoring {
         var items = parse(args.text("parameters"));
         for (var item : items) {
             if (param(run, method, item.name()) != null) continue;
-            if (item.type() == null || item.defaultValue() == null) {
-                throw new IllegalArgumentException("new parameter needs name:type=default: " + item.name());
-            }
+            if (item.type() == null) throw new IllegalArgumentException("a new parameter needs its type: " + item.name());
             projection.apply(new Primitive.Create(Kind.PARAM, method, item.name(), Map.of(Fact.TYPE, item.type()), item.defaultValue()));
         }
         for (var i = 0; i < items.size(); i++) { // each kept parameter goes before the one now at its place
@@ -69,20 +70,39 @@ public final class ChangeSignature implements Refactoring {
                 .filter(p -> p.kind() == Kind.PARAM && p.name().equals(name)).findFirst().orElse(null);
     }
 
+    /** {@code type name = value}, {@code name:type=value} or a name alone; commas inside {@code <>} belong to a type. */
     private static List<Item> parse(String spec) {
         var items = new ArrayList<Item>();
-        for (var raw : spec.split(",")) {
-            var text = raw.strip();
-            var colon = text.indexOf(':');
-            var eq = text.indexOf('=');
-            if (colon < 0) {
-                items.add(new Item(text, null, null));
+        for (var raw : split(spec)) {
+            var eq = raw.indexOf('=');
+            var value = eq < 0 ? null : raw.substring(eq + 1).strip();
+            var declared = (eq < 0 ? raw : raw.substring(0, eq)).strip();
+            var colon = declared.indexOf(':');
+            if (colon >= 0) {
+                items.add(new Item(declared.substring(0, colon).strip(), declared.substring(colon + 1).strip(), value));
             } else {
-                items.add(new Item(text.substring(0, colon).strip(),
-                        text.substring(colon + 1, eq < 0 ? text.length() : eq).strip(),
-                        eq < 0 ? null : text.substring(eq + 1).strip()));
+                var space = declared.lastIndexOf(' ');
+                items.add(space < 0 ? new Item(declared, null, value)
+                        : new Item(declared.substring(space + 1), declared.substring(0, space).strip(), value));
             }
         }
         return items;
+    }
+
+    private static List<String> split(String spec) {
+        var parts = new ArrayList<String>();
+        var depth = 0;
+        var start = 0;
+        for (var i = 0; i < spec.length(); i++) {
+            var c = spec.charAt(i);
+            if (c == '<') depth++;
+            else if (c == '>') depth--;
+            else if (c == ',' && depth == 0) {
+                parts.add(spec.substring(start, i));
+                start = i + 1;
+            }
+        }
+        parts.add(spec.substring(start));
+        return parts.stream().map(String::strip).filter(part -> !part.isEmpty()).toList();
     }
 }

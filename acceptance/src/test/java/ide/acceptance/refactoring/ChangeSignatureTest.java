@@ -57,6 +57,29 @@ class ChangeSignatureTest {
         assertThat(ws.diagnostics()).isEmpty();
     }
 
+    /** The new list written as in Java: a kept parameter with its type, a new one with the value calls pass. */
+    @Test
+    void theParametersCanBeWrittenAsInJava() {
+        var ws = Workspace.of(Map.of("a/Calc.java", CALC, "b/User.java", USER));
+
+        var result = ws.invoke("change-signature", Map.of("method", "a.Calc#add(int,int,int)",
+                "parameters", "int b, int a, long scale = 1"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Calc.java")).contains("public int add(int b, int a, long scale) {", "return add(2, 1, 1);");
+    }
+
+    /** With no calls, a new parameter needs no value for them. */
+    @Test
+    void aMethodNobodyCallsTakesANewParameterWithNoValue() {
+        var ws = Workspace.of(Map.of("a/Calc.java", CALC.replace("return add(1, 2, 0);", "return 0;")));
+
+        var result = ws.invoke("change-signature", Map.of("method", "a.Calc#add(int,int,int)", "parameters", "int a, int b, String label"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Calc.java")).contains("public int add(int a, int b, String label) {");
+    }
+
     @Test
     void removingAParameterTheBodyUsesAborts() {
         var ws = Workspace.of(Map.of("a/Calc.java", CALC, "b/User.java", USER));
