@@ -33,7 +33,8 @@ public final class Main {
             var root = args.length > 0 ? Path.of(args[0]) : folder();
             if (root == null) System.exit(0);
             var frame = new JFrame("IdeSeed: " + root.toAbsolutePath().normalize());
-            frame.setContentPane(new JLabel("Reading the Java sources under " + root + " ...", SwingConstants.CENTER));
+            frame.setContentPane(new JLabel("Reading the Java sources under " + root + ", and asking Maven for their libraries ...",
+                    SwingConstants.CENTER));
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setSize(1400, 900);
             frame.setLocationRelativeTo(null);

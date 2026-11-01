@@ -73,6 +73,10 @@ final class Workbench extends JPanel {
                 }
             }
         });
+        var classpath = ide.record("classpath", Map.of());
+        var libraries = strings(classpath.get("entries"));
+        say("libraries: " + (libraries.isEmpty() ? "none" : libraries.size() + " from Maven")
+                + (classpath.get("problem") == null ? "" : " (" + String.valueOf(classpath.get("problem")).lines().findFirst().orElse("") + ")"));
         for (var key : Keymap.KEYS) {
             getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(key.stroke(), key.action());
             getActionMap().put(key.action(), new AbstractAction(key.description()) {

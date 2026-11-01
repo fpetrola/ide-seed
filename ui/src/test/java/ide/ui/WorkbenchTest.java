@@ -57,6 +57,7 @@ class WorkbenchTest {
         assertThat(workbench.files()).containsExactly("a/A.java", "a/B.java");
         assertThat(workbench.text("a/A.java")).isEqualTo(A);
         assertThat(workbench.where()).isEqualTo("a/A.java:7:16");
+        assertThat(workbench.views().output()).startsWith("libraries: none (no pom.xml in ");
     }
 
     @Test
