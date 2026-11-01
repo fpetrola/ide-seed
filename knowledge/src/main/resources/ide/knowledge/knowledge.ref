@@ -134,7 +134,7 @@ effect drop-final "make ${field} not final"
 end
 
 # A class that does not implement what its supertypes leave abstract: it implements each, answering what the type
-# starts with until it is written; or it is abstract too.
+# starts with until it is written; or it is abstract too (java.rules says when it may be).
 goal ecj.AbstractMethodMustBeImplemented needs complete(symbol)
 
 effect implement-methods "implement methods of ${symbol}"
@@ -152,15 +152,6 @@ effect implement-methods "implement methods of ${symbol}"
       end
       set ${d} body "return default"
     end
-  end
-end
-
-effect make-abstract "make ${symbol} abstract"
-  makes complete(symbol)
-  when nonempty(type-in(path, symbol))
-  cost 2
-  do
-    set ${type-in(path, symbol)} abstract true
   end
 end
 

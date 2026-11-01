@@ -579,7 +579,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   Una promesa se rompe solo a propósito: como el primer cambio de un plan, el cambio del que el fix trata; ese plan
   cambia el sentido (se ofrece, ninguna reparación lo toma) y cuesta más. Como consecuencia dentro de una cadena,
   nunca: ahí corta el camino. Así "make count not final" sale de quién puede darle valor a un `final` (JLS 8.3.1.2)
-  con `final` de un campo como promesa, y `unfinal` se fue. `unimplemented` pasó a ser una consulta de `Program`. Y que un tipo escrito en un archivo nombra un tipo
+  con `final` de un campo como promesa, y `unfinal` se fue. `unimplemented` pasó a ser una consulta de `Program`.
+  Después, que una clase no abstracta implementa lo que hereda sin cuerpo (JLS 8.1.1.1) y que nadie crea objetos de
+  una abstracta (15.9.1), con el `abstract` de una clase como promesa: `make-abstract` se fue, y ya no se ofrece
+  volver abstracta una clase de la que algo crea objetos. Para verlo hubo que preguntar las reglas enteras después de
+  cada cambio, no solo alrededor de lo cambiado: una violación puede llegar a lo cambiado por su cuerpo. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).

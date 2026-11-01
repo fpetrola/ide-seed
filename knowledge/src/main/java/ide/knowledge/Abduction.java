@@ -265,7 +265,7 @@ final class Abduction {
     private List<Found> mend(Found found, List<Dead> dead) {
         var state = base;
         for (var change : found.changes()) state = suppose(state, change);
-        var broken = broken(found.changes(), state);
+        var broken = broken(state);
         if (broken.isEmpty()) return List.of(found);
         var violation = broken.getFirst();
         var known = dead.size();
@@ -283,22 +283,20 @@ final class Abduction {
         return mended;
     }
 
-    /** The violations that hold now and did not before, around the elements {@code changes} touched. */
-    private List<Atom> broken(List<Change> changes, Evaluation state) {
+    /**
+     * The violations that hold now and did not before. Every rule is asked whole, not only around what changed: a
+     * violation may reach a changed element through its body alone ({@code no-new-abstract(site, constructor)} through
+     * the constructor's class). What held before is asked once.
+     */
+    private List<Atom> broken(Evaluation state) {
         var broken = new LinkedHashSet<Atom>();
-        var touched = new LinkedHashSet<String>();
-        for (var change : changes) touched.add(change.element());
         for (var relation : violations.entrySet()) {
-            for (var element : touched) {
-                for (var place = 0; place < relation.getValue(); place++) {
-                    var terms = new ArrayList<Term>();
-                    for (var i = 0; i < relation.getValue(); i++) terms.add(i == place ? Term.constant(element) : Term.variable("V" + i));
-                    var query = new Atom(relation.getKey(), terms);
-                    var before = new java.util.HashSet<>(base.answers(query));
-                    for (var answer : state.answers(query)) {
-                        if (!before.contains(answer)) broken.add(bound(query, answer));
-                    }
-                }
+            var terms = new ArrayList<Term>();
+            for (var i = 0; i < relation.getValue(); i++) terms.add(Term.variable("V" + i));
+            var query = new Atom(relation.getKey(), terms);
+            var before = new java.util.HashSet<>(base.answers(query));
+            for (var answer : state.answers(query)) {
+                if (!before.contains(answer)) broken.add(bound(query, answer));
             }
         }
         return List.copyOf(broken);

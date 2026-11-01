@@ -100,3 +100,22 @@ promise final of field "the value never changes once the object is made"
 problem ecj.FinalFieldAssignment is final-where(inside(path, line, column), element-at(path, line, column))
 
 say not final for final-where "make ${called} not final"
+
+# A class that is not abstract implements every method it inherits without a body (JLS 8.1.1.1), and nothing makes
+# an object of one that is (JLS 15.9.1).
+rule complete "a class that is not abstract implements every method it inherits without a body"
+  for t where kind(t, "class") and unimplemented(t, _)
+  must abstract(t)
+end
+
+rule no-new-abstract "nothing makes an object of an abstract class"
+  for s, k where new-use(s, k) and parent(k, t)
+  must not abstract(t)
+end
+
+# Whether objects of a class can be made.
+promise abstract of class "whether objects of it can be made"
+
+problem ecj.AbstractMethodMustBeImplemented is complete(type-in(path, symbol))
+
+say abstract for complete "make ${called} abstract"
