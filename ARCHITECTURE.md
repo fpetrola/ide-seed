@@ -558,7 +558,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   padre, lugar, a qué liga un uso, un constructor que nadie tiene). Lo que una definición necesita de otra se hace
   antes, igual que las necesidades de un efecto. `say` dice cada cambio como lo dice el lenguaje, y `order` da un
   orden de valores. La primera definición en pasar fue quién puede usar qué (el efecto `open-visibility` se fue): ya
-  no se prueba `protected` donde no alcanza.
+  no se prueba `protected` donde no alcanza. Después, dónde se usa un miembro sin decir de quién es (JLS 8.2) y el
+  orden de los inicializadores (JLS 8.3.3): `pull-up-dependency` se fue, y subir un campo que un inicializador usa
+  es un cambio de padre y uno de lugar que se juntan en un solo `Move`.
 - **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
   misma. La propuesta de la etapa 3 (decisión 32) las reemplaza por reglas generales del lenguaje, de las que se
   deducen las transformaciones, y deja los refactorings como intenciones; necesita las sentencias en el grafo. Un predicado que ningún `fact` define siempre se hace, aunque

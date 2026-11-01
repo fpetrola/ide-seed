@@ -27,3 +27,16 @@ def protected-reach(site, m) when package(site, p) and package(m, p)
 def protected-reach(site, m) when enclosing(site, a) and enclosing(m, b) and subclass(a, b)
 
 say visibility for accessible "open-visibility ${qualified(element)} ${was} -> ${value}"
+
+# Where a member is used without saying whose (JLS 8.2): in its type and in the types that inherit it. It can live in
+# a class both where it was and where it is used inherit from: what had it keeps it.
+def in-scope(site, m) when not kind(site, "field") and enclosing(site, t) and parent(m, o)
+  and subclass(o, u) and subclass(t, u) and not clash(m, u) and parent(m, u)
+# A field's initializer uses a field of its own type only if it is declared before (JLS 8.3.3).
+def in-scope(site, m) when kind(site, "field") and parent(site, t) and parent(m, o)
+  and subclass(o, t) and not clash(m, t) and parent(m, t) and before(m, site)
+
+# Two members alike in one type are one too many.
+def clash(m, u) when parent(x, u) and alike(x, m) and x != m
+
+say parent for in-scope "pull-up-dependency ${qualified(element)} -> ${qualified(value)}"

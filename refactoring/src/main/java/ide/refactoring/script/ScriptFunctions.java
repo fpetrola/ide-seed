@@ -48,7 +48,6 @@ final class ScriptFunctions {
             case "declared-type" -> graph.declaredType(element(args, 0).id()).map(e -> elem(e.id())).orElse(null);
             case "superclass" -> graph.superclass(element(args, 0).id()).map(e -> elem(e.id())).orElse(null);
             case "enclosing" -> elem(graph.enclosingType(element(args, 0).id()).id());
-            case "subclass-of" -> bool(graph.isSubclass(element(args, 0), element(args, 1)));
             case "member-named" -> graph.members(element(args, 0).id()).stream().filter(m -> alike(m, element(args, 1)))
                     .map(m -> elem(m.id())).findFirst().orElse(null);
             case "field-in" -> graph.typesIn(text(args, 0)).stream()

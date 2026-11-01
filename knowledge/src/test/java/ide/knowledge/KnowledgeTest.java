@@ -107,6 +107,26 @@ class KnowledgeTest {
         assertThat(projection.program().element(id(p, "a.A#x")).fact(Fact.VISIBILITY)).isEqualTo("package");
     }
 
+    /**
+     * What Java says of scope: a member used where it is not inherited goes to a class both places inherit from, and a
+     * field an initializer uses goes before it. Both changes are one move, said as the knowledge says it.
+     */
+    @Test
+    void aMemberAnInitializerUsesMovesUpAndBeforeItInOneMove() {
+        var projection = MemoryProjection.builder().rules(MemoryProjection.PRIVATE_TO_TOP_LEVEL)
+                .type("a.A").type("a.B").extend("a.B", "a.A")
+                .field("a.A", "x", "int").field("a.B", "y", "int").use("a.A#x", "a.B#y", Mode.READ)
+                .build();
+        var p = projection.program();
+        var violation = new Violation("binding.unresolved", id(p, "a.A#x"), id(p, "a.B#y"), "no longer binds");
+
+        var plans = Knowledge.standard(Library.standard()).plans(violation, projection);
+
+        assertThat(plans).extracting(Plan::title).containsExactly("pull-up-dependency a.B#y -> a.A");
+        plans.getFirst().apply(projection);
+        assertThat(projection.program().children(id(p, "a.A"))).extracting(e -> e.name()).containsExactly("y", "x");
+    }
+
     @Test
     void plansAreDeducedFromTheEffectsThatMakeTheGoalCheapestFirst() {
         var projection = program();
