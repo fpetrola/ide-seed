@@ -31,15 +31,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   public class B extends A int n() calls m, then reads x
  *   public interface I
  * package b
- *   public class C           public A a; public int use(A other)
+ *   public class C           public A a; public String label; public int use(A other)
  * </pre>
+ * {@code String} is the library's: the program names it, and a projection never changes it.
  */
 public abstract class ProjectionContract {
 
     /** The fixture's outline. */
     public static final List<String> FIXTURE = List.of(
-            "CLASS a.A", "CLASS a.B", "CLASS b.C",
-            "FIELD a.A#x", "FIELD b.C#a",
+            "CLASS a.A", "CLASS a.B", "CLASS b.C", "CLASS java.lang.String (library)",
+            "FIELD a.A#x", "FIELD b.C#a", "FIELD b.C#label",
             "INTERFACE a.I",
             "METHOD a.A#k(int)", "METHOD a.A#m(int)", "METHOD a.A#total()", "METHOD a.B#n()", "METHOD b.C#use(A)",
             "PARAM a.A#k(int)/p", "PARAM a.A#m(int)/p", "PARAM b.C#use(A)/other",
@@ -47,7 +48,7 @@ public abstract class ProjectionContract {
             "a.A#total() -> a.A#m(int) (call)", "a.A#total() -> a.A#x (read)",
             "a.B -> a.A (extends)",
             "a.B#n() -> a.A#m(int) (call)", "a.B#n() -> a.A#x (read)",
-            "b.C#a -> a.A (declared)",
+            "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)",
             "b.C#use(A)/other -> a.A (declared)");
 
     /** A projection holding the fixture. */
@@ -87,6 +88,24 @@ public abstract class ProjectionContract {
     @Test
     void theFixtureIsTheDocumentedProgram() {
         assertThat(fixture().program().outline()).containsExactlyElementsOf(FIXTURE);
+    }
+
+    /** Obligation 6: an element of a library is never changed; using it is a reference like any other. */
+    @Test
+    void anElementOfALibraryIsNeverChanged() {
+        var projection = fixture();
+        var p = projection.program();
+        var string = id(p, "java.lang.String");
+
+        for (var primitive : List.<Primitive>of(new Primitive.Rename(string, "Text"), new Primitive.Move(string, id(p, "a"), null),
+                new Primitive.Delete(string), new Primitive.Set(string, "visibility", "package"),
+                new Primitive.Create(Kind.FIELD, string, "extra"), new Primitive.Move(id(p, "a.A#k(int)"), string, null))) {
+            assertThatThrownBy(() -> projection.apply(primitive)).as(primitive.toString())
+                    .isInstanceOfSatisfying(PrimitiveRejected.class, refused -> assertThat(refused.code()).isEqualTo("projection.library"));
+        }
+        assertThat(projection.program().outline()).containsExactlyElementsOf(FIXTURE);
+        assertThat(p.element(string).inLibrary()).isTrue();
+        assertThat(p.referencesTo(string)).extracting(r -> p.element(r.site()).qualified()).containsExactly("b.C#label");
     }
 
     /** Obligation 1: an element keeps its id through rename, move, set and link. */

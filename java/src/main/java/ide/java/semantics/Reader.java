@@ -19,6 +19,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory;
 import ide.java.syntax.Decl;
 import ide.java.text.Unit;
@@ -45,7 +46,9 @@ import static ide.java.semantics.Resolution.*;
 
 /**
  * Reads the program from the units: elements (packages and types first, since members key their parameter types by
- * type id), then the uses that resolve to them. Identity decides who is who: a known address keeps its id.
+ * type id), then the uses that resolve to them. Identity decides who is who: a known address keeps its id. A type of
+ * a library that the workspace names joins the program too, with its package: its identity is its name, since nothing
+ * can change it, and it stays out of the identity table, where it would change the keys of members.
  */
 public final class Reader {
 
@@ -132,6 +135,7 @@ public final class Reader {
         var references = new ArrayList<Reference>();
         var uses = new HashMap<String, Node>();
         var ordinals = new HashMap<ElementId, Integer>();
+        var library = new LinkedHashMap<String, Element>(); // the libraries' packages and types the workspace names
         for (var unit : units) {
             var cu = unit.tree();
             var nodes = new ArrayList<Node>();
@@ -142,28 +146,49 @@ public final class Reader {
             nodes.addAll(cu.findAll(MethodReferenceExpr.class));
             nodes.sort(Comparator.comparing(n -> n.getBegin().orElseThrow()));
             for (var use : nodes) {
-                var target = switch (use) {
-                    case MethodCallExpr call -> resolveMethod(call);
-                    case ObjectCreationExpr creation -> callable(resolveConstructor(creation));
-                    case MethodReferenceExpr reference -> callable(resolveMethodReference(reference));
-                    case ClassOrInterfaceType type -> type(resolveType(type));
+                var typeName = false;
+                ElementId target;
+                switch (use) {
+                    case MethodCallExpr call -> target = resolveMethod(call);
+                    case ObjectCreationExpr creation -> target = callable(resolveConstructor(creation));
+                    case MethodReferenceExpr reference -> target = callable(resolveMethodReference(reference));
+                    case ClassOrInterfaceType type -> target = named(resolveDeclaration(type), library);
                     default -> {
                         var field = resolveField((Expression) use);
-                        yield field != null ? field(field) : use instanceof NameExpr name ? type(resolveTypeName(name)) : null;
+                        typeName = field == null && use instanceof NameExpr;
+                        target = field != null ? field(field) : typeName ? named(resolveTypeDeclaration((NameExpr) use), library) : null;
                     }
-                };
-                if (target == null) continue; // JDK and unresolved uses are not tracked yet
+                }
+                if (target == null) continue; // members of libraries, and unresolved uses, are not tracked yet
                 var site = siteOf(use);
                 var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1); // the site, and the use's place in it
                 uses.put(id, use);
                 var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
                         : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
                         : ((NodeWithSimpleName<?>) use).getNameAsString();
-                var mode = use instanceof NameExpr && ids.address(target) instanceof Address.Type ? Mode.TYPE : modeOf(use);
+                var mode = typeName ? Mode.TYPE : modeOf(use);
                 references.add(new Reference(id, site, target, name, mode));
             }
         }
+        elements.addAll(library.values());
         return new Reading(new Program(elements, references), uses, declarations);
+    }
+
+    /** The element of a resolved type: the workspace's, or a library's, which joins the program the first time. */
+    private ElementId named(ResolvedTypeDeclaration type, Map<String, Element> library) {
+        if (type == null) return null;
+        var qualified = type.getQualifiedName();
+        var workspace = ids.get(new Address.Type(qualified));
+        if (workspace != null) return workspace;
+        var known = library.get(qualified);
+        if (known != null) return known.id();
+        var pkg = type.getPackageName();
+        library.computeIfAbsent(pkg, name -> new Element(new ElementId("lib:" + name), Kind.PACKAGE, name, null,
+                new Address.Package(name), name, Map.of(Fact.LIBRARY, "true")));
+        var element = new Element(new ElementId("lib:" + qualified), kindOf(type), type.getName(), library.get(pkg).id(),
+                new Address.Type(qualified), qualified, Map.of(Fact.LIBRARY, "true", Fact.VISIBILITY, "public"));
+        library.put(qualified, element);
+        return element.id();
     }
 
     private ElementId addPackage(List<Element> elements, String name) {
@@ -209,10 +234,16 @@ public final class Reader {
 
     /** A name used as a type (e.g. the receiver in {@code Money.of(1)}): its qualified name, or null. */
     public String resolveTypeName(NameExpr name) {
+        var type = resolveTypeDeclaration(name);
+        return type == null ? null : type.getQualifiedName();
+    }
+
+    /** A name used as a type: the type it names, in the workspace or in a library, or null. */
+    public ResolvedTypeDeclaration resolveTypeDeclaration(NameExpr name) {
         if (name.getParentNode().filter(p -> p instanceof MethodCallExpr || p instanceof FieldAccessExpr).isEmpty()) return null;
         try {
             var type = JavaParserFactory.getContext(name, typeSolver).solveType(name.getNameAsString());
-            return type.isSolved() ? type.getCorrespondingDeclaration().getQualifiedName() : null;
+            return type.isSolved() ? type.getCorrespondingDeclaration() : null;
         } catch (RuntimeException unresolved) {
             return null;
         }

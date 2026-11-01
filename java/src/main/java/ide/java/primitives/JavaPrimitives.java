@@ -2,6 +2,7 @@ package ide.java.primitives;
 
 import ide.program.Change;
 import ide.program.Primitive;
+import ide.projection.PrimitiveRejected;
 
 /**
  * The primitives in Java, one class each and all of one shape: check that the primitive can be applied, edit the
@@ -14,6 +15,7 @@ public final class JavaPrimitives {
 
     public static Change apply(Primitive primitive, Context context) {
         var before = context.program();
+        PrimitiveRejected.unlessInWorkspace(before, primitive);
         return switch (primitive) {
             case Primitive.Create p -> CreateElement.apply(p, context, before);
             case Primitive.Delete p -> DeleteElement.apply(p, context, before);

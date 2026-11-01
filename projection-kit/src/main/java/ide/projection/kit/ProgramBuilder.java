@@ -41,6 +41,12 @@ public final class ProgramBuilder {
         return this;
     }
 
+    /** A type of a library ({@code java.lang.String}): the program can name it, and nothing changes it. */
+    public ProgramBuilder library(String qualified, Kind kind) {
+        projection.library(qualified, kind);
+        return this;
+    }
+
     public ProgramBuilder field(String owner, String name, String type) {
         declare(projection.apply(new Primitive.Create(Kind.FIELD, id(owner), name)).produced(), type);
         return this;

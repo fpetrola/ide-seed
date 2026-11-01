@@ -118,4 +118,18 @@ class RenameTypeTest {
 
         assertThat(result.violations()).extracting(Violation::code).containsExactly("projection.duplicate");
     }
+
+    @Test
+    void aNameThatWouldCaptureTheUsesOfALibraryTypeIsCaught() {
+        var ws = Workspace.of(Map.of(
+                "a/Item.java", "package a;\n\npublic class Item {\n}\n",
+                "a/Report.java", "package a;\n\nimport java.util.*;\n\nclass Report {\n    List lines;\n}\n"));
+
+        // a type of the same package shadows an on-demand import: Report's List would quietly become a.List
+        var result = ws.invoke("rename", Map.of("element", "a.Item", "name", "List"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("binding.rebound");
+        assertThat(ws.source("a/Item.java")).contains("public class Item");
+    }
 }

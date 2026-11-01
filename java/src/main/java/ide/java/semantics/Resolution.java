@@ -22,6 +22,8 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -56,6 +58,20 @@ public final class Resolution {
         } catch (RuntimeException unresolved) {
             return null;
         }
+    }
+
+    /** The declaration a type use resolves to, in the workspace or in a library, or null. */
+    public static ResolvedReferenceTypeDeclaration resolveDeclaration(ClassOrInterfaceType type) {
+        try {
+            return type.resolve().asReferenceType().getTypeDeclaration().orElse(null);
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
+    /** The kind a resolved type has in the program. */
+    public static Kind kindOf(ResolvedTypeDeclaration type) {
+        return type.isInterface() || type.isAnnotation() ? Kind.INTERFACE : type.isEnum() ? Kind.ENUM : Kind.CLASS;
     }
 
     public static Mode modeOf(Node use) {

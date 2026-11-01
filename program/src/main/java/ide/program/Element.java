@@ -13,4 +13,9 @@ public record Element(ElementId id, Kind kind, String name, ElementId parent, Ad
     public String fact(Fact fact) {
         return facts.get(fact);
     }
+
+    /** Whether the element is declared in a library, outside the workspace: named by the program, never changed. */
+    public boolean inLibrary() {
+        return "true".equals(fact(Fact.LIBRARY));
+    }
 }

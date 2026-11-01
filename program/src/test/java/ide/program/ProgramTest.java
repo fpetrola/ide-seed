@@ -103,6 +103,29 @@ class ProgramTest {
     }
 
     @Test
+    void aLibraryTypeIsNamedByTheProgramButIsNoPartOfTheWorkspaceHierarchy() {
+        var lang = new ElementId("lib:java.lang");
+        var exception = new ElementId("lib:java.lang.Exception");
+        var oops = new ElementId("type:20");
+        var library = Map.of(Fact.LIBRARY, "true", Fact.VISIBILITY, "public");
+        var p = new Program(List.of(
+                new Element(lang, Kind.PACKAGE, "java.lang", null, new Address.Package("java.lang"), "java.lang", library),
+                new Element(exception, Kind.CLASS, "Exception", lang, new Address.Type("java.lang.Exception"),
+                        "java.lang.Exception", library),
+                element(PKG, Kind.PACKAGE, "a", null, "a"),
+                element(oops, Kind.CLASS, "Oops", PKG, "a.Oops")),
+                List.of(new Reference("type:20@0", oops, exception, "Exception", Mode.EXTENDS)));
+
+        assertThat(p.element(exception).inLibrary()).isTrue();
+        assertThat(p.element(oops).inLibrary()).isFalse();
+        assertThat(p.referencesTo(exception)).extracting(Reference::site).containsExactly(oops);
+        assertThat(p.superclass(oops)).isEmpty();
+        assertThat(p.supertypes(p.element(oops))).isEmpty();
+        assertThat(p.outline()).containsExactly("CLASS a.Oops", "CLASS java.lang.Exception (library)",
+                "a.Oops -> java.lang.Exception (extends)");
+    }
+
+    @Test
     void referencesAreIndexedBothWays() {
         var p = program();
 

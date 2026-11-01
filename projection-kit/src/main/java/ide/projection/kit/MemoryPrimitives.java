@@ -28,6 +28,7 @@ final class MemoryPrimitives {
     }
 
     static Change apply(MemoryGraph graph, Primitive primitive, Program before) {
+        PrimitiveRejected.unlessInWorkspace(before, primitive);
         return switch (primitive) {
             case Primitive.Create c -> {
                 var created = create(graph, c.kind(), c.parent(), c.name(), c.argument());

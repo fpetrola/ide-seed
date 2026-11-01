@@ -132,19 +132,26 @@ public final class Program {
         return from.getOrDefault(site, List.of());
     }
 
-    // ---- links: the hierarchy and declared types are references too
+    // ---- links: the hierarchy and declared types are references too; the hierarchy is the workspace's
+
+    /** The link of {@code mode} an element declares (what it extends, what it is declared with), wherever it binds. */
+    public Optional<Reference> link(ElementId element, Mode mode) {
+        return referencesFrom(element).stream().filter(r -> r.mode() == mode).findFirst();
+    }
 
     /** The class a class extends, when it is in the workspace. */
     public Optional<Element> superclass(ElementId type) {
         if (element(type).kind() != Kind.CLASS) return Optional.empty();
-        return referencesFrom(type).stream().filter(r -> r.mode() == Mode.EXTENDS).findFirst().map(r -> element(r.target()));
+        return link(type, Mode.EXTENDS).map(r -> element(r.target())).filter(e -> !e.inLibrary());
     }
 
     /** Direct supertypes in the workspace: what the type extends, then what it implements. */
     public List<Element> supertypes(Element type) {
         var supertypes = new ArrayList<Element>();
         for (var mode : List.of(Mode.EXTENDS, Mode.IMPLEMENTS)) {
-            for (var r : referencesFrom(type.id())) if (r.mode() == mode) supertypes.add(element(r.target()));
+            for (var r : referencesFrom(type.id())) {
+                if (r.mode() == mode && !element(r.target()).inLibrary()) supertypes.add(element(r.target()));
+            }
         }
         return supertypes;
     }
@@ -177,7 +184,7 @@ public final class Program {
 
     /** The workspace type a field, parameter or method is declared with. */
     public Optional<Element> declaredType(ElementId element) {
-        return referencesFrom(element).stream().filter(r -> r.mode() == Mode.DECLARED).findFirst().map(r -> element(r.target()));
+        return link(element, Mode.DECLARED).map(r -> element(r.target())).filter(e -> !e.inLibrary());
     }
 
     /** The type and its superclasses in the workspace, nearest first. */
@@ -296,7 +303,7 @@ public final class Program {
     }
 
     private void outline(Element element, List<String> lines) {
-        lines.add(element.kind() + " " + element.qualified());
+        lines.add(element.kind() + " " + element.qualified() + (element.inLibrary() ? " (library)" : ""));
         for (var child : children(element.id())) if (!child.kind().isType()) outline(child, lines);
     }
 

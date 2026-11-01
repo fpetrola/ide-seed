@@ -131,6 +131,14 @@ final class MemoryGraph {
         order.add(id);
     }
 
+    /** An element of a library: public, and marked so that no primitive changes it. */
+    ElementId library(Address address, Kind kind, String name, ElementId parent) {
+        var id = ids.of(address, kind);
+        var facts = kind == Kind.PACKAGE ? Map.of(Fact.LIBRARY, "true") : Map.of(Fact.LIBRARY, "true", Fact.VISIBILITY, "public");
+        add(id, new Node(kind, name, parent, facts));
+        return id;
+    }
+
     void addUse(ElementId site, ElementId target, Mode mode) {
         uses.add(new Use(site, target, nodes.get(target).name(), mode));
     }

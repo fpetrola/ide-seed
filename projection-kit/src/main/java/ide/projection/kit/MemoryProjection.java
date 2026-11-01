@@ -1,5 +1,7 @@
 package ide.projection.kit;
 
+import ide.program.Address;
+import ide.program.Kind;
 import ide.program.Change;
 import ide.program.ElementId;
 import ide.program.Fact;
@@ -137,6 +139,16 @@ public final class MemoryProjection implements Projection {
 
     void rules(LanguageRules rules) {
         this.rules = rules;
+    }
+
+    /** A type of a library, with its package: the program names it, and no primitive may change it. */
+    void library(String qualified, Kind kind) {
+        var dot = qualified.lastIndexOf('.');
+        var pkg = new Address.Package(qualified.substring(0, dot));
+        var parent = graph.ids.has(pkg) ? graph.ids.get(pkg)
+                : graph.library(pkg, Kind.PACKAGE, pkg.name(), null);
+        graph.library(new Address.Type(qualified), kind, qualified.substring(dot + 1), parent);
+        program = null;
     }
 
     void addUse(ElementId site, ElementId target, Mode mode) {

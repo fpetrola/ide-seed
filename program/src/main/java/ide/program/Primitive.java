@@ -4,6 +4,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,13 +48,9 @@ public sealed interface Primitive {
             case Set s -> Fact.VISIBILITY.label().equals(s.attribute())
                     ? Change.NONE.pin(s.element(), Change.Aspect.VISIBILITY) : Change.NONE;
             case Link l -> {
-                var old = switch (l.mode()) {
-                    case EXTENDS -> before.superclass(l.element());
-                    case DECLARED -> before.declaredType(l.element());
-                    default -> java.util.Optional.<Element>empty(); // implements adds one more
-                };
-                yield old.filter(o -> !o.id().equals(l.target()))
-                        .map(o -> Change.NONE.expect(new Change.Retargeted(l.element(), o.id(), l.target())))
+                if (l.mode() == Mode.IMPLEMENTS) yield Change.NONE; // implements adds one more
+                yield before.link(l.element(), l.mode()).filter(old -> !old.target().equals(l.target()))
+                        .map(old -> Change.NONE.expect(new Change.Retargeted(l.element(), old.target(), l.target())))
                         .orElse(Change.NONE);
             }
             case Retarget r -> {
@@ -65,6 +62,21 @@ public sealed interface Primitive {
                 var reference = before.reference(i.reference());
                 yield Change.NONE.expect(new Change.Dropped(reference.site(), reference.target()));
             }
+        };
+    }
+
+    /** The elements this primitive changes; a projection refuses it when one of them belongs to a library. */
+    default List<ElementId> changed() {
+        return switch (this) {
+            case Create c -> c.parent() == null ? List.of() : List.of(c.parent());
+            case Delete d -> List.of(d.element());
+            case Move m -> List.of(m.element(), m.parent());
+            case Rename r -> List.of(r.element());
+            case Set s -> List.of(s.element());
+            case Link l -> List.of(l.element());
+            case Extract e -> List.of(e.method());
+            case Retarget r -> List.of(); // the code that changes is where the use is: always the workspace
+            case Inline i -> List.of();
         };
     }
 
