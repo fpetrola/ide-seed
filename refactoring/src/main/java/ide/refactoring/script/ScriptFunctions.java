@@ -84,7 +84,6 @@ final class ScriptFunctions {
             case "arguments" -> new Value.Items(needs(args.getFirst()).arguments().stream() // each its name, then its type
                     .<Value>map(a -> texts(List.of(a.name(), a.type()))).toList());
             case "types-named" -> elems(graph.types().stream().filter(type -> type.name().equals(text(args, 0))).toList());
-            case "similar" -> args.getFirst() == null ? elems(List.of()) : elems(similar(element(args, 0), text(args, 1), text(args, 2)));
             // queries
             case "members" -> elems(graph.members(element(args, 0).id()));
             case "fields" -> elems(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("FIELD")).toList());
@@ -181,37 +180,6 @@ final class ScriptFunctions {
     /** What a use that binds nothing is: a {@code type}, a {@code call}, a {@code new} object, or a {@code value} read or written. */
     private static String used(Mode mode) {
         return mode == Mode.CALL ? "call" : mode == Mode.NEW ? "new" : mode.isTypeUse() ? "type" : "value";
-    }
-
-    /**
-     * The members of a kind that {@code type} has, declared or inherited from the workspace, whose names are almost
-     * {@code name}: one or two letters away, as a typo is; the nearest first.
-     */
-    private List<Element> similar(Element type, String name, String kind) {
-        var members = new java.util.ArrayList<Element>();
-        for (var t = java.util.Optional.of(type); t.isPresent(); t = graph.superclass(t.get().id())) {
-            graph.members(t.get().id()).stream().filter(m -> m.kind().name().equals(kind)).forEach(members::add);
-        }
-        return members.stream().filter(m -> distance(m.name(), name) > 0 && distance(m.name(), name) <= 2)
-                .sorted(java.util.Comparator.comparingInt(m -> distance(m.name(), name))).toList();
-    }
-
-    /** How many letters must be inserted, deleted, replaced or swapped to turn one name into the other. */
-    private static int distance(String a, String b) {
-        var d = new int[a.length() + 1][b.length() + 1];
-        for (var i = 0; i <= a.length(); i++) {
-            for (var j = 0; j <= b.length(); j++) {
-                if (i == 0 || j == 0) d[i][j] = i + j;
-                else {
-                    var replace = d[i - 1][j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1);
-                    d[i][j] = Math.min(replace, Math.min(d[i - 1][j], d[i][j - 1]) + 1);
-                    if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
-                        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-                    }
-                }
-            }
-        }
-        return d[a.length()][b.length()];
     }
 
     private String ref(Value value) {

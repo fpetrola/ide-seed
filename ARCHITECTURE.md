@@ -1372,6 +1372,15 @@ que esto no escala solo:
      por si una regla necesita decir varias juntas.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
+
+   **Ciclo 1 hecho el 2026-11-01**: elegir por parecido. `use-similar` y `call-similar` se fueron; quedan 4 efectos.
+   - El parecido de nombres es una relación del grafo (`similar(e, tipo, nombre, kind)`: un miembro que el tipo
+     tiene o hereda, a una o dos letras, como una errata, el más cercano primero), y no una función de los scripts.
+   - `java.rules` dice que un nombre mal escrito resuelve en el miembro casi igual que es accesible, y que cambiar el
+     uso a él es ligarlo (`target`): el mismo cambio que ya hacía `import`. Cada forma tiene su predicado
+     (`spelled`, `called-as`), así cada una tiene su título.
+   - El rastro de `why` ya no muestra esos efectos aparte: sus caminos son definiciones de `resolves`, tratadas en
+     orden con las otras.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

@@ -172,6 +172,19 @@ def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "v
 say member for resolves "create ${kind} ${named} in ${name(owner)}"
 say parameter for resolves "create parameter ${named} in ${name(owner)}()"
 
+# A name misspelled (JLS 6.5.6.1, 15.12.1): a member the type it is looked up in has whose name is almost it, one or
+# two letters away as a typo is, the nearest first; changing the use to it writes its name.
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "value") and scope(u, t)
+  and similar(f, t, symbol, "field") and site(u, s) and accessible(s, f) and spelled(u, f)
+def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "call") and scope(u, t)
+  and similar(m, t, symbol, "method") and site(u, s) and accessible(s, m) and called-as(u, m)
+
+def spelled(u, f) when target(u, f)
+def called-as(u, m) when target(u, m)
+
+say target for spelled "change to ${name(value)}"
+say target for called-as "change to ${name(value)}(..)"
+
 # What only the person knows of what is created: asked, with what the rules deduce proposed.
 ask type "type of the new field" for type of new field
 

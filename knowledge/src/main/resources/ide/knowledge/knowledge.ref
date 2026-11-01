@@ -21,26 +21,7 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 
 # resolves(symbol) by a type of that name, or by a field or a parameter created for it: java.rules says it.
 
-# A name misspelled: the members of the type it is looked up in whose names are almost it.
-effect use-similar "change to ${name(f)}"
-  makes resolves(symbol)
-  when nonempty(unresolved-in(path, symbol, "value"))
-  for f in similar(scope(unresolved-in(path, symbol, "value")), symbol, "FIELD")
-  needs accessible(site(unresolved-in(path, symbol, "value")), f)
-  do
-    retarget ${unresolved-in(path, symbol, "value")} ${f}
-  end
-end
-
-effect call-similar "change to ${name(m)}(..)"
-  makes resolves(symbol)
-  when nonempty(unresolved-in(path, symbol, "call"))
-  for m in similar(scope(unresolved-in(path, symbol, "call")), symbol, "METHOD")
-  needs accessible(site(unresolved-in(path, symbol, "call")), m)
-  do
-    retarget ${unresolved-in(path, symbol, "call")} ${m}
-  end
-end
+# A name misspelled: java.rules says it is changed to one almost it.
 
 # A call to no method, a new no constructor makes, a type nothing declares: java.rules says what is created for each.
 

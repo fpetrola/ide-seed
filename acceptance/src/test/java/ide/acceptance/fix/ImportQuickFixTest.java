@@ -107,10 +107,11 @@ class ImportQuickFixTest {
                 "      ! open-visibility b.Money package -> public",
                 "  X resolves: unresolved(u, a/U.java, Money, value)",
                 "  X resolves: unresolved(u, a/U.java, Money, value)",
+                "  X resolves: unresolved(u, a/U.java, Money, value)",
+                "  X resolves: unresolved(u, a/U.java, Money, call)",
                 "  X resolves: unresolved(u, a/U.java, Money, call)",
                 "  X resolves: not named(_1, Money)",
-                "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",
-                "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))");
+                "  X resolves: not named(_1, Money)");
 
         ws.fix("a/U.java", 4, "open-visibility b.Money package -> public, then import b.Money");
 
@@ -136,9 +137,10 @@ class ImportQuickFixTest {
                 "  ! import java.util.List",
                 "  X resolves: unresolved(u, a/U.java, List, value)",
                 "  X resolves: unresolved(u, a/U.java, List, value)",
+                "  X resolves: unresolved(u, a/U.java, List, value)",
+                "  X resolves: unresolved(u, a/U.java, List, call)",
                 "  X resolves: unresolved(u, a/U.java, List, call)",
                 "  X resolves: not named(_1, List)",
-                "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",
-                "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))");
+                "  X resolves: not named(_1, List)");
     }
 }

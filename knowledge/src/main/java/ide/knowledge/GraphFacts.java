@@ -37,6 +37,8 @@ import java.util.stream.Stream;
  *                                     place expects, and how the language writes what a type starts with)
  * member(e, owner, name, kind)        parameter(p, callable, name, passed)     constructor-for(k, type, use)
  * takes-arguments(m, use)             (m's parameters are of the types of what the use passes)
+ * similar(e, type, name, kind)        (a member type has, declared or inherited, named one or two letters away from
+ *                                     name, as a typo is; the nearest first)
  * </pre>
  */
 final class GraphFacts implements Facts {
@@ -112,11 +114,46 @@ final class GraphFacts implements Facts {
                     program.unresolved().stream().map(u -> List.of(u.id(), u.site().value())),
                     program.references().stream().map(r -> List.of(r.id(), r.site().value())));
             case "target" -> program.references().stream().map(r -> List.of(r.id(), r.target().value()));
+            case "similar" -> pattern.size() < 3 || pattern.get(1) == null || pattern.get(2) == null ? Stream.empty()
+                    : similar(new ElementId(pattern.get(1)), pattern.get(2)).map(m -> List.of(id(m), pattern.get(1), pattern.get(2),
+                    m.kind().name().toLowerCase(Locale.ROOT)));
             case "known" -> known.entrySet().stream().filter(e -> e.getValue() != null && !(e.getValue() instanceof Value.Items))
                     .map(e -> List.of(e.getKey(), Value.asText(e.getValue())));
             default -> Stream.empty();
         };
         return tuples.filter(tuple -> Facts.matches(tuple, pattern));
+    }
+
+    /**
+     * The members {@code type} has, declared or inherited from the workspace, whose names are almost {@code name}: one
+     * or two letters away, as a typo is; the nearest first.
+     */
+    private Stream<Element> similar(ElementId type, String name) {
+        if (!program.contains(type)) return Stream.empty();
+        var members = new java.util.ArrayList<Element>();
+        for (var t = java.util.Optional.of(program.element(type)); t.isPresent(); t = program.superclass(t.get().id())) {
+            members.addAll(program.members(t.get().id()));
+        }
+        return members.stream().filter(m -> distance(m.name(), name) > 0 && distance(m.name(), name) <= 2)
+                .sorted(java.util.Comparator.comparingInt(m -> distance(m.name(), name)));
+    }
+
+    /** How many letters must be inserted, deleted, replaced or swapped to turn one name into the other. */
+    private static int distance(String a, String b) {
+        var d = new int[a.length() + 1][b.length() + 1];
+        for (var i = 0; i <= a.length(); i++) {
+            for (var j = 0; j <= b.length(); j++) {
+                if (i == 0 || j == 0) d[i][j] = i + j;
+                else {
+                    var replace = d[i - 1][j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1);
+                    d[i][j] = Math.min(replace, Math.min(d[i - 1][j], d[i][j - 1]) + 1);
+                    if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
+                        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+                    }
+                }
+            }
+        }
+        return d[a.length()][b.length()];
     }
 
     /** The uses that bind nothing: the one named, or all. */
