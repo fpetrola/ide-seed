@@ -1,0 +1,11 @@
+pom.xml
+shop/cart/Cart.java
+shop/fixes/Broken.java
+shop/fixes/Unset.java
+shop/model/Book.java
+shop/model/Discount.java
+shop/model/Item.java
+shop/model/Movie.java
+shop/model/Product.java
+shop/report/Report.java
+shop/secret/Vault.java

@@ -65,11 +65,11 @@ class WorkbenchTest {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 18);
         workbench.open("a/A.java", 4, 16); // public int x: on x
-        dialogs.fill(Map.of("name", "count"));
+        dialogs.line("count");
 
         workbench.act("rename");
 
-        assertThat(dialogs.filled.getFirst().fields().getFirst().value()).isEqualTo("a.A#x");
+        assertThat(dialogs.asked).containsExactly("Rename a.A#x [x]");
         assertThat(workbench.text("a/A.java")).contains("public int count;", "return count + p;");
         assertThat(workbench.views().steps()).contains("' rename a.A#x -> count");
         assertThat(workbench.views().changes()).contains("+    public int count;");
@@ -84,7 +84,7 @@ class WorkbenchTest {
         workbench.act("apply-edit");
 
         assertThat(workbench.views().problems()).singleElement().asString().startsWith("a/B.java:5: cannot find symbol");
-        dialogs.choose("create field total").fill(Map.of());
+        dialogs.choose("create field total").line("int");
 
         workbench.act("quick-fix");
 

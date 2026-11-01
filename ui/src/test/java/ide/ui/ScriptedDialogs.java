@@ -1,5 +1,6 @@
 package ide.ui;
 
+import java.awt.Point;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -14,6 +15,7 @@ final class ScriptedDialogs implements Dialogs {
 
     final List<Form> filled = new ArrayList<>();
     final List<List<String>> offered = new ArrayList<>();
+    final List<String> asked = new ArrayList<>();
     final List<String> told = new ArrayList<>();
     private final Deque<Map<String, Object>> fills = new ArrayDeque<>();
     private final Deque<String> choices = new ArrayDeque<>();
@@ -46,18 +48,19 @@ final class ScriptedDialogs implements Dialogs {
     }
 
     @Override
-    public Optional<String> choose(String title, List<String> options) {
-        offered.add(options);
+    public Optional<String> choose(String title, List<Option> options, Point at) {
+        offered.add(options.stream().map(Option::text).toList());
         return Optional.ofNullable(choices.poll());
     }
 
     @Override
-    public Optional<String> line(String question, String initial) {
+    public Optional<String> line(String title, String initial, Point at) {
+        asked.add(title + " [" + initial + "]");
         return Optional.ofNullable(lines.poll());
     }
 
     @Override
-    public void tell(String title, List<String> lines) {
+    public void tell(String title, List<String> lines, Point at) {
         told.add(title);
     }
 }

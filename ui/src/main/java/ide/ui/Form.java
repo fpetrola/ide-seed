@@ -44,7 +44,8 @@ final class Form {
             switch (param.type()) {
                 case "element", "elements" -> {
                     var kinds = String.join(",", param.kinds());
-                    var options = ide.list("elements", kinds.isEmpty() ? Map.of() : Map.of("kinds", kinds));
+                    var options = ide.records("elements", kinds.isEmpty() ? Map.of() : Map.of("kinds", kinds)).stream()
+                            .map(element -> String.valueOf(element.get("element"))).toList();
                     Object value = param.type().equals("elements") ? List.of() : null;
                     if (!chosen && param.type().equals("element") && selection.filter(s -> s.fits(param)).isPresent()) {
                         value = selection.get().element();

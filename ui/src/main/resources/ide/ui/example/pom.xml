@@ -1,0 +1,7 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>example</groupId>
+    <artifactId>shop</artifactId>
+    <version>1</version>
+    <!-- IdeSeed's example: a shop to try refactorings, quick fixes, completion and navigation on. -->
+</project>

@@ -10,10 +10,13 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.BorderFactory;
 import javax.swing.JTree;
+import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -35,7 +38,26 @@ final class Workbench extends JPanel {
     private record File(String path, long problems) {
         @Override
         public String toString() {
-            return path.substring(path.lastIndexOf('/') + 1) + (problems == 0 ? "" : "  (" + problems + ")");
+            return path.substring(path.lastIndexOf('/') + 1, path.length() - (path.endsWith(".java") ? 5 : 0));
+        }
+    }
+
+    /** A package or a file, with its icon; a file with problems in red, with how many. */
+    private static final class FileRenderer extends DefaultTreeCellRenderer {
+        @Override
+        public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded,
+                                                      boolean leaf, int row, boolean focus) {
+            var object = ((DefaultMutableTreeNode) value).getUserObject();
+            if (object instanceof File file) {
+                var text = file.problems() == 0 ? file.toString()
+                        : "<html><font color='#E05555'><u>" + file + "</u></font>&nbsp;&nbsp;<font color='#808080'>" + file.problems() + "</font></html>";
+                super.getTreeCellRendererComponent(tree, text, selected, expanded, leaf, row, focus);
+                setIcon(Icons.of("CLASS"));
+            } else {
+                super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
+                setIcon(Icons.of("PACKAGE"));
+            }
+            return this;
         }
     }
 
@@ -43,9 +65,11 @@ final class Workbench extends JPanel {
     private final Dialogs dialogs;
     private final DefaultTreeModel tree = new DefaultTreeModel(new DefaultMutableTreeNode("project"));
     private final JTree project = new JTree(tree);
-    private final Editors editors = new Editors(Keymap.KEYS.stream().map(Keymap.Key::stroke).toList());
+    private final Editors editors;
     private final Views views = new Views(this::openProblem, this::openResult);
     private final JLabel status = new JLabel(" ");
+    private final JLabel position = new JLabel(" ");
+    private final JLabel libraries = new JLabel(" ");
     private final Deque<String> back = new ArrayDeque<>();
     private final Deque<String> forward = new ArrayDeque<>();
     private List<String> files = List.of();
@@ -55,13 +79,45 @@ final class Workbench extends JPanel {
         super(new BorderLayout());
         this.ide = ide;
         this.dialogs = dialogs;
+        this.editors = new Editors(Keymap.KEYS.stream().map(Keymap.Key::stroke).toList(), new Editors.Help() {
+            @Override
+            public List<Map<String, Object>> completions(String path, String text, int offset) {
+                return ide.records("complete", Map.of("path", path, "text", text, "offset", String.valueOf(offset)));
+            }
+
+            @Override
+            public Optional<Runnable> link(String path, int line, int column) {
+                if (!editors().unapplied().isEmpty()) return Optional.empty();
+                var at = ide.record("at", Map.of("path", path, "line", String.valueOf(line), "column", String.valueOf(column)));
+                return at == null ? Optional.empty() : Optional.of(() -> go(String.valueOf(at.get("element"))));
+            }
+
+            @Override
+            public void moved() {
+                position.setText(editors().current().map(path -> editors().line() + ":" + editors().column()).orElse(" "));
+            }
+        });
         var center = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editors, views);
         center.setResizeWeight(0.72);
-        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(project), center);
+        center.setBorder(BorderFactory.createEmptyBorder());
+        var projectScroll = new JScrollPane(project);
+        projectScroll.setBorder(BorderFactory.createEmptyBorder());
+        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, projectScroll, center);
         main.setDividerLocation(260);
+        main.setBorder(BorderFactory.createEmptyBorder());
         add(main, BorderLayout.CENTER);
-        add(status, BorderLayout.PAGE_END);
+        var bar = new JPanel(new BorderLayout(16, 0));
+        bar.setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 10));
+        bar.add(status, BorderLayout.CENTER);
+        var right = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 16, 0));
+        right.setOpaque(false);
+        right.add(libraries);
+        right.add(position);
+        bar.add(right, BorderLayout.LINE_END);
+        add(bar, BorderLayout.PAGE_END);
         project.setRootVisible(false);
+        project.setShowsRootHandles(true);
+        project.setCellRenderer(new FileRenderer());
         project.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
@@ -73,10 +129,6 @@ final class Workbench extends JPanel {
                 }
             }
         });
-        var classpath = ide.record("classpath", Map.of());
-        var libraries = strings(classpath.get("entries"));
-        say("libraries: " + (libraries.isEmpty() ? "none" : libraries.size() + " from Maven")
-                + (classpath.get("problem") == null ? "" : " (" + String.valueOf(classpath.get("problem")).lines().findFirst().orElse("") + ")"));
         for (var key : Keymap.KEYS) {
             getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(key.stroke(), key.action());
             getActionMap().put(key.action(), new AbstractAction(key.description()) {
@@ -87,6 +139,12 @@ final class Workbench extends JPanel {
             });
         }
         refresh();
+        var classpath = ide.record("classpath", Map.of());
+        var jars = strings(classpath.get("entries"));
+        libraries.setText(jars.isEmpty() ? "JDK only" : jars.size() + " libraries");
+        libraries.setToolTipText(classpath.get("problem") == null ? String.join("\n", jars) : String.valueOf(classpath.get("problem")));
+        say("libraries: " + (jars.isEmpty() ? "none" : jars.size() + " from Maven")
+                + (classpath.get("problem") == null ? "" : " (" + String.valueOf(classpath.get("problem")).lines().findFirst().orElse("") + ")"));
     }
 
     /** Does what a key of the keymap does; what goes wrong is said, not thrown. */
@@ -106,13 +164,19 @@ final class Workbench extends JPanel {
                     refresh();
                 }
                 case "quick-fix" -> quickFix();
-                case "complete" -> complete();
-                case "rename", "change-signature", "move" -> refactor(action);
+                case "complete" -> editors.complete();
+                case "rename" -> rename();
+                case "change-signature", "move" -> refactor(action);
                 case "refactor" -> {
                     var selection = selection();
                     var offered = ide.list("library", Map.of()).stream().map(line -> line.substring(line.indexOf(' ') + 1))
-                            .filter(id -> selection.isEmpty() || takes(ide.capability(id), selection.get())).toList();
-                    dialogs.choose("Refactor", offered).ifPresent(this::refactor);
+                            .filter(id -> selection.isEmpty() || takes(ide.capability(id), selection.get()))
+                            .map(id -> new Dialogs.Option(id, "REFACTORING", ide.capability(id).description())).toList();
+                    dialogs.choose("Refactor " + selection.map(Form.Selection::element).orElse(""), offered, editors.caretOnScreen())
+                            .ifPresent(id -> {
+                                if (id.equals("rename")) rename();
+                                else refactor(id);
+                            });
                 }
                 case "open-declaration" -> selection().ifPresent(selected -> go(selected.element()));
                 case "hierarchy" -> taken("hierarchy").ifPresent(type ->
@@ -121,11 +185,11 @@ final class Workbench extends JPanel {
                         results("Callers of " + method, ide.list("callers", Map.of("method", method))));
                 case "references" -> taken("references").ifPresent(element ->
                         results("References to " + element, ide.list("references", Map.of("element", element))));
-                case "open-type" -> dialogs.choose("Open type", ide.list("elements", Map.of("kinds", "CLASS,INTERFACE,ENUM")))
+                case "open-type" -> dialogs.choose("Enter class name", options(Map.of("kinds", "CLASS,INTERFACE,ENUM")), null)
                         .ifPresent(this::go);
                 case "outline" -> editors.current().ifPresent(path ->
-                        dialogs.choose("Outline of " + path, ide.list("elements", Map.of("path", path))).ifPresent(this::go));
-                case "go-to-line" -> dialogs.line("Line", String.valueOf(editors.line()))
+                        dialogs.choose(path.substring(path.lastIndexOf('/') + 1), options(Map.of("path", path)), null).ifPresent(this::go));
+                case "go-to-line" -> dialogs.line("Go to line", String.valueOf(editors.line()), editors.caretOnScreen())
                         .ifPresent(line -> editors.caret(Integer.parseInt(line.strip()), 1));
                 case "next-problem" -> problem(1);
                 case "previous-problem" -> problem(-1);
@@ -134,12 +198,22 @@ final class Workbench extends JPanel {
                 case "zoom-in" -> editors.zoom(1);
                 case "zoom-out" -> editors.zoom(-1);
                 case "keys" -> dialogs.tell("Keys", Keymap.KEYS.stream()
-                        .map(key -> String.format("%-16s %s", key.stroke().toString().replace("pressed ", ""), key.description())).toList());
+                        .map(key -> String.format("%-16s %s", key.stroke().toString().replace("pressed ", ""), key.description())).toList(), null);
                 default -> throw new IllegalArgumentException("no action " + action);
             }
         } catch (RuntimeException failed) {
             say("error: " + failed.getMessage());
         }
+    }
+
+    private Editors editors() {
+        return editors;
+    }
+
+    /** The elements the capability answers, as options with the icon of their kind. */
+    private List<Dialogs.Option> options(Map<String, String> args) {
+        return ide.records("elements", args).stream()
+                .map(e -> Dialogs.Option.of(String.valueOf(e.get("element")), String.valueOf(e.get("kind")))).toList();
     }
 
     /** Opens a file at a line and a column, from 1. */
@@ -175,7 +249,13 @@ final class Workbench extends JPanel {
     /** The menus: each action with its key. */
     JMenuBar menus() {
         var bar = new JMenuBar();
-        menu(bar, "File", "apply-edit", "save", "undo-change");
+        var file = new JMenu("File");
+        var openFolder = new JMenuItem("Open Folder...");
+        openFolder.addActionListener(event -> opener.accept(null));
+        file.add(openFolder);
+        file.addSeparator();
+        bar.add(file);
+        for (var action : List.of("apply-edit", "save", "undo-change")) file.add(item(action));
         menu(bar, "Edit", "complete", "quick-fix");
         menu(bar, "Refactor", "rename", "refactor", "change-signature", "move");
         menu(bar, "Navigate", "open-declaration", "open-type", "outline", "references", "callers", "hierarchy", "go-to-line",
@@ -211,12 +291,21 @@ final class Workbench extends JPanel {
 
     private void menu(JMenuBar bar, String name, String... actions) {
         var menu = new JMenu(name);
-        for (var action : actions) {
-            var item = new JMenuItem(getActionMap().get(action));
-            item.setAccelerator(Keymap.KEYS.stream().filter(key -> key.action().equals(action)).findFirst().orElseThrow().stroke());
-            menu.add(item);
-        }
+        for (var action : actions) menu.add(item(action));
         bar.add(menu);
+    }
+
+    private JMenuItem item(String action) {
+        var item = new JMenuItem(getActionMap().get(action));
+        item.setAccelerator(Keymap.KEYS.stream().filter(key -> key.action().equals(action)).findFirst().orElseThrow().stroke());
+        return item;
+    }
+
+    private java.util.function.Consumer<java.nio.file.Path> opener = folder -> { };
+
+    /** What File, Open Folder does: the window opens another project. */
+    void opener(java.util.function.Consumer<java.nio.file.Path> opener) {
+        this.opener = opener;
     }
 
     /** Applies what the editors say and the program does not yet: an edit by hand each, shown as it went. */
@@ -253,18 +342,27 @@ final class Workbench extends JPanel {
             say("no quick fix for " + path + ":" + line);
             return;
         }
-        dialogs.choose("Quick fix", titles).ifPresent(title -> {
-            var asks = ide.records("asks", Map.of("path", path, "line", line, "title", title));
-            var answers = asks.isEmpty() ? Optional.of(Map.<String, Object>of()) : dialogs.fill(title, Form.questions(title, asks), values -> "");
-            answers.ifPresent(values -> change("fix", Map.of("path", path, "line", line, "title", title, "answers", values)));
+        var at = editors.caretOnScreen();
+        dialogs.choose("Quick fix", titles.stream().map(title -> Dialogs.Option.of(title, "FIX")).toList(), at).ifPresent(title -> {
+            var answers = new java.util.LinkedHashMap<String, Object>();
+            for (var ask : ide.records("asks", Map.of("path", path, "line", line, "title", title))) {
+                var answer = dialogs.line(String.valueOf(ask.get("question")), String.valueOf(ask.get("default")), at);
+                if (answer.isEmpty()) return;
+                answers.put(String.valueOf(ask.get("name")), answer.get());
+            }
+            change("fix", Map.of("path", path, "line", line, "title", title, "answers", answers));
         });
     }
 
-    private void complete() {
-        var path = editors.current().orElseThrow(() -> new IllegalStateException("no file is open"));
-        var word = editors.word();
-        var candidates = ide.list("complete", Map.of("path", path, "text", editors.text(path), "offset", String.valueOf(editors.offset())));
-        dialogs.choose("Complete " + word, candidates).ifPresent(chosen -> editors.replaceBefore(word.length(), chosen));
+    /** A new name for the element under the caret, written where it is, as IDEs rename in place. */
+    private void rename() {
+        var selection = selection();
+        if (selection.isEmpty()) {
+            say("rename: the caret is on no element");
+            return;
+        }
+        dialogs.line("Rename " + selection.get().element(), editors.name(), editors.caretOnScreen())
+                .ifPresent(name -> change("rename", Map.of("element", selection.get().element(), "name", name)));
     }
 
     /** Runs a change after applying what the editors say, and shows what it did. */
@@ -363,6 +461,8 @@ final class Workbench extends JPanel {
         views.say(line);
         status.setText(line);
     }
+
+
 
     private static List<String> strings(Object list) {
         return list instanceof List<?> items ? items.stream().map(String::valueOf).toList() : List.of();
