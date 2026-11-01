@@ -211,7 +211,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   entera: `ancestors`, `subtypes` (por el índice de referencias) y `overriddenTransitively`, que antes calculaba la
   navegación de la sesión recorriendo el grafo a mano. Desde la etapa 2 tiene usos sin resolver y elementos de
   biblioteca; `Retarget` liga un uso sin resolver (`Change.Bound`); `Primitive.changed()` dice qué elementos cambia
-  cada primitivo; el outline muestra `site -> ? nombre (modo)` y marca los tipos `(library)`.
+  cada primitivo; el outline muestra `site -> ? nombre (modo)` y marca los tipos `(library)`. También desde la etapa 2,
+  `Reconciliation` empareja, después de una edición a mano, cada elemento nuevo con el de antes que es (renombrado,
+  con otra firma o movido de paquete), solo cuando la estructura no deja dudas: el tipo de un campo, el nombre o el
+  cuerpo de un método, el lugar de un parámetro, lo que contiene un tipo, o ser el único de su clase que se fue de un
+  padre mientras llegaba otro. `Identity.transfer` le da al id viejo la dirección nueva.
 - **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
   enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
 
@@ -290,9 +294,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   la etapa 2 el Reader suma los tipos de biblioteca que el código nombra (con id `lib:` y su nombre, fuera de la
   tabla de identidad, donde cambiarían las claves de los miembros) y los tipos escritos que no ligan nada, con los
   tipos del JDK que podrían nombrar. Ligar uno escribe el nombre del destino y lo importa si hace falta. Reemplazar
-  un tipo vinculado declara que los usos dentro de él, como sus argumentos de tipo, se van con él.
+  un tipo vinculado declara que los usos dentro de él, como sus argumentos de tipo, se van con él. Una edición a mano
+  reconcilia la identidad por rondas (tipos, lo que contienen, parámetros), leyendo de nuevo entre una y otra; lo
+  que la edición quitó se olvida, para que su id no vuelva con otra cosa.
 - **Abierto.** Invalidación selectiva: se reparsea solo lo tocado, pero el grafo se relee entero. Borrado de tipos
-  anidados. Reconciliación estructural de identidad en `edit`. Renombrar un parámetro no renombra sus usos en el
+  anidados. Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
+  un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
   cuerpo, porque esos usos no son referencias del grafo.
 
 ### 5.5 `engine`: motor de transacciones verificadas
@@ -332,7 +339,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   (acceso). `Trace` es un árbol de datos y el único lugar que escribe sigilos; el planificador de `knowledge` también
   responde su deducción como `Trace`. Tests propios sobre la proyección en memoria: transacción, reparador, rastro y
   cada vista sola. En la fase 5 el intento pasó de la sesión a la transacción, y remedios y quick fixes dejaron de
-  recibir las reglas aparte de la proyección. En la fase 6 la transacción nació con su reparador (decisión 17).
+  recibir las reglas aparte de la proyección. En la fase 6 la transacción nació con su reparador (decisión 17). En
+  la etapa 2 el paso de una edición a mano dice qué se entendió de ella: cada elemento que conserva su id con otra
+  dirección (`a.P#x -> a.P#count`).
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
@@ -465,17 +474,17 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítem 1 |
-|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|-----------------|
-| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 15              |
-| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10              |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 26              |
-| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19              |
-| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11              |
-| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6               |
-| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0               |
-| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22              |
-| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 105             |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 y 2 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 29                   |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  |
 
 ## 7. Decisiones
 
@@ -484,7 +493,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 1  | Mapa y nombres           | core, program, projection, java, engine, refactoring, knowledge, session, adapters          | tomada, 2026-10-31 (10610bc) |
 | 2  | Forma de los primitivos  | `Primitive` sellado y `apply(Primitive)` que devuelve `Change`; cada primitivo declara su intención | tomada, 2026-10-31 (1524f0c) |
 | 3  | Vínculos                 | extends, implements y declared son referencias; `Link` reemplaza los `set` de tipos        | tomada, 2026-10-31 (4d16bfe, 5cceb1a) |
-| 4  | Identidad                | `Address` tipada con ids de dueño y de tipos de parámetro; reconciliación estructural después | tomada, 2026-10-31 (67901c9) |
+| 4  | Identidad                | `Address` tipada con ids de dueño y de tipos de parámetro; reconciliación estructural después | tomada, 2026-10-31 (67901c9; reconciliación en afd56af) |
 | 5  | Edición                  | solo `EditSet` de texto; sin mutación del AST ni printer léxico                            | tomada, 2026-10-31 (3f994c2) |
 | 6  | Hechos                   | conjunto cerrado y tipado (claves `Fact`; los valores siguen siendo texto)                 | tomada, 2026-10-31 (4d16bfe) |
 | 7  | Cuerpos                  | fuera del grafo; el fragmento es una dirección opaca de la proyección (líneas en Java, posiciones de usos en memoria) | tomada, 2026-10-31 (f64f7dd) |
@@ -675,6 +684,15 @@ etapa 2, por valor.
    del nombre en mayúscula del diagnóstico, y la completion y los fixes compartirán una sola pregunta: qué puede
    ligar este uso desde su sitio.
 2. Reconciliación estructural de identidad en ediciones manuales (hoy un rename a mano equivale a borrar y crear).
+   Hecho en dos ciclos:
+   - afd56af: lo que una edición a mano renombra, cambia de firma o mueve de paquete conserva su id, y lo que quita
+     no vuelve. Antes un elemento borrado a mano volvía con su id viejo si se escribía de nuevo su nombre.
+   - 7e7a8fd: el paso de la edición dice qué se entendió de ella; un tipo renombrado es una línea, no una por miembro.
+
+   Abierto: con la identidad estable, una edición a mano se puede verificar contra lo que dejó roto en otros
+   archivos y ofrecer seguir el rename. No se hizo todavía: verificar también el archivo editado marcaría como
+   violaciones los cambios hechos a propósito, y ofrecer seguir el rename necesita los usos de miembros sin resolver
+   (lo abierto del ítem 1). Tampoco se reconoce un miembro llevado de un tipo o de un archivo a otro.
 3. Invalidación selectiva del grafo.
 4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo.
 5. Lo que falta del catálogo: pull-up-unifying, borrado de tipos anidados, encadenamiento en varios niveles del
@@ -690,7 +708,9 @@ etapa 2, por valor.
 - **Tipo de biblioteca**: un tipo de fuera del workspace que el programa nombra; nada lo cambia.
 - **Hecho**: un valor tipado sobre un elemento: visibilidad, estático, abstracto, final.
 - **Dirección**: cómo se nombra un elemento desde el texto; cambia con rename y move. El id no.
-- **Identidad**: la tabla dirección → id; solo los primitivos la transfieren.
+- **Identidad**: la tabla dirección → id; la transfieren los primitivos, y la reconciliación después de una edición
+  a mano.
+- **Reconciliación**: emparejar lo que una edición a mano cambió de dirección con lo que era, sin adivinar.
 - **Primitivo**: un pedido de cambio abstracto, record de `Primitive`.
 - **Change**: lo que un primitivo devuelve: producido, expectativas, pins.
 - **Expectativa**: una diferencia entre antes y después que el cambio hizo a propósito; el verificador la espera.

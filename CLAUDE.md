@@ -21,7 +21,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `core` — Capability, CapabilityRegistry, Param, Json, EventLog (JSONL), TextDiff. Knows nothing else.
 - `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy), Unresolved (a use that binds
-  nothing, same id space as references; a Retarget binds it), Reference (id `site@ordinal`, Mode:
+  nothing, same id space as references; a Retarget binds it), Reconciliation (after an edit by hand, pairs what
+  changed address with what it was, only when the structure leaves no doubt), Reference (id `site@ordinal`, Mode:
   uses read|write|update|call|new|type and links extends|implements|declared), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
   parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
@@ -41,7 +42,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   JavacCheck, Bodies, Completion), `ide.java.primitives` (Context and one class per primitive), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
-  binding one writes the name and imports it. The AST is never edited. Other modules use
+  binding one writes the name and imports it. An edit by hand reconciles identity (types, members, parameters,
+  reading again between rounds) and forgets what it removed. The AST is never edited. Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
 - `engine` (projection) — Transaction (born with its Repairer; intercepts `apply`, folds each declared Change into
   the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins
