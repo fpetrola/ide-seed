@@ -42,7 +42,7 @@ class InlineMethodTest {
                     }
                 }
                 """);
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

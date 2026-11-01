@@ -30,7 +30,7 @@ class CreateFieldQuickFixTest {
         var result = ws.fix("a/U.java", 5, "create field count in U", Map.of("type", "long"));
 
         assertThat(result.applied()).isTrue();
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).isEqualTo("""
                 package a;
 
@@ -73,7 +73,7 @@ class CreateFieldQuickFixTest {
 
         ws.fix("a/U.java", 5, "create field size in V");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/V.java")).contains("    int size;");
     }
 

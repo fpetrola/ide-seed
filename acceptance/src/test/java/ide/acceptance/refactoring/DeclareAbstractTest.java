@@ -43,7 +43,7 @@ class DeclareAbstractTest {
                     public abstract double area();
                 }
                 """);
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test
@@ -71,6 +71,6 @@ class DeclareAbstractTest {
         var result = ws.invoke("declare-abstract-in-superclass", Map.of("method", "a.Circle#area()"));
 
         assertThat(result.applied()).isFalse();
-        assertThat(result.violations()).extracting(v -> v.code()).containsExactly("javac.abstract.cant.be.instantiated");
+        assertThat(result.violations()).extracting(v -> v.code()).containsExactly("ecj.InvalidClassInstantiation");
     }
 }

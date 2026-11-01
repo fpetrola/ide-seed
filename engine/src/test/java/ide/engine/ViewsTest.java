@@ -116,11 +116,11 @@ class ViewsTest {
     @Test
     void theCompilerSeesItsErrorsOnlyIfTheCodeCompiledBefore() {
         var memory = MemoryProjection.builder().type("a.A").build();
-        var projection = reporting(memory, new Diagnostic("javac.cant.resolve", "a/A.java", 3, "List", "cannot find symbol"));
+        var projection = reporting(memory, new Diagnostic("ecj.UndefinedType", "a/A.java", 3, "List", "cannot find symbol"));
         var view = new CompilerView();
 
         assertThat(view.check(new Comparison(memory.program(), projection, true))).singleElement().satisfies(v -> {
-            assertThat(v.code()).isEqualTo("javac.cant.resolve");
+            assertThat(v.code()).isEqualTo("ecj.UndefinedType");
             assertThat(v.facts()).isEqualTo(Map.of("symbol", "List", "path", "a/A.java", "line", "3"));
         });
         assertThat(view.check(new Comparison(memory.program(), projection, false))).isEmpty();

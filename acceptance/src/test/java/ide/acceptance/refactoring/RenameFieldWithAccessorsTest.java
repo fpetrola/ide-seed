@@ -44,7 +44,7 @@ class RenameFieldWithAccessorsTest {
         assertThat(ws.source("a/P.java")).contains("private int quantity;", "public int getQuantity() {",
                 "return quantity;", "public void setQuantity(int qty) {", "this.quantity = qty;");
         assertThat(ws.source("b/U.java")).contains("p.setQuantity(p.getQuantity() * 2);", "return p.getQuantity();");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

@@ -24,13 +24,13 @@ class ImportQuickFixTest {
 
         assertThat(ws.diagnostics())
                 .extracting(Diagnostic::code, Diagnostic::path, Diagnostic::line, Diagnostic::symbol)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("javac.cant.resolve.location", "a/U.java", 4, "List"));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("ecj.UndefinedType", "a/U.java", 4, "List"));
         assertThat(ws.fixes("a/U.java", 4)).containsExactly("import java.util.List");
 
         var result = ws.fix("a/U.java", 4, "import java.util.List");
 
         assertThat(result.applied()).isTrue();
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).isEqualTo("""
                 package a;
 
@@ -67,7 +67,7 @@ class ImportQuickFixTest {
 
         ws.fix("a/U.java", 6, "import b.Money");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).isEqualTo("""
                 package a;
 
@@ -100,7 +100,7 @@ class ImportQuickFixTest {
 
         assertThat(ws.fixes("a/U.java", 4)).containsExactly("open-visibility b.Money package -> public, then import b.Money");
         assertThat(ws.why("a/U.java", 4).lines()).containsExactly(
-                "javac.cant.resolve.location Money",
+                "ecj.UndefinedType Money",
                 "? resolves(Money)",
                 "  ! import b.Money",
                 "    ? accessible(a.U, b.Money)",
@@ -112,7 +112,7 @@ class ImportQuickFixTest {
 
         ws.fix("a/U.java", 4, "open-visibility b.Money package -> public, then import b.Money");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("b/Money.java")).contains("public class Money {");
         assertThat(ws.source("a/U.java")).contains("import b.Money;");
     }
@@ -129,7 +129,7 @@ class ImportQuickFixTest {
                 """));
 
         assertThat(ws.why("a/U.java", 4).lines()).containsExactly(
-                "javac.cant.resolve.location List",
+                "ecj.UndefinedType List",
                 "? resolves(List)",
                 "  ! import java.util.List",
                 "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",

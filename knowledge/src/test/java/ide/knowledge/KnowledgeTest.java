@@ -144,7 +144,7 @@ class KnowledgeTest {
                 .type("a.U").file("a.U", "a/U.java").method("a.U", "names", "void")
                 .unresolved("a.U#names()", "List", Mode.DECLARED)
                 .build();
-        var diagnostic = new Diagnostic("javac.cant.resolve.location", "a/U.java", 4, "List", "cannot find symbol");
+        var diagnostic = new Diagnostic("ecj.UndefinedType", "a/U.java", 4, "List", "cannot find symbol");
 
         var plans = Knowledge.standard(Library.standard()).plans(diagnostic, projection);
         plans.getFirst().apply(projection);
@@ -163,7 +163,7 @@ class KnowledgeTest {
                 .unresolved("a.U#total()", "measure", Mode.CALL, "a.U",
                         new Needs("long", List.of(new Needs.Argument("names", "List<String>"), new Needs.Argument("i", "int"))))
                 .build();
-        var diagnostic = new Diagnostic("javac.cant.resolve.location.args", "a/U.java", 5, "measure", "cannot find symbol");
+        var diagnostic = new Diagnostic("ecj.UndefinedMethod", "a/U.java", 5, "measure", "cannot find symbol");
 
         var plans = Knowledge.standard(Library.standard()).plans(diagnostic, projection);
         var create = plans.stream().filter(plan -> plan.title().equals("create method measure in U")).findFirst().orElseThrow();

@@ -57,40 +57,42 @@ public final class Repairer {
         for (var round = 0; round < MAX_ROUNDS; round++) {
             var violations = verify(baseline, compiled, projection);
             if (violations.isEmpty()) return new Outcome(repairs, List.of(), search);
-            var target = violations.getFirst();
-            search.open(Trace.Kind.QUESTION, target.code() + " " + target.detail());
-            var plans = remedies.stream().flatMap(r -> r.plans(target, projection).stream())
-                    .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
             String kept = null;
-            if (plans.isEmpty()) search.add(Trace.Kind.NOTE, "(no plan)");
-            for (var plan : plans) {
-                if (branches++ >= MAX_BRANCHES) {
-                    search.add(Trace.Kind.DROPPED, "branch cap reached").close();
-                    return new Outcome(repairs, violations, search);
-                }
-                var saved = projection.snapshot();
-                var intent = state(projection.program(), pinned);
-                try {
-                    plan.apply(projection);
-                } catch (RuntimeException failed) {
+            for (var target : violations) { // one with no plan may follow from another: the next one is tried
+                search.open(Trace.Kind.QUESTION, target.code() + " " + target.detail());
+                var plans = remedies.stream().flatMap(r -> r.plans(target, projection).stream())
+                        .filter(plan -> plan.asks().isEmpty()).toList(); // holes are for the user to fill, never guessed
+                if (plans.isEmpty()) search.add(Trace.Kind.NOTE, "(no plan)");
+                for (var plan : plans) {
+                    if (branches++ >= MAX_BRANCHES) {
+                        search.add(Trace.Kind.DROPPED, "branch cap reached").close();
+                        return new Outcome(repairs, violations, search);
+                    }
+                    var saved = projection.snapshot();
+                    var intent = state(projection.program(), pinned);
+                    try {
+                        plan.apply(projection);
+                    } catch (RuntimeException failed) {
+                        projection.restore(saved);
+                        search.add(Trace.Kind.DROPPED, plan.title() + ": " + String.valueOf(failed.getMessage()).lines().findFirst().orElse(""));
+                        continue;
+                    }
+                    if (!state(projection.program(), pinned).equals(intent)) {
+                        projection.restore(saved);
+                        search.add(Trace.Kind.DROPPED, plan.title() + ": would undo what the refactoring did");
+                        continue;
+                    }
+                    if (!same(target, verify(baseline, compiled, projection))) {
+                        kept = plan.title();
+                        search.add(Trace.Kind.ANSWER, plan.title());
+                        break;
+                    }
                     projection.restore(saved);
-                    search.add(Trace.Kind.DROPPED, plan.title() + ": " + String.valueOf(failed.getMessage()).lines().findFirst().orElse(""));
-                    continue;
+                    search.add(Trace.Kind.DROPPED, plan.title() + ": still " + target.code());
                 }
-                if (!state(projection.program(), pinned).equals(intent)) {
-                    projection.restore(saved);
-                    search.add(Trace.Kind.DROPPED, plan.title() + ": would undo what the refactoring did");
-                    continue;
-                }
-                if (!same(target, verify(baseline, compiled, projection))) {
-                    kept = plan.title();
-                    search.add(Trace.Kind.ANSWER, plan.title());
-                    break;
-                }
-                projection.restore(saved);
-                search.add(Trace.Kind.DROPPED, plan.title() + ": still " + target.code());
+                search.close();
+                if (kept != null) break;
             }
-            search.close();
             if (kept == null) return new Outcome(repairs, violations, search);
             repairs.add(kept);
         }

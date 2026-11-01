@@ -9,7 +9,7 @@ import com.github.javaparser.ast.expr.Expression;
 import ide.java.primitives.Context;
 import ide.java.primitives.JavaPrimitives;
 import ide.java.semantics.Completion;
-import ide.java.semantics.JavacCheck;
+import ide.java.semantics.EcjCheck;
 import ide.java.semantics.Keys;
 import ide.java.semantics.Positions;
 import ide.java.semantics.Reader;
@@ -66,9 +66,11 @@ public final class JavaProjection implements Projection {
     private boolean afresh = true; // read every file anew: at first, and after identity changed without the text
     private Reader.Reading reading;
     private List<Diagnostic> diagnostics;
+    private final EcjCheck compiler;
 
     private JavaProjection(List<Path> classpath) {
         this.classpath = List.copyOf(classpath);
+        this.compiler = new EcjCheck(classpath);
         typeSolver = new WorkspaceTypeSolver(this::trees, WorkspaceTypeSolver.libraries(classpath));
         reader = new Reader(ids, keys, typeSolver);
         sources = new Sources(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
@@ -201,7 +203,7 @@ public final class JavaProjection implements Projection {
 
     @Override
     public List<Diagnostic> diagnostics() {
-        if (diagnostics == null) diagnostics = JavacCheck.errors(sources.texts(), classpath);
+        if (diagnostics == null) diagnostics = compiler.check(sources.texts());
         return diagnostics;
     }
 

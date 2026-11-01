@@ -54,7 +54,7 @@ class ChangeSignatureTest {
                 }
                 """);
         assertThat(ws.source("b/User.java")).contains("new a.Calc().add(1, 3, 1) + 0");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     /** The new list written as in Java: a kept parameter with its type, a new one with the value calls pass. */

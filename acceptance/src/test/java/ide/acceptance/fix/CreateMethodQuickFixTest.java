@@ -27,7 +27,7 @@ class CreateMethodQuickFixTest {
 
         ws.fix("a/U.java", 5, "create method measure in U");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).contains("""
                     long measure(java.util.List<String> names, int i) {
                         return 0;
@@ -49,7 +49,7 @@ class CreateMethodQuickFixTest {
 
         ws.fix("a/U.java", 5, "create method log in U");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).contains("static void log(String string) {");
     }
 
@@ -72,7 +72,7 @@ class CreateMethodQuickFixTest {
 
         ws.fix("a/U.java", 5, "create method reset in V");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/V.java")).contains("    void reset() {").doesNotContain("static");
     }
 }

@@ -78,7 +78,7 @@ class RenameTypeTest {
                 }
                 """);
         assertThat(ws.source("a/Wallet.java")).contains("java.util.List<Amount> coins;");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test
@@ -107,7 +107,7 @@ class RenameTypeTest {
 
         assertThat(result.violations()).isEmpty();
         assertThat(ws.source("b/Shop.java")).contains("import a.Amount;", "long pay(Amount m) {");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

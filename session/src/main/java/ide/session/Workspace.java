@@ -92,6 +92,11 @@ public final class Workspace {
         return project.diagnostics();
     }
 
+    /** The compiler's errors: its diagnostics but the warnings. */
+    public List<Diagnostic> errors() {
+        return project.diagnostics().stream().filter(Diagnostic::isError).toList();
+    }
+
     // ---- the library
 
     /** {@code "<level> <id>"} for every refactoring in the library. */

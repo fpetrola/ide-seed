@@ -63,7 +63,7 @@ class CollapseHierarchyTest {
                     }
                 }
                 """);
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test
@@ -104,7 +104,7 @@ class CollapseHierarchyTest {
                     }
                 }
                 """);
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

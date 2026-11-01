@@ -7,7 +7,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Every error javac finds, as an IDE shows them all: one that does not resolve does not hide the others. */
+/** Every error the compiler finds, as an IDE shows them all: one that does not resolve does not hide the others. */
 class DiagnosticsTest {
 
     @Test
@@ -16,7 +16,7 @@ class DiagnosticsTest {
                 "a/Broken.java", "package a;\n\nclass Broken {\n    int total() {\n        return count;\n    }\n}\n",
                 "a/Unset.java", "package a;\n\nclass Unset {\n    private final int limit;\n}\n"));
 
-        assertThat(projection.diagnostics()).extracting(Diagnostic::path, Diagnostic::line).containsExactlyInAnyOrder(
+        assertThat(projection.diagnostics().stream().filter(Diagnostic::isError)).extracting(Diagnostic::path, Diagnostic::line).containsExactlyInAnyOrder(
                 org.assertj.core.groups.Tuple.tuple("a/Broken.java", 5), org.assertj.core.groups.Tuple.tuple("a/Unset.java", 4));
     }
 }

@@ -58,6 +58,6 @@ class RenamePackageTest {
                 }
                 """);
         assertThat(ws.source("b/User.java")).contains("import app.money.Money;", "import app.money.Shop;");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }

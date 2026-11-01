@@ -32,7 +32,7 @@ class CompilerViewTest {
         var result = ws.invoke("rename", Map.of("element", "a.P#one()", "name", "hashCode"));
 
         assertThat(result.applied()).isFalse();
-        assertThat(result.violations()).extracting(Violation::code).containsExactly("javac.override.weaker.access");
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("ecj.MethodReducesVisibility");
         assertThat(ws.source("a/P.java")).isEqualTo(p);
     }
 

@@ -61,7 +61,7 @@ class SessionTest {
         var result = session.fix(new Fix(project.diagnostics().getFirst(), declare), Map.of());
 
         assertThat(result.applied()).isTrue();
-        assertThat(project.diagnostics()).isEmpty();
+        assertThat(project.diagnostics()).filteredOn(ide.projection.Diagnostic::isError).isEmpty();
         session.undo();
         assertThat(project.source("a/P.java")).isEqualTo(P);
     }

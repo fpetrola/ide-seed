@@ -307,7 +307,7 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 
 - **Qué es.** Una librería que, dado un conjunto de fuentes Java en memoria, lee el programa como grafo y ejecuta
   primitivos como ediciones mínimas de texto, conservando formato y comentarios. La única que conoce JavaParser y
-  javac.
+  el compilador de Eclipse (ECJ).
 - **Para qué lo usarías.** Codemods, migraciones masivas, cualquier automatización sobre un codebase Java, sin
   verificación ni scripts.
 - **Dominio**, en capas internas, cada una un paquete con su vocabulario; `LayersTest` hace cumplir que cada una
@@ -320,7 +320,7 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
      miembro, cómo se va, su texto con el comentario), `Modifiers`, `Lists` (parámetros y argumentos), `Imports`,
      `Render` (texto de código nuevo).
   3. Semántica, `ide.java.semantics`. `Reader` (la lectura: programa, nodo de cada uso, declaración de cada
-     elemento), `Resolution`, `Keys`, `WorkspaceTypeSolver`, `JavacCheck`, `Bodies` (flujo de datos y precedencia
+     elemento), `Resolution`, `Keys`, `WorkspaceTypeSolver`, `EcjCheck`, `Bodies` (flujo de datos y precedencia
      para extract e inline), `Completion`.
   4. Primitivos, `ide.java.primitives`. Un `Context` (el programa leído, las declaraciones, las fuentes, la
      identidad) y una clase por primitivo, todas con la misma forma: precondiciones, ediciones, transferencia de
@@ -362,7 +362,7 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
-  cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez.
+  cuerpo (`binding.rebound`).
   Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
   cuerpo, porque esos usos no son referencias del grafo.
@@ -664,6 +664,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 25 | Classpath                | las bibliotecas de un proyecto se le preguntan a Maven, en un producto propio (`maven`), y se recuerdan mientras sus POMs no cambien; el driver las lee de los jars sin cargar clases, y javac compila siempre contra el classpath del proyecto, nunca contra el del IDE | tomada, 2026-11-01 (817a548, 854df27) |
 | 26 | Usos de miembros sin resolver | un campo o método que no liga nada es un uso del programa solo si el resolvedor lo asegura (para una llamada: ningún método con ese nombre donde se busca); en la duda no es nada, como un local. El uso dice en qué tipo se busca, y los fixes parten de él | tomada, 2026-11-01 |
 | 27 | Lo que necesita un uso   | qué tipo espera un uso sin resolver y qué pasa una llamada se le pregunta a la proyección por un uso (`needs`, obligación 10), no se guarda en el grafo: solo lo usa un fix, y así se prueba sin lenguaje | tomada, 2026-11-01 |
+| 28 | Compilador               | el de Eclipse (ECJ) en vez de javac, incremental como su builder: compila lo que cambió y lo que nombra un tipo cuya forma cambió (class file con cambios estructurales, o que vino o se fue), leyendo lo demás de los class files anteriores. Da errores y warnings con línea, columna y largo; un warning no es una violación. Los códigos son `ecj.<problema>` | tomada, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -870,8 +871,8 @@ etapa 2, por valor.
    primitivo, y los samples, que comparan el modelo con uno releído después de cada caso. `InvalidationTest` cubre
    la regla, con las capturas a través de un subtipo y de una sobrecarga.
 
-   Abierto: un cambio de tipo (nombre, paquete, cabecera) relee todo, también lo que no lo nombra; javac
-   incremental.
+   Abierto: un cambio de tipo (nombre, paquete, cabecera) relee todo, también lo que no lo nombra. El compilador ya
+   es incremental (decisión 28): en el sample de 100 archivos, un segundo rename tarda unos 45 ms en total.
 4. Lenguaje neutral de cuerpos para plantillas; se van las fugas de Java del catálogo. Hecho en tres ciclos:
    - 37c903e: un cuerpo se dice sin lenguaje (`Body`, en `program`) y cada proyección lo escribe en el suyo. La de
      memoria hace los usos que nombra; Java escribe nombres, califica un campo que un parámetro tapa e importa el

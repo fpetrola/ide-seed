@@ -54,6 +54,6 @@ class ExtractInterfaceTest {
                 }
                 """);
         assertThat(ws.source("a/Line.java")).contains("public class Line implements Priced {");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }

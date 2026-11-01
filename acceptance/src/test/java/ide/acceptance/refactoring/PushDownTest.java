@@ -45,7 +45,7 @@ class PushDownTest {
         assertThat(result.violations()).isEmpty();
         assertThat(ws.source("a/A.java")).doesNotContain("onlyB");
         assertThat(ws.source("a/B.java")).contains("int onlyB() {");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

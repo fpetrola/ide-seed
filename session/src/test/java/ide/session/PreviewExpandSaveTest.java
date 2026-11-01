@@ -126,7 +126,7 @@ class PreviewExpandSaveTest {
 
         var ws = Workspace.open(root.resolve("src/main/java"));
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.model()).contains("a.U#node -> com.github.javaparser.ast.Node (declared)");
         assertThat(ws.capabilities().invoke("classpath", Map.of())).contains("javaparser-core-3.26.2.jar", "\"problem\":null");
     }

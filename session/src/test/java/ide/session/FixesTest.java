@@ -33,7 +33,7 @@ class FixesTest {
         assertThat(fixes.find("a/P.java", 5, "create field total in P").diagnostic().symbol()).isEqualTo("total");
         assertThatThrownBy(() -> fixes.find("a/P.java", 5, "rename total")).hasMessage("no fix 'rename total' at a/P.java:5");
         assertThat(fixes.why("a/P.java", 5).lines()).containsExactly(
-                "javac.cant.resolve.location total",
+                "ecj.UnresolvedVariable total",
                 "? resolves(total)",
                 "  X import: nonempty(unresolved-in(path, symbol, \"type\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",

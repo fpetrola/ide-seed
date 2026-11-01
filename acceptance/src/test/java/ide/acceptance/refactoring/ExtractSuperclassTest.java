@@ -27,7 +27,7 @@ class ExtractSuperclassTest {
         assertThat(result.violations()).isEmpty();
         assertThat(ws.source("a/Base.java")).contains("import java.util.ArrayList;", "public class Base extends ArrayList<String> {");
         assertThat(ws.source("a/B.java")).contains("public class B extends Base {");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

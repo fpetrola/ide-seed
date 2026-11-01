@@ -47,8 +47,9 @@ final class Capabilities {
                 .register(Capability.of("library", "Refactorings by level", List.of(), args -> workspace.library()))
                 .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
                         args -> workspace.define(text(args, "text"))))
-                .register(Capability.of("diagnostics", "Compiler errors", List.of(), args -> workspace.diagnostics().stream()
-                        .map(d -> Map.of("code", d.code(), "path", d.path(), "line", d.line(), "message", d.message())).toList()))
+                .register(Capability.of("diagnostics", "Compiler errors and warnings", List.of(), args -> workspace.diagnostics().stream()
+                        .map(d -> entries("code", d.code(), "path", d.path(), "line", d.line(), "message", d.message(),
+                                "severity", d.severity().name(), "column", d.column(), "length", d.length())).toList()))
                 .register(Capability.of("fixes", "Quick fixes for a line", List.of(path, line),
                         args -> workspace.fixes(text(args, "path"), number(args, "line"))))
                 .register(Capability.of("fix", "Applies a quick fix, with the answers to what it asks",

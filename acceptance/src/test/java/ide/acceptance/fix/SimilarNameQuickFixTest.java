@@ -35,7 +35,7 @@ class SimilarNameQuickFixTest {
         ws.fix("a/U.java", 7, "change to count");
         ws.fix("a/U.java", 7, "change to size(..)");
 
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/U.java")).contains("return count + size();");
     }
 

@@ -98,7 +98,7 @@ class MoveTypeTest {
                     Money money;
                 }
                 """);
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
         assertThat(ws.whyRepair().lines()).contains(
                 "? access.insufficient a.Shop#total() cannot access package b.Money#cents",
                 "  X open-visibility b.Money#cents package -> protected: still access.insufficient",
@@ -135,7 +135,7 @@ class MoveTypeTest {
                     Money money;
                 }
                 """);
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test
@@ -170,6 +170,6 @@ class MoveTypeTest {
         // the receiver Status.PAID is a type reference too, so the projection adds the import itself
         assertThat(result.repairs()).isEmpty();
         assertThat(ws.source("a/Order.java")).contains("import b.Status;");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }

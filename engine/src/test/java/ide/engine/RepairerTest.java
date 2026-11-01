@@ -51,7 +51,8 @@ class RepairerTest {
         var outcome = new Repairer(List.of()).stabilize(before, true, projection);
 
         assertThat(outcome.violations()).extracting(Violation::code).containsExactly("access.insufficient", "access.insufficient");
-        assertThat(outcome.search().lines()).containsExactly("? access.insufficient a.A#n() cannot access private a.B#x", "  (no plan)");
+        assertThat(outcome.search().lines()).containsExactly("? access.insufficient a.A#n() cannot access private a.B#x", "  (no plan)",
+                "? access.insufficient a.A#n() cannot access private a.B#z", "  (no plan)");
     }
 
     @Test

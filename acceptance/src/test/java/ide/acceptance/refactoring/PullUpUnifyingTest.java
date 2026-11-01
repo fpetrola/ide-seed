@@ -71,7 +71,7 @@ class PullUpUnifyingTest {
                 """);
         assertThat(ws.model()).contains("a.Board#show(Square) -> a.Shape#label (read)",
                 "a.Square#title() -> a.Shape#label (read)");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test
@@ -112,7 +112,7 @@ class PullUpUnifyingTest {
         assertThat(ws.source("a/Circle.java")).doesNotContain("kind");
         assertThat(ws.source("a/Square.java")).doesNotContain("kind");
         assertThat(ws.model()).contains("a.Board#show(Square) -> a.Shape#kind() (call)");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     /** A sibling's method with another body is not the same method: it stays, and overrides the one moved up. */
@@ -143,6 +143,6 @@ class PullUpUnifyingTest {
         assertThat(result.violations()).isEmpty();
         assertThat(ws.source("a/Shape.java")).contains("return \"round\";");
         assertThat(ws.source("a/Square.java")).contains("return \"square\";");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }

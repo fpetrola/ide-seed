@@ -54,6 +54,6 @@ class IntroduceFactoryTest {
                 }
                 """);
         assertThat(ws.source("b/Shop.java")).contains("return Money.of(100);");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }

@@ -85,7 +85,7 @@ class OrdersSampleTest {
         } else {
             assertThat(result.applied()).as(description).isFalse();
             assertThat(result.violations()).extracting(Violation::code).contains(expected);
-            assertThat(ws.diagnostics()).isEmpty();
+            assertThat(ws.errors()).isEmpty();
         }
     }
 
@@ -101,7 +101,7 @@ class OrdersSampleTest {
                 .doesNotContain("getDiscount");
         assertThat(ws.source("orders/service/Billing.java")).contains("order.customer.getName()");
         assertThat(result.steps()).anyMatch(step -> step.startsWith("  X orders.model.Customer#discount: retarget.update"));
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     static Map<String, String> sources() throws IOException {

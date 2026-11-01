@@ -4,9 +4,12 @@
 
 goal access.insufficient needs accessible(site, target)
 goal binding.unresolved needs in-scope(site, target)
-goal javac.cant.resolve.location needs resolves(symbol)
-goal javac.cant.resolve needs resolves(symbol)
-goal javac.cant.resolve.location.args needs resolves(symbol)
+# What Eclipse's compiler says does not resolve: a type, a variable or a field, a method.
+goal ecj.UndefinedType needs resolves(symbol)
+goal ecj.UndefinedName needs resolves(symbol)
+goal ecj.UnresolvedVariable needs resolves(symbol)
+goal ecj.UndefinedField needs resolves(symbol)
+goal ecj.UndefinedMethod needs resolves(symbol)
 
 fact accessible(site, target) when can-access(site, target)
 
@@ -95,7 +98,7 @@ effect create-method "create method ${symbol} in ${name(scope(unresolved-in(path
   end
 end
 
-goal javac.var.not.initialized.in.default.constructor needs initialized(symbol)
+goal ecj.UninitializedBlankFinalField needs initialized(symbol)
 
 effect initialize-in-declaration "initialize ${symbol} in its declaration"
   makes initialized(symbol)

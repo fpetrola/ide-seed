@@ -43,7 +43,7 @@ class MergeDuplicateTest {
         assertThat(result.violations()).isEmpty();
         assertThat(ws.source("a/P.java")).doesNotContain("int one()").contains("return unit() + unit();");
         assertThat(ws.source("b/U.java")).contains("new a.P()::unit");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     /** Its calls already read like calls of the kept method: the duplicate goes, and they bind the method it overrode. */
@@ -91,7 +91,7 @@ class MergeDuplicateTest {
                 }
                 """);
         assertThat(ws.source("b/Tank.java")).contains("return fish.sound();");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 
     @Test

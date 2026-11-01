@@ -19,7 +19,7 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule onlyTheJavaDriverKnowsJavaParserAndJavac = noClasses()
             .that().resideOutsideOfPackage("ide.java..")
-            .should().dependOnClassesThat().resideInAnyPackage("com.github.javaparser..", "javax.tools..", "com.sun.source..");
+            .should().dependOnClassesThat().resideInAnyPackage("com.github.javaparser..", "org.eclipse.jdt..", "javax.tools..", "com.sun.source..");
 
     @ArchTest
     static final ArchRule theJavaDriverIsUsedOnlyThroughItsFacade = noClasses()

@@ -179,6 +179,6 @@ class PullUpMethodTest {
         assertThat(result.violations()).isEmpty();
         assertThat(ws.source("a/A.java")).contains("return \"b\";");
         assertThat(ws.source("a/C.java")).contains("return \"c\";");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }

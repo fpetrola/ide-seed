@@ -41,7 +41,7 @@ public final class Transaction implements Projection {
         this.repairer = repairer;
         this.start = projection.snapshot();
         this.baseline = projection.program();
-        this.compiled = projection.diagnostics().isEmpty();
+        this.compiled = projection.diagnostics().stream().noneMatch(Diagnostic::isError);
     }
 
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else restores the start. */

@@ -34,6 +34,6 @@ class FinalFieldQuickFixTest {
         ws.fix("a/P.java", 5, "make label not final");
 
         assertThat(ws.source("a/P.java")).contains("private final int limit = 10;", "private String label;");
-        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
     }
 }
