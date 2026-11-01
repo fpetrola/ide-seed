@@ -82,9 +82,9 @@ De la arquitectura (nuevos):
                  acceptance            (solo tests: donde los productos se encuentran)
                      |
                   session              (ensambla)
-          ___________|____________
-         |           |            |
-         |       knowledge        |
+          ___________|________________
+         |           |            |   \
+         |       knowledge        |    maven     (lo que Maven dice de un proyecto)
          |        /     \         |
        java   engine   refactoring
          \       |       /
@@ -110,7 +110,8 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | engine      | projection                                                 | transacciones verificadas                    |
 | refactoring | projection, engine                                         | refactorings, run, lenguaje `.ref`, catálogo |
 | knowledge   | engine, refactoring                                        | planificador por metas                       |
-| session     | java, engine, refactoring, knowledge; JavaParser en runtime | el ensamblado                                |
+| maven       | nada                                                       | el classpath de un proyecto, según Maven     |
+| session     | java, engine, refactoring, knowledge, maven; JavaParser en runtime | el ensamblado                         |
 | acceptance  | session, solo para tests                                   | escenarios transversales, samples, reglas    |
 | cli         | session, core                                              | adaptador: la terminal                       |
 | ui          | session, core; RSyntaxTextArea                             | adaptador: la ventana Swing                  |
@@ -346,9 +347,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   6 responde posiciones desde su lectura (`semantics.Positions`): un uso se encuentra por el nombre con que está
   escrito, así el cursor sobre `a` en `a.m(1)` está en `a` y no en la llamada. Lee Java hasta 21 (antes leía al nivel
   por defecto de JavaParser y un proyecto con un `instanceof` con patrón no abría): un record es una clase y un tipo
-  anotación una interfaz, para el lector y para el type solver del workspace.
-- **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. El classpath es solo el
-  JDK: lo que viene de bibliotecas externas (las dependencias de Maven de un proyecto) no liga y javac lo reporta. Todo
+  anotación una interfaz, para el lector y para el type solver del workspace. Sus bibliotecas son el JDK y los jars
+  del classpath que le dan (`JavaProjection.of(sources, classpath)`): los tipos de un jar ligan como los del JDK, leídos
+  sin cargar una clase, y javac compila siempre contra ese classpath; antes, sin classpath, javac leía el del IDE y el
+  código analizado compilaba contra JavaParser y Guava aunque su proyecto no los tuviera.
+- **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
   cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez.
@@ -501,10 +504,31 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   (el elemento y su clase en una posición), `where` (dónde está declarado), `elements` (de unas clases, o de un
   archivo) y las respuestas de `fix`. `ls` responde ordenado y las respuestas con campos los mantienen en orden. Una
   carpeta se lee sin lo que escriben los builds y las herramientas: carpetas `target`, `build`, `out` y ocultas.
+  Abrir una carpeta le pregunta a `maven` el classpath del proyecto (recordado en `.ide/classpath.txt`) y se lo da al
+  driver; la capacidad `classpath` dice cuáles son las bibliotecas o qué salió mal, y abrir queda en el log.
 - **Abierto.** `Capabilities` lista las operaciones a mano: si un día se desfasan de la fachada, se derivan de ella.
   `model` sigue sin ser capacidad: ningún adaptador la pidió (`elements` alcanzó).
 
-### 5.9 `adapters`: cli, ui, mcp
+### 5.9 `maven`: lo que Maven dice de un proyecto
+
+- **Qué es.** El classpath de un proyecto Maven: los jars contra los que compila su código y corren sus tests, en
+  todos los módulos si es un reactor. Se lo pregunta a Maven mismo (`dependency:build-classpath`, scope test), que es
+  la autoridad sobre padres, BOMs importados, exclusiones y mediación de versiones: reimplementar eso sería adivinar.
+- **Para qué lo usarías.** Cualquier herramienta que analice el código de un proyecto Maven sin correr su build: un
+  linter, un indexador, otro IDE.
+- **Dominio.** `Maven.project(carpeta)`: el proyecto es la carpeta más cercana, en ella o arriba, con un `pom.xml`.
+  `classpath(cache)`: lo que dijo Maven, recordado en un archivo con el tamaño y la fecha de cada POM del que depende
+  (los del proyecto y los de arriba), porque preguntar tarda segundos; se pregunta de nuevo cuando un POM cambia.
+  `Classpath(entries, problem)`: lo que Maven no pudo resolver, o Maven ausente, se dice, no se lanza.
+- **Qué ignora.** Java, el IDE, la sesión. No declara ningún otro producto.
+- **Prueba de autonomía.** `MavenTest`, con un POM en una carpeta temporal y una dependencia que está en `~/.m2`: el
+  jar está en el classpath, la segunda vez sale del cache, y un POM cambiado lo pregunta de nuevo.
+- **Estado actual** (2026-11-01). En `oozx`, un reactor de 25 POMs, el classpath de todos sus módulos son 118 jars, y
+  preguntarlo tarda unos 25 s; el de un módulo, unos 10 s; recordado, nada.
+- **Abierto.** Gradle. Las carpetas de clases (un módulo hermano compilado y no instalado) llegan a javac pero no al
+  symbol solver, que lee solo jars.
+
+### 5.10 `adapters`: cli, ui, mcp
 
 - **Qué es.** Traductores: argumentos a capacidades, respuestas JSON a texto o pantalla. CLI primero, después UI
   Swing con keymap de Eclipse, después MCP.
@@ -620,6 +644,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 22 | Encadenamiento           | `fact` dice cuándo vale un predicado y `needs` qué requiere un efecto; los planes se deducen hacia atrás, de hasta 4 efectos, y una búsqueda responde los 12 más baratos | tomada, 2026-11-01 (8695c28) |
 | 23 | Posiciones               | el contrato de la proyección dice dónde está declarado un elemento y qué elemento hay en una posición; el grafo sigue sin posiciones | tomada, 2026-11-01 (3223bf9) |
 | 24 | Adaptadores              | un módulo cada uno, que declara `session` y `core` y usa solo eso (`AdapterTest`); hablan con el IDE solo por capacidades, en JSON; lo que un adaptador necesita y no es capacidad entra a `session` como capacidad | tomada, 2026-11-01 (cedbd23, 763d4e6, 8b760b3) |
+| 25 | Classpath                | las bibliotecas de un proyecto se le preguntan a Maven, en un producto propio (`maven`), y se recuerdan mientras sus POMs no cambien; el driver las lee de los jars sin cargar clases, y javac compila siempre contra el classpath del proyecto, nunca contra el del IDE | tomada, 2026-11-01 (817a548, 854df27) |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 

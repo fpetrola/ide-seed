@@ -30,6 +30,11 @@
             <groupId>ide</groupId>
             <artifactId>ide-knowledge</artifactId>
         </dependency>
+        <!-- a project's libraries are what Maven says they are -->
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-maven</artifactId>
+        </dependency>
         <!-- navigation and completion know no language: they are tested over a projection with none -->
         <dependency>
             <groupId>ide</groupId>

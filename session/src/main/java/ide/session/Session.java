@@ -187,6 +187,16 @@ public final class Session {
         log.append(Map.of("event", "save", "root", root.toString()));
     }
 
+    /** That the project in {@code root} was opened, with how many libraries and what went wrong getting them. */
+    public void opened(Path root, int libraries, String problem) {
+        var event = new LinkedHashMap<String, Object>();
+        event.put("event", "open");
+        event.put("root", root.toString());
+        event.put("libraries", libraries);
+        if (problem != null) event.put("problem", problem);
+        log.append(event);
+    }
+
     /** Appends every event to a JSONL file from now on. */
     public void logTo(Path file) {
         log = EventLog.to(file);

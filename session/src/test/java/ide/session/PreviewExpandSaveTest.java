@@ -102,4 +102,42 @@ class PreviewExpandSaveTest {
 
         org.assertj.core.api.Assertions.assertThatThrownBy(ws::save).hasMessageContaining("nowhere to save");
     }
+
+    /** The libraries of a project in a Maven folder are what Maven says: its types bind and javac compiles against them. */
+    @Test
+    void aMavenProjectsLibrariesAreItsClasspath(@TempDir Path root) throws Exception {
+        Files.writeString(root.resolve("pom.xml"), """
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>t</groupId>
+                    <artifactId>t</artifactId>
+                    <version>1</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.github.javaparser</groupId>
+                            <artifactId>javaparser-core</artifactId>
+                            <version>3.26.2</version>
+                        </dependency>
+                    </dependencies>
+                </project>
+                """);
+        var sources = Files.createDirectories(root.resolve("src/main/java/a"));
+        Files.writeString(sources.resolve("U.java"), "package a;\n\nimport com.github.javaparser.ast.Node;\n\nclass U {\n    Node node;\n}\n");
+
+        var ws = Workspace.open(root.resolve("src/main/java"));
+
+        assertThat(ws.diagnostics()).isEmpty();
+        assertThat(ws.model()).contains("a.U#node -> com.github.javaparser.ast.Node (declared)");
+        assertThat(ws.capabilities().invoke("classpath", Map.of())).contains("javaparser-core-3.26.2.jar", "\"problem\":null");
+    }
+
+    @Test
+    void aFolderOutOfAnyMavenProjectHasOnlyTheJdk(@TempDir Path root) throws Exception {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/P.java"), P);
+
+        var classpath = Workspace.open(root).capabilities().invoke("classpath", Map.of());
+
+        assertThat(classpath).startsWith("{\"entries\":[],\"problem\":\"no pom.xml in ");
+    }
 }

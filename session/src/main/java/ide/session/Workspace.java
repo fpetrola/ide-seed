@@ -7,6 +7,7 @@ import ide.engine.Result;
 import ide.engine.Trace;
 import ide.java.JavaProjection;
 import ide.knowledge.Knowledge;
+import ide.maven.Maven;
 import ide.program.Element;
 import ide.projection.Diagnostic;
 import ide.projection.Location;
@@ -32,11 +33,13 @@ public final class Workspace {
     private final Navigation navigation;
     private final Completion completion;
     private final Path root;
+    private final Maven.Classpath classpath;
 
-    private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root) {
+    private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root, Maven.Classpath classpath) {
         this.project = project;
         this.library = library;
         this.root = root;
+        this.classpath = classpath;
         this.session = new Session(project, library, new Repairer(List.of(knowledge)));
         this.fixes = new Fixes(project, knowledge);
         this.navigation = new Navigation(project);
@@ -46,14 +49,29 @@ public final class Workspace {
     /** A workspace over these sources, with the standard library and knowledge; it has nowhere to save. */
     public static Workspace of(Map<String, String> sources) {
         var library = Library.standard();
-        return new Workspace(JavaProjection.of(sources), library, Knowledge.standard(library), null);
+        return new Workspace(JavaProjection.of(sources), library, Knowledge.standard(library), null,
+                Maven.Classpath.none("sources in memory"));
     }
 
-    /** A workspace over the Java sources under {@code root}: it logs to {@code .ide/events.jsonl} there, and saves there. */
+    /**
+     * A workspace over the Java sources under {@code root}, whose libraries are what Maven says the project's are (asked
+     * once, then remembered in {@code .ide/classpath.txt} while its POMs do not change): it logs to
+     * {@code .ide/events.jsonl} there, and saves there.
+     */
     public static Workspace open(Path root) {
         var library = Library.standard();
-        var workspace = new Workspace(JavaProjection.of(Session.sourcesIn(root)), library, Knowledge.standard(library), root);
-        return workspace.logTo(root.resolve(".ide/events.jsonl"));
+        var classpath = Maven.project(root).map(maven -> maven.classpath(root.resolve(".ide/classpath.txt")))
+                .orElse(Maven.Classpath.none("no pom.xml in " + root.toAbsolutePath().normalize() + " or above it"));
+        var workspace = new Workspace(JavaProjection.of(Session.sourcesIn(root), classpath.entries()), library,
+                Knowledge.standard(library), root, classpath);
+        workspace.logTo(root.resolve(".ide/events.jsonl"));
+        workspace.session.opened(root, classpath.entries().size(), classpath.problem());
+        return workspace;
+    }
+
+    /** The project's libraries, besides the JDK, and what went wrong asking for them, if anything. */
+    public Maven.Classpath classpath() {
+        return classpath;
     }
 
     // ---- the project

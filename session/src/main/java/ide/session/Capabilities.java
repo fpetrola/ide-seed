@@ -37,6 +37,9 @@ final class Capabilities {
                     workspace.undo();
                     return "ok";
                 }))
+                .register(Capability.of("classpath", "The project's libraries besides the JDK, and what went wrong asking Maven for them",
+                        List.of(), args -> entries("entries", workspace.classpath().entries().stream().map(Object::toString).toList(),
+                                "problem", workspace.classpath().problem())))
                 .register(Capability.of("save", "Writes the changed files where the project was opened from", List.of(), args -> {
                     workspace.save();
                     return "ok";
