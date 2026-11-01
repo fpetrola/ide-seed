@@ -282,4 +282,18 @@ class WorkbenchTest {
         workbench.act("previous-problem");
         assertThat(workbench.where()).isEqualTo("a/B.java:5:16");
     }
+
+    @Test
+    void aSelectedExpressionBecomesAConstant() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 7, 16);
+        workbench.type("a/A.java", A.replace("return x + p;", "return x + p * (2 + 3);"));
+        workbench.act("apply-edit");
+        workbench.select(7, 25, 7, 29); // 2 + 3
+        dialogs.fill(Map.of("name", "FIVE"));
+
+        workbench.act("introduce-constant");
+
+        assertThat(workbench.text("a/A.java")).contains("private static final int FIVE = 2 + 3;", "return x + p * (FIVE);");
+    }
 }

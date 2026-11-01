@@ -473,10 +473,16 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   acepta un fragmento que termina el método con su último return. El lenguaje de cuerpos ganó la llamada
   (`#{f}.#{m}(...)`, `#{m}(...)`; en un método que no responde nada, un return de una llamada es la llamada), y con
   ella generate-delegates (los Delegate Methods de IntelliJ) y rename-with-delegate (el viejo nombre llama al nuevo).
+  introduce-constant (el Introduce Constant de IntelliJ) es una composición de primitivos: extract de la expresión a
+  un método, un campo `static final` que empieza con `#{m}()` (un inicializador dicho sin lenguaje, cuyos usos son
+  del campo), el retarget de la llamada al campo (una llamada que no pasa nada se vuelve una lectura), el inline de la
+  llamada en el inicializador y el delete del método. Una expresión que usa un local o el objeto no es constante: el
+  compilador lo dice y la transacción se deshace.
 - **Abierto.** El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
   spec faltan annotate, use-supertype-where-possible,
   extract-interface-and-use, fold-constructors y delete-tree; y lo que trabaja sobre locales (extract variable,
-  inline variable, introduce parameter desde una expresión), que el grafo no tiene.
+  inline variable, introduce parameter desde una expresión), que el grafo no tiene. Introduce field se haría como
+  introduce-constant, con el campo de instancia.
 
 ### 5.7 `knowledge`: planificador por metas
 

@@ -21,7 +21,8 @@ import java.util.List;
 
 /**
  * Points a use at another element. A use of the same kind just names the other one; a type use names the other type
- * (imported if needed); a field read becomes {@code getter()}, a write {@code x = v} used as a statement
+ * (imported if needed); a call that passes nothing becomes a field read; a field read becomes {@code getter()}, a
+ * write {@code x = v} used as a statement
  * {@code setter(v)}, a {@code new} a factory call. Updates (compound assignment, ++/--) and assignments whose value
  * is used are refused: they would change how many times things are evaluated. A type written in a parameter is part
  * of its method's signature: the method keeps its identity at its new address.
@@ -45,6 +46,10 @@ final class RetargetUse {
             if (!Imports.names(unit, target.qualified())) Imports.add(edits, unit, target.qualified());
         } else if (target.kind() == before.element(ref.target()).kind()) {
             Shared.renameUse(c, edits, node, target.name());
+        } else if (ref.mode() == Mode.CALL && target.kind() == Kind.FIELD) { // a call of nothing but a value: the value
+            var call = (com.github.javaparser.ast.expr.MethodCallExpr) node;
+            if (!call.getArguments().isEmpty()) throw new PrimitiveRejected("retarget.call", call + " passes arguments a field cannot take");
+            edits.replace(unit, call, call.getScope().map(scope -> unit.textOf(scope) + ".").orElse("") + target.name());
         } else {
             if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
             var expression = (Expression) node;

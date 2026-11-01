@@ -55,6 +55,11 @@ final class WriteBody {
         c.sources().apply(edits);
     }
 
+    /** A value said in no language, as the file of {@code site} writes it: a field's start. */
+    static String value(Context c, ElementId site, EditSet edits, Unit unit, String text) {
+        return new WriteBody(c.program(), List.of(), edits, unit, "void").value(Body.value(text, c.program(), site));
+    }
+
     private String statement(Body.Statement statement) {
         return switch (statement) {
             case Body.Return r when r.value() instanceof Body.Default && type.equals("void") -> "";

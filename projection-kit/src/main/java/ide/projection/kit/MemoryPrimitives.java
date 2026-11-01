@@ -179,6 +179,14 @@ final class MemoryPrimitives {
             body(graph, element, value);
             return;
         }
+        if (attribute.equals("initializer") && Body.names(value)) { // a start said in no language: its uses are the field's
+            var start = Body.value(value, graph.read(), element);
+            graph.uses.removeIf(use -> use.site().equals(element) && !use.mode().isLink());
+            for (var use : Body.uses(start)) {
+                graph.uses.add(new MemoryGraph.Use(element, use.element(), graph.nodes.get(use.element()).name(), use.mode()));
+            }
+            return;
+        }
         var fact = switch (attribute) {
             case "visibility", "static", "abstract", "final", "type", "superclass" -> Fact.of(attribute);
             default -> throw new PrimitiveRejected("projection.unsupported", "a memory projection has no " + attribute);
@@ -247,6 +255,7 @@ final class MemoryPrimitives {
         Mode mode;
         if (from == to || from.isType() && to.isType()) mode = use.mode();
         else if (to == Kind.METHOD && (use.mode() == Mode.READ || use.mode() == Mode.WRITE || use.mode() == Mode.NEW)) mode = Mode.CALL;
+        else if (to == Kind.FIELD && use.mode() == Mode.CALL) mode = Mode.READ; // a call of nothing but a value: the value
         else throw new PrimitiveRejected("retarget." + use.mode().label(), "cannot express a " + use.mode().label()
                     + " of " + graph.render(use.target()) + " with " + graph.render(target));
         graph.uses.set(index, new MemoryGraph.Use(use.site(), target, graph.nodes.get(target).name(), mode));

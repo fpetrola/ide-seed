@@ -126,7 +126,7 @@ final class SetAttribute {
         if (method != null) Shared.resign(c, method, unit.path(), names);
     }
 
-    /** The initial value of a field, as written. */
+    /** The initial value of a field: as Java writes it, or said in no language ({@code #{method:4}()}). */
     private static void initializer(Context c, ElementId id, String value) {
         var element = c.program().element(id);
         var declaration = c.declaration(element);
@@ -134,8 +134,9 @@ final class SetAttribute {
         var variable = declaration.as(FieldDeclaration.class).getVariables().stream()
                 .filter(v -> v.getNameAsString().equals(element.name())).findFirst().orElseThrow();
         var edits = new EditSet();
-        if (variable.getInitializer().isPresent()) edits.replace(unit, variable.getInitializer().get(), value);
-        else edits.insertAfter(unit, variable.getName(), " = " + value);
+        var written = ide.program.Body.names(value) ? WriteBody.value(c, id, edits, unit, value) : value; // said in no language, or in Java
+        if (variable.getInitializer().isPresent()) edits.replace(unit, variable.getInitializer().get(), written);
+        else edits.insertAfter(unit, variable.getName(), " = " + written);
         c.sources().apply(edits);
     }
 

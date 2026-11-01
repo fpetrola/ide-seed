@@ -316,3 +316,25 @@ refactoring rename-with-delegate "Renames a method and keeps its old name as a m
   set ${d} body "return #{method}(#{params(d)})"
   return ${d}
 end
+
+refactoring introduce-constant "Moves an expression into a constant, a static final field the place reads, as IntelliJ's Introduce Constant"
+  param method : element(METHOD) "the method the expression is in"
+  param lines : lines "the expression's stretch"
+  param name : text "name of the constant" default "VALUE"
+  m := extract ${method} ${lines} ${concat("compute", name)}
+  set ${m} static true
+  f := create FIELD ${owner(method)} ${name}
+  set ${f} visibility private
+  set ${f} static true
+  set ${f} final true
+  set ${f} type ${type(m)}
+  set ${f} initializer "#{m}()"
+  for r in refs(m) | within method
+    retarget ${r} ${f}
+  end
+  for r in refs(m) | within f
+    inline ${r}
+  end
+  delete ${m}
+  return ${f}
+end

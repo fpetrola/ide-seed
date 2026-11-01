@@ -11,7 +11,7 @@ import ide.java.text.Unit;
 import java.util.Optional;
 import java.util.Set;
 
-/** A declaration's modifiers, edited as keywords: the access keyword first, the others right after it. */
+/** A declaration's modifiers, edited as keywords: each where Java's usual order puts it (public static final). */
 public final class Modifiers {
 
     private static final Set<Modifier.Keyword> ACCESS =
@@ -33,12 +33,19 @@ public final class Modifiers {
         var present = declaration.getModifiers().stream().filter(m -> m.getKeyword() == keyword).findFirst();
         if (!on) {
             present.ifPresent(m -> edits.removeWithSpaceAfter(unit, m));
-        } else if (present.isEmpty()) {
-            var access = access(declaration);
-            if (access.isPresent()) edits.insertAfter(unit, access.get(), " " + keyword.asString());
+        } else if (present.isEmpty()) { // after the last one that goes before it in Java's usual order
+            var rank = ORDER.indexOf(keyword);
+            var before = declaration.getModifiers().stream().filter(m -> ORDER.indexOf(m.getKeyword()) < rank).reduce((a, b) -> b);
+            if (before.isPresent()) edits.insertAfter(unit, before.get(), " " + keyword.asString());
             else edits.insertAt(unit, start(unit, declaration), keyword.asString() + " ");
         }
     }
+
+    /** The order Java's style writes modifiers in. */
+    private static final java.util.List<Modifier.Keyword> ORDER = java.util.List.of(Modifier.Keyword.PUBLIC, Modifier.Keyword.PROTECTED,
+            Modifier.Keyword.PRIVATE, Modifier.Keyword.ABSTRACT, Modifier.Keyword.DEFAULT, Modifier.Keyword.STATIC, Modifier.Keyword.SEALED,
+            Modifier.Keyword.NON_SEALED, Modifier.Keyword.FINAL, Modifier.Keyword.TRANSIENT, Modifier.Keyword.VOLATILE,
+            Modifier.Keyword.SYNCHRONIZED, Modifier.Keyword.NATIVE, Modifier.Keyword.STRICTFP);
 
     private static Optional<Modifier> access(NodeWithModifiers<?> declaration) {
         return declaration.getModifiers().stream().filter(m -> ACCESS.contains(m.getKeyword())).findFirst();

@@ -86,6 +86,27 @@ public record Body(List<Statement> statements) {
         return new Body(statements);
     }
 
+    /**
+     * A value said in no language, as a field starts with it ({@code #{method:4}()}): an expression of a body, read
+     * from inside {@code site}.
+     */
+    public static Expression value(String text, Program program, ElementId site) {
+        var statement = new Parser("return " + text.strip(), program, site).statement();
+        return ((Return) statement).value();
+    }
+
+    /** Whether a text says something in no language: it names elements as a body does. */
+    public static boolean names(String text) {
+        return text.contains("#{");
+    }
+
+    /** The uses a value makes, in the order it names them. */
+    public static List<Use> uses(Expression value) {
+        var uses = new ArrayList<Use>();
+        uses(value, uses);
+        return uses;
+    }
+
     /** The uses the body makes of elements outside its method, in the order it names them. */
     public List<Use> uses() {
         var uses = new ArrayList<Use>();
