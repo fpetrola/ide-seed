@@ -25,6 +25,7 @@ public final class Script implements Refactoring {
     private final String id;
     private final String description;
     private final List<Param> params;
+    private final Map<String, String> defaults;
     private final List<Stmt> body;
 
     /** An anonymous script: a block of statements run with the given variables, as knowledge effects are. */
@@ -36,18 +37,19 @@ public final class Script implements Refactoring {
 
     /** Evaluates an expression with the given variables. */
     public static Value evaluate(String expression, Run run, Map<String, Value> variables) {
-        return new Script("expression", "", List.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
+        return new Script("expression", "", List.of(), Map.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
     }
 
     /** Interpolates {@code ${expr}} and {@code #{expr}} in a text with the given variables. */
     public static String render(String text, Run run, Map<String, Value> variables) {
-        return Value.asText(new Script("text", "", List.of(), List.of()).interpolate(text, run, variables));
+        return Value.asText(new Script("text", "", List.of(), Map.of(), List.of()).interpolate(text, run, variables));
     }
 
-    Script(String id, String description, List<Param> params, List<Stmt> body) {
+    Script(String id, String description, List<Param> params, Map<String, String> defaults, List<Stmt> body) {
         this.id = id;
         this.description = description;
         this.params = List.copyOf(params);
+        this.defaults = Map.copyOf(defaults);
         this.body = List.copyOf(body);
     }
 
@@ -76,19 +78,44 @@ public final class Script implements Refactoring {
         return count(body);
     }
 
+    /** Each default a parameter not given declares, rendered with the parameters given; one that fails is left out. */
+    @Override
+    public Map<String, String> suggestions(Run run, Args args) {
+        var env = new HashMap<String, Value>();
+        for (var param : params) {
+            if (args.values().get(param.name()) == null) continue;
+            try {
+                env.put(param.name(), value(param, args, run));
+            } catch (RuntimeException unusable) {
+                // not given in a form a suggestion can use
+            }
+        }
+        var suggestions = new LinkedHashMap<String, String>();
+        defaults.forEach((name, template) -> {
+            if (env.containsKey(name)) return;
+            try {
+                suggestions.put(name, render(template, run, env));
+            } catch (RuntimeException missing) {
+                // it needs a parameter not given yet
+            }
+        });
+        return suggestions;
+    }
+
+    private static Value value(Param param, Args args, Run run) {
+        var graph = run.program();
+        return switch (param.type()) {
+            case "element" -> new Value.Elem(args.element(param.name(), graph).id());
+            case "elements" -> new Value.Items(args.elements(param.name(), graph).stream()
+                    .<Value>map(e -> new Value.Elem(e.id())).toList());
+            default -> args.value(param.name());
+        };
+    }
+
     @Override
     public ElementId apply(Run run, Args args) {
         var env = new HashMap<String, Value>();
-        var graph = run.program();
-        for (var param : params) {
-            var value = switch (param.type()) {
-                case "element" -> new Value.Elem(args.element(param.name(), graph).id());
-                case "elements" -> new Value.Items(args.elements(param.name(), graph).stream()
-                        .<Value>map(e -> new Value.Elem(e.id())).toList());
-                default -> args.value(param.name());
-            };
-            env.put(param.name(), value);
-        }
+        for (var param : params) env.put(param.name(), value(param, args, run));
         try {
             run(body, run, env);
             return null;

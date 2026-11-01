@@ -87,10 +87,18 @@ public final class Bodies {
 
     /** A return, or a break/continue whose loop or switch is outside the fragment; null if none. */
     public static Statement jumpOut(List<Statement> fragment) {
+        return jumpOut(fragment, false);
+    }
+
+    /** The first statement that leaves the fragment; a return does not when {@code returning}: the method's own end. */
+    public static Statement jumpOut(List<Statement> fragment, boolean returning) {
         for (var statement : fragment) {
             for (var jump : statement.findAll(Statement.class, s -> s instanceof ReturnStmt || s instanceof BreakStmt || s instanceof ContinueStmt)) {
                 if (jump.findAncestor(LambdaExpr.class).filter(l -> statement.isAncestorOf(l)).isPresent()) continue;
-                if (jump instanceof ReturnStmt) return jump;
+                if (jump instanceof ReturnStmt) {
+                    if (returning) continue;
+                    return jump;
+                }
                 var target = jump.findAncestor(Statement.class, s -> s instanceof ForStmt || s instanceof ForEachStmt
                         || s instanceof WhileStmt || s instanceof DoStmt || (jump instanceof BreakStmt && s instanceof SwitchStmt));
                 if (target.isEmpty() || !(statement == target.get() || statement.isAncestorOf(target.get()))) return jump;

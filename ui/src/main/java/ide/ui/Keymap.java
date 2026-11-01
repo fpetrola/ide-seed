@@ -1,50 +1,75 @@
 package ide.ui;
 
 import javax.swing.KeyStroke;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-/** Eclipse's keys and what each does: whoever knows Eclipse finds each thing where their hands expect it. */
+/**
+ * The window's keys: IntelliJ's first, which the menus show, and Eclipse's too, so that whoever knows either finds
+ * each thing where their hands expect it.
+ */
 final class Keymap {
 
-    /** An action of the window, the key that does it, and what it does. */
-    record Key(String action, KeyStroke stroke, String description) {
+    /** An action of the window, its name in a menu, the keys that do it (the first one shown), and what it does. */
+    record Key(String action, String name, List<KeyStroke> strokes, String description) {
+
+        KeyStroke stroke() {
+            return strokes.getFirst();
+        }
     }
 
     static final List<Key> KEYS = List.of(
-            key("apply-edit", "ctrl S", "Apply what the editor says to the program"),
-            key("save", "ctrl shift S", "Write the changed files to disk"),
-            key("undo-change", "ctrl alt Z", "Undo the last change to the program"),
-            key("quick-fix", "ctrl 1", "Quick fixes for the problems on the line"),
-            key("complete", "ctrl SPACE", "Complete the name being written"),
-            key("rename", "alt shift R", "Rename the element under the caret"),
-            key("refactor", "alt shift T", "Refactorings that take the element under the caret"),
-            key("change-signature", "alt shift C", "Change the signature of the method under the caret"),
-            key("move", "alt shift V", "Move the element under the caret"),
-            key("open-declaration", "F3", "Go to where the element under the caret is declared"),
-            key("hierarchy", "F4", "Supertypes and subtypes of the type under the caret"),
-            key("callers", "ctrl alt H", "Who calls the method under the caret"),
-            key("references", "ctrl shift G", "Every use of the element under the caret"),
-            key("open-type", "ctrl shift T", "Open a type by name"),
-            key("outline", "ctrl O", "Go to an element of this file"),
-            key("go-to-line", "ctrl L", "Go to a line"),
-            key("next-problem", "ctrl PERIOD", "Go to the next problem"),
-            key("previous-problem", "ctrl COMMA", "Go to the previous problem"),
-            key("back", "alt LEFT", "Go back to where the caret was"),
-            key("forward", "alt RIGHT", "Go forward again"),
-            key("zoom-in", "ctrl EQUALS", "Bigger text, everywhere"),
-            key("zoom-out", "ctrl MINUS", "Smaller text"),
-            key("zoom-reset", "ctrl 0", "Text at its usual size"),
-            key("keys", "ctrl shift L", "Every key and what it does"));
+            key("apply-edit", "Build Project", "Apply what the editors say to the program, and compile it", "ctrl S", "ctrl F9"),
+            key("save", "Save All", "Write the changed files to disk", "ctrl shift S"),
+            key("undo-change", "Undo Change", "Undo the last change to the program", "ctrl alt Z"),
+            key("context-actions", "Show Context Actions", "Show context actions: the quick fixes of the line and the refactorings of the caret", "alt ENTER", "ctrl 1"),
+            key("complete", "Basic Completion", "Complete the name being written", "ctrl SPACE"),
+            key("generate", "Generate...", "Generate code into the type under the caret", "alt INSERT"),
+            key("extend-selection", "Extend Selection", "Select what the selection is inside", "ctrl W", "alt shift UP"),
+            key("shrink-selection", "Shrink Selection", "Select less again", "ctrl shift W", "alt shift DOWN"),
+            key("find-action", "Find Action...", "Find an action by name", "ctrl shift A"),
+            key("refactor", "Refactor This...", "Refactor this: the refactorings that take the element under the caret", "ctrl alt shift T", "alt shift T"),
+            key("rename", "Rename...", "Rename the element under the caret", "shift F6", "alt shift R"),
+            key("change-signature", "Change Signature...", "Change the signature of the method under the caret", "ctrl F6", "alt shift C"),
+            key("move", "Move...", "Move the element under the caret", "F6", "alt shift V"),
+            key("extract-method", "Extract Method...", "Extract the selected statements into a method", "ctrl alt M", "alt shift M"),
+            key("inline", "Inline...", "Inline the method under the caret", "ctrl alt N", "alt shift I"),
+            key("safe-delete", "Safe Delete...", "Delete the element under the caret, if nothing uses it", "alt DELETE"),
+            key("open-declaration", "Declaration", "Go to where the element under the caret is declared", "ctrl B", "F3"),
+            key("hierarchy", "Type Hierarchy", "Supertypes and subtypes of the type under the caret", "ctrl H", "F4"),
+            key("callers", "Call Hierarchy", "Who calls the method under the caret", "ctrl alt H"),
+            key("references", "Find Usages", "Every use of the element under the caret", "alt F7", "ctrl shift G"),
+            key("open-type", "Class...", "Open a type by name", "ctrl N", "ctrl shift T"),
+            key("outline", "File Structure", "Go to an element of this file", "ctrl F12", "ctrl O"),
+            key("go-to-line", "Line...", "Go to a line", "ctrl G", "ctrl L"),
+            key("next-problem", "Next Highlighted Error", "Go to the next problem", "F2", "ctrl PERIOD"),
+            key("previous-problem", "Previous Highlighted Error", "Go to the previous problem", "shift F2", "ctrl COMMA"),
+            key("back", "Back", "Go back to where the caret was", "ctrl alt LEFT", "alt LEFT"),
+            key("forward", "Forward", "Go forward again", "ctrl alt RIGHT", "alt RIGHT"),
+            key("zoom-in", "Zoom In", "Bigger text, everywhere", "ctrl EQUALS"),
+            key("zoom-out", "Zoom Out", "Smaller text", "ctrl MINUS"),
+            key("zoom-reset", "Reset Zoom", "Text at its usual size", "ctrl 0"),
+            key("keys", "Keymap Reference", "Every key and what it does", "ctrl shift L"));
 
     private Keymap() {
     }
 
     static Optional<String> action(KeyStroke stroke) {
-        return KEYS.stream().filter(key -> key.stroke().equals(stroke)).map(Key::action).findFirst();
+        return KEYS.stream().filter(key -> key.strokes().contains(stroke)).map(Key::action).findFirst();
     }
 
-    private static Key key(String action, String stroke, String description) {
-        return new Key(action, KeyStroke.getKeyStroke(stroke), description);
+    /** Every key of every action. */
+    static List<KeyStroke> strokes() {
+        return KEYS.stream().flatMap(key -> key.strokes().stream()).toList();
+    }
+
+    static Key of(String action) {
+        return KEYS.stream().filter(key -> key.action().equals(action)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("no action " + action));
+    }
+
+    private static Key key(String action, String name, String description, String... strokes) {
+        return new Key(action, name, Arrays.stream(strokes).map(KeyStroke::getKeyStroke).toList(), description);
     }
 }

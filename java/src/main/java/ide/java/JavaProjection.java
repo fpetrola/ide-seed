@@ -33,6 +33,7 @@ import ide.projection.Projection;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -143,6 +144,27 @@ public final class JavaProjection implements Projection {
         return sources.texts();
     }
 
+    /** A stretch of a file, from the first character to the last, each as line and column from 1. */
+    public record Span(int line, int column, int endLine, int endColumn) {
+    }
+
+    /**
+     * What a place of a file is inside, innermost first: each Java construct's stretch, once, as an editor widens a
+     * selection step by step (a name, the expression, the statement, the block, the method, the class).
+     */
+    public List<Span> around(String path, int line, int column) {
+        var at = new com.github.javaparser.Position(line, column);
+        var spans = new java.util.LinkedHashSet<Span>();
+        sources.unit(path).tree().walk(node -> node.getRange()
+                .filter(range -> range.contains(new com.github.javaparser.Range(at, at)) || range.begin.equals(at))
+                .ifPresent(range -> spans.add(new Span(range.begin.line, range.begin.column, range.end.line, range.end.column))));
+        var starts = new ArrayList<Integer>(List.of(0));
+        var text = sources.unit(path).text();
+        for (var i = 0; i < text.length(); i++) if (text.charAt(i) == '\n') starts.add(i + 1);
+        java.util.function.ToIntFunction<Span> size = s -> starts.get(s.endLine() - 1) + s.endColumn() - starts.get(s.line() - 1) - s.column();
+        return spans.stream().sorted(java.util.Comparator.comparingInt(size)).toList();
+    }
+
     @Override
     public Program program() {
         return reading().program();
@@ -221,6 +243,11 @@ public final class JavaProjection implements Projection {
     @Override
     public Optional<ElementId> elementAt(String path, int line, int column) {
         return Positions.at(reading(), sources, path, line, column);
+    }
+
+    /** The innermost element whose declaration a place of a file is inside, as an editor asks what the caret is in. */
+    public Optional<ElementId> inside(String path, int line, int column) {
+        return Positions.inside(reading(), path, line, column);
     }
 
     /** What a field or a call that binds nothing needs; nothing is known of a written type's. */

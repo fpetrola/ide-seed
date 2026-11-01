@@ -39,6 +39,14 @@ public final class ChangeSignature implements Refactoring {
                 "the new parameters, as in Java: int b, int a, long scale = 1 (a new one gives the value calls pass)", true));
     }
 
+    /** The parameters the method has now, as they would be written to keep them. */
+    @Override
+    public Map<String, String> suggestions(Run run, Args args) {
+        if (args.values().get("method") == null || args.values().get("parameters") != null) return Map.of();
+        var method = args.element("method", run.program()).id();
+        return Map.of("parameters", String.join(", ", params(run, method).stream().map(p -> p.fact(Fact.TYPE) + " " + p.name()).toList()));
+    }
+
     @Override
     public ElementId apply(Run run, Args args) {
         var projection = run.projection();

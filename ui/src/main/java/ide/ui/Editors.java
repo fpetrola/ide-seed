@@ -58,6 +58,12 @@ final class Editors extends JTabbedPane {
         Optional<Runnable> link(String path, int line, int column);
 
         void moved();
+
+        /** The light bulb in the margin was clicked: the context actions of its line. */
+        void bulb();
+
+        /** The editor's right-click menu, made when it opens: what can be done where the caret is. */
+        javax.swing.JPopupMenu menu();
     }
 
     /** A file's editor and the text it last applied. */
@@ -69,6 +75,10 @@ final class Editors extends JTabbedPane {
         RTextScrollPane scroll;
         AutoCompletion completion;
         String applied;
+        org.fife.ui.rtextarea.GutterIconInfo bulb;
+        /** The problems' icons in the margin, by line from 0; the bulb hides the one of its line, as IntelliJ's does. */
+        final Map<Integer, org.fife.ui.rtextarea.GutterIconInfo> marks = new java.util.HashMap<>();
+        Integer hidden;
 
         Editor(String path, String text) {
             this.path = path;
@@ -159,11 +169,34 @@ final class Editors extends JTabbedPane {
             area.setLinkScanningMask(InputEvent.CTRL_DOWN_MASK);
             area.setLinkGenerator((textArea, offset) -> link(path, textArea, offset));
             area.addCaretListener(event -> help.moved());
+            area.setPopupMenu(help.menu());
+            area.addMouseListener(new java.awt.event.MouseAdapter() { // a right click puts the caret where it is, as IDEs do
+                @Override
+                public void mousePressed(java.awt.event.MouseEvent event) {
+                    if (javax.swing.SwingUtilities.isRightMouseButton(event) && area.getSelectionStart() == area.getSelectionEnd()) {
+                        var offset = area.viewToModel2D(event.getPoint());
+                        if (offset >= 0) area.setCaretPosition(offset);
+                    }
+                }
+            });
             editor.completion = completion(path, area);
             editor.scroll = new RTextScrollPane(area);
             editor.scroll.setIconRowHeaderEnabled(true);
             editor.scroll.getGutter().setLineNumberFont(Zoom.code(13));
             editor.scroll.setBorder(BorderFactory.createEmptyBorder());
+            var shown = editor;
+            editor.scroll.getGutter().addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent event) {
+                    if (shown.bulb == null) return;
+                    try {
+                        var line = area.getLineOfOffset(area.viewToModel2D(new Point(0, event.getY())));
+                        if (line == area.getLineOfOffset(shown.bulb.getMarkedOffset())) help.bulb();
+                    } catch (BadLocationException outside) {
+                        // no line there
+                    }
+                }
+            });
             var panel = new JPanel(new BorderLayout());
             panel.add(editor.scroll, BorderLayout.CENTER);
             panel.add(new ErrorStrip(area), BorderLayout.LINE_END);
@@ -220,16 +253,105 @@ final class Editors extends JTabbedPane {
             editor.area.forceReparsing(editor.problems);
             var gutter = editor.scroll.getGutter();
             gutter.removeAllTrackingIcons();
+            editor.bulb = null;
+            editor.hidden = null;
+            editor.marks.clear();
             for (var problem : editor.problems.problems) {
+                var line = ((Number) problem.get("line")).intValue() - 1;
+                if (editor.marks.containsKey(line)) continue;
                 try {
-                    gutter.addLineTrackingIcon(((Number) problem.get("line")).intValue() - 1,
-                            Icons.of("WARNING".equals(problem.get("severity")) ? "WARNING" : "ERROR"),
-                            String.valueOf(problem.get("message")).lines().findFirst().orElse(""));
+                    editor.marks.put(line, gutter.addLineTrackingIcon(line, Icons.of("WARNING".equals(problem.get("severity")) ? "WARNING" : "ERROR"),
+                            String.valueOf(problem.get("message")).lines().findFirst().orElse("")));
                 } catch (BadLocationException outside) {
                     // a line the text no longer has
                 }
             }
         }
+    }
+
+    /**
+     * The light bulb at the caret's line, as IntelliJ shows it: red when the line has a problem to fix, yellow when the
+     * caret has something to refactor; none for {@code null}.
+     */
+    void bulb(String kind) {
+        current().ifPresent(path -> {
+            var editor = editor(path);
+            var gutter = editor.scroll.getGutter();
+            if (editor.bulb != null) gutter.removeTrackingIcon(editor.bulb);
+            editor.bulb = null;
+            try {
+                if (editor.hidden != null) {
+                    var mark = editor.marks.get(editor.hidden);
+                    editor.marks.put(editor.hidden, gutter.addLineTrackingIcon(editor.hidden, mark.getIcon(), mark.getToolTip()));
+                    editor.hidden = null;
+                }
+                if (kind == null) return;
+                var line = editor.area.getCaretLineNumber();
+                if (editor.marks.containsKey(line)) {
+                    gutter.removeTrackingIcon(editor.marks.get(line));
+                    editor.hidden = line;
+                }
+                editor.bulb = gutter.addLineTrackingIcon(line, Icons.of(kind),
+                        "Show context actions (" + Keymap.of("context-actions").stroke().toString().replace("pressed ", "") + ")");
+            } catch (BadLocationException outside) {
+                // no line there
+            }
+        });
+    }
+
+    /** Which bulb the current editor shows: FIX, INTENTION, or nothing. */
+    Optional<String> bulb() {
+        return current().map(this::editor).filter(e -> e.bulb != null).map(e -> e.bulb.getIcon() == Icons.of("FIX") ? "FIX" : "INTENTION");
+    }
+
+    /** The lines the selection covers, {@code first-last}, if anything is selected. */
+    Optional<String> selectedLines() {
+        return current().map(this::editor).filter(e -> e.area.getSelectionStart() != e.area.getSelectionEnd()).map(e -> {
+            try {
+                var area = e.area;
+                var first = area.getLineOfOffset(area.getSelectionStart()) + 1;
+                var end = area.getSelectionEnd();
+                var last = area.getLineOfOffset(end) + (end > 0 && area.getLineStartOffset(area.getLineOfOffset(end)) == end ? 0 : 1);
+                return first + "-" + Math.max(first, last);
+            } catch (BadLocationException outside) {
+                return null;
+            }
+        });
+    }
+
+    /** What is selected, as offsets {@code start, end}; the caret twice if nothing is. */
+    int[] selection() {
+        return current().map(this::editor).map(e -> new int[] {e.area.getSelectionStart(), e.area.getSelectionEnd()}).orElse(new int[] {0, 0});
+    }
+
+    /** Selects a stretch of the current file, from a line and column to the last character's, from 1. */
+    void select(int line, int column, int endLine, int endColumn) {
+        current().ifPresent(path -> {
+            var area = editor(path).area;
+            try {
+                var start = area.getLineStartOffset(line - 1) + column - 1;
+                var end = area.getLineStartOffset(endLine - 1) + endColumn;
+                area.select(start, Math.min(end, area.getDocument().getLength()));
+            } catch (BadLocationException outside) {
+                // a stretch the text no longer has
+            }
+        });
+    }
+
+    /** Selects from offset to offset. */
+    void select(int[] range) {
+        current().ifPresent(path -> editor(path).area.select(range[0], range[1]));
+    }
+
+    /** The offset of a line and column of the current file, from 1. */
+    int offset(int line, int column) {
+        return current().map(path -> {
+            try {
+                return editor(path).area.getLineStartOffset(line - 1) + column - 1;
+            } catch (BadLocationException outside) {
+                return 0;
+            }
+        }).orElse(0);
     }
 
     /** Opens completion at the caret of the current editor. */

@@ -51,6 +51,16 @@ public final class Positions {
                 .map(Map.Entry::getKey).findFirst();
     }
 
+    /** The innermost element whose declaration a place of a file is inside: a parameter, a method, a field, a type. */
+    public static Optional<ElementId> inside(Reader.Reading reading, String path, int line, int column) {
+        var position = new Position(line, column);
+        return reading.declarations().entrySet().stream()
+                .filter(entry -> entry.getValue().unit().path().equals(path))
+                .filter(entry -> entry.getValue().node().getRange().filter(range -> range.contains(position)).isPresent())
+                .min(Comparator.comparing((Map.Entry<ElementId, ide.java.syntax.Decl> entry) -> size(entry.getValue().node().getRange().orElseThrow())))
+                .map(Map.Entry::getKey);
+    }
+
     /** Where the name of a declaration or a use is written; a field declaration names each of its variables. */
     private static Optional<Range> name(Node node, String variable) {
         return switch (node) {

@@ -89,6 +89,16 @@ final class Capabilities {
                             answer.put("diff", preview.diff());
                             return answer;
                         }))
+                .register(Capability.of("inside", "The innermost element whose declaration a line and column of a file is inside",
+                        List.of(path, line, Param.of("column", "text")),
+                        args -> workspace.inside(text(args, "path"), number(args, "line"), number(args, "column"))
+                                .map(e -> entries("element", e.qualified(), "kind", e.kind().name())).orElse(null)))
+                .register(Capability.of("around", "What a place of a file is inside, innermost first: line, column, end line, end column",
+                        List.of(path, line, Param.of("column", "text")), args -> workspace.around(text(args, "path"), number(args, "line"),
+                                number(args, "column")).stream().map(s -> entries("line", s.line(), "column", s.column(),
+                                "endLine", s.endLine(), "endColumn", s.endColumn())).toList()))
+                .register(Capability.of("suggest", "What a refactoring suggests for the parameters not given, from those given",
+                        List.of(refactoring, itsArgs), args -> workspace.suggest(text(args, "refactoring"), nested(args))))
                 .register(Capability.of("expand", "A refactoring's primitives, without applying them",
                         List.of(refactoring, itsArgs), args -> workspace.expand(text(args, "refactoring"), nested(args))))
                 .register(Capability.of("why-repair", "How the last transaction's repairs were searched", List.of(),

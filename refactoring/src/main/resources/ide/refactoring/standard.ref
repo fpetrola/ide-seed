@@ -55,7 +55,7 @@ end
 
 refactoring extract-superclass "Creates a class between a type and its superclass and pulls fields up into it"
   param type : element(CLASS) "the type to extract from"
-  param name : text "name of the new superclass"
+  param name : text "name of the new superclass" default "Abstract${name(type)}"
   param fields : elements(FIELD) "fields to pull up"
   base := create CLASS ${owner(type)} ${name}
   if nonempty(attr(type, "superclass"))
@@ -70,7 +70,7 @@ end
 
 refactoring rename-method-family "Renames a method with every method it overrides or that overrides it"
   param method : element(METHOD) "any method of the family"
-  param name : text "the new name"
+  param name : text "the new name" default "${name(method)}"
   for m in family(method)
     rename ${m} ${name}
   end
@@ -91,7 +91,7 @@ end
 
 refactoring introduce-factory "Static factory for a constructor; every new outside it goes through the factory"
   param constructor : element(CONSTRUCTOR) "the constructor to hide"
-  param name : text "name of the factory method"
+  param name : text "name of the factory method" default "create${name(owner(constructor))}"
   f := create METHOD ${owner(constructor)} ${name}
   set ${f} visibility public
   set ${f} static true
@@ -144,7 +144,7 @@ end
 
 refactoring extract-interface "Creates an interface with some methods of a type, and the type implements it"
   param type : element(CLASS) "the type to extract from"
-  param name : text "name of the new interface"
+  param name : text "name of the new interface" default "I${name(type)}"
   param methods : elements(METHOD) "the methods the interface declares"
   i := create INTERFACE ${owner(type)} ${name}
   for m in methods
@@ -156,7 +156,7 @@ end
 
 refactoring rename-field-with-accessors "Renames a field together with its getter and setter, if it has them"
   param field : element(FIELD) "the field to rename"
-  param name : text "the new name"
+  param name : text "the new name" default "${name(field)}"
   let getter = first(methods(owner(field)) | named concat("get", cap(name(field))))
   let setter = first(methods(owner(field)) | named concat("set", cap(name(field))))
   rename ${field} ${name}
@@ -179,8 +179,8 @@ end
 
 refactoring extract-method "Moves a run of statements into a new private method and calls it"
   param method : element(METHOD) "the method the statements are in"
-  param lines : text "first-last line of the statements"
-  param name : text "name of the new method"
+  param lines : lines "first-last line of the statements"
+  param name : text "name of the new method" default "extracted"
   m := extract ${method} ${lines} ${name}
   return ${m}
 end
@@ -249,7 +249,7 @@ end
 
 refactoring rename-package "Moves every type of a package to a new package"
   param package : element(PACKAGE) "the package to rename"
-  param name : text "the new qualified name"
+  param name : text "the new qualified name" default "${qualified(package)}"
   p := create PACKAGE name=${name}
   for t in types-of(package)
     move-type ${t} ${p}

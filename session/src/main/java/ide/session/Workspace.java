@@ -119,6 +119,20 @@ public final class Workspace {
         return session.preview(refactoring, args);
     }
 
+    /** The innermost element whose declaration a place of a file is inside. */
+    public Optional<Element> inside(String path, int line, int column) {
+        return project.inside(path, line, column).map(id -> project.program().element(id));
+    }
+
+    /** What a place of a file is inside, innermost first, as an editor widens a selection. */
+    public List<JavaProjection.Span> around(String path, int line, int column) {
+        return project.around(path, line, column);
+    }
+
+    public Map<String, String> suggest(String refactoring, Map<String, ?> args) {
+        return session.suggest(refactoring, args);
+    }
+
     public List<String> expand(String refactoring, Map<String, ?> args) {
         return session.expand(refactoring, args);
     }

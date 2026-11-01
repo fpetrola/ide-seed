@@ -32,7 +32,8 @@ final class Icons {
             Map.entry("PARAM", letter("p", new Color(0x8C8C8C))),
             Map.entry("LOCAL", letter("v", new Color(0x8C8C8C))),
             Map.entry("PACKAGE", folder()),
-            Map.entry("FIX", bulb()),
+            Map.entry("FIX", bulb(new Color(0xE05555))),
+            Map.entry("INTENTION", bulb(new Color(0xF2C55C))),
             Map.entry("REFACTORING", wrench()),
             Map.entry("ERROR", mark(new Color(0xE05555), "!")),
             Map.entry("WARNING", warning()),
@@ -187,9 +188,9 @@ final class Icons {
         });
     }
 
-    private static Icon bulb() {
+    private static Icon bulb(Color color) {
         return icon(g -> {
-            g.setColor(new Color(0xF2C55C));
+            g.setColor(color);
             g.fillOval(3, 1, 10, 10);
             g.fillRect(6, 10, 4, 2);
             g.setColor(new Color(0xA0A0A0));

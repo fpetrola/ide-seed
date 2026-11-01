@@ -89,4 +89,22 @@ class CapabilitiesTest {
         assertThat(capabilities.invoke("edit", Map.of("path", "a/P.java", "text", P.replace("int x", "long x")))).contains("\"applied\":true");
         assertThat(ws.source("a/P.java")).contains("public long x;");
     }
+
+    @Test
+    void aFormAsksWhatARefactoringSuggests() {
+        var capabilities = Workspace.of(Map.of("a/P.java", """
+                package a;
+
+                class P {
+                    int add(int a, long b) {
+                        return a;
+                    }
+                }
+                """)).capabilities();
+
+        assertThat(capabilities.invoke("suggest", Map.of("refactoring", "change-signature", "args", Map.of("method", "a.P#add(int,long)"))))
+                .isEqualTo("{\"parameters\":\"int a, long b\"}");
+        assertThat(capabilities.invoke("suggest", Map.of("refactoring", "extract-superclass", "args", Map.of("type", "a.P"))))
+                .isEqualTo("{\"name\":\"AbstractP\"}");
+    }
 }

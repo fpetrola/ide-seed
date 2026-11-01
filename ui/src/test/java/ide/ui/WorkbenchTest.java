@@ -87,7 +87,7 @@ class WorkbenchTest {
         assertThat(workbench.marks()).containsExactly(java.util.Map.entry("a", "ERROR"), java.util.Map.entry("a/B.java", "ERROR"));
         dialogs.choose("create field total in B").line("int");
 
-        workbench.act("quick-fix");
+        workbench.act("context-actions");
 
         assertThat(workbench.views().problems()).isEmpty();
         assertThat(workbench.marks()).isEmpty();
@@ -113,8 +113,8 @@ class WorkbenchTest {
 
         workbench.act("refactor");
 
-        assertThat(dialogs.offered.getFirst()).contains("rename", "encapsulate-field", "pull-up-field")
-                .doesNotContain("extract-superclass", "pull-up-method", "ls");
+        assertThat(dialogs.offered.getFirst()).contains("Rename...", "Encapsulate Field...", "Pull Up Field...")
+                .doesNotContain("Extract Superclass...", "Pull Up Method...", "Ls...");
     }
 
     @Test
@@ -163,5 +163,81 @@ class WorkbenchTest {
             }
         }
         return null;
+    }
+
+    @Test
+    void altEnterOffersTheFixesOfTheLineAndTheRefactoringsOfTheCaret() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 4, 16); // public int x: on x
+
+        workbench.act("context-actions");
+
+        assertThat(dialogs.offered.getFirst()).contains("Generate Getter...", "Encapsulate Field...", "Rename...", "Safe Delete...")
+                .doesNotContain("Pull Up Method...");
+        assertThat(workbench.bulbShown()).contains("INTENTION");
+    }
+
+    @Test
+    void aLineWithAProblemShowsTheRedBulb() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/B.java", 5, 16);
+        workbench.type("a/B.java", B.replace("return a.m(1);", "return total;"));
+        workbench.act("apply-edit");
+
+        assertThat(workbench.bulbShown()).contains("FIX");
+    }
+
+    @Test
+    void theSelectedStatementsAreExtractedIntoAMethodNamedAsSuggested() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 7, 9);
+        workbench.select(7, 9, 7, 21); // return x + p;
+        dialogs.fill(Map.of());
+
+        workbench.act("extract-method");
+
+        var form = dialogs.filled.getFirst();
+        assertThat(form.fields()).extracting(f -> f.param().name() + "=" + f.value())
+                .containsExactly("method=a.A#m(int)", "lines=7-7", "name=extracted");
+        assertThat(workbench.text("a/A.java")).contains("return extracted(p);");
+    }
+
+    @Test
+    void changeSignatureStartsWithTheParametersTheMethodHas() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 6, 9);
+
+        workbench.act("change-signature");
+
+        assertThat(dialogs.filled.getFirst().fields()).extracting(f -> f.param().name() + "=" + f.value())
+                .containsExactly("method=a.A#m(int)", "parameters=int p");
+    }
+
+    @Test
+    void theSelectionWidensToWhatItIsInsideAndShrinksBack() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 7, 16); // return x + p: on x
+
+        workbench.act("extend-selection");
+        assertThat(workbench.selected()).isEqualTo("x");
+        workbench.act("extend-selection");
+        assertThat(workbench.selected()).isEqualTo("x + p");
+        workbench.act("extend-selection");
+        assertThat(workbench.selected()).isEqualTo("return x + p;");
+        workbench.act("shrink-selection");
+        assertThat(workbench.selected()).isEqualTo("x + p");
+    }
+
+    @Test
+    void theMenusAreLaidOutAsIntelliJs() throws IOException {
+        var bar = workbench().menus();
+
+        var names = new java.util.ArrayList<String>();
+        for (var i = 0; i < bar.getMenuCount(); i++) names.add(bar.getMenu(i).getText());
+        assertThat(names).containsExactly("File", "Edit", "View", "Navigate", "Code", "Refactor", "Build", "Help");
+        var refactor = bar.getMenu(5);
+        var items = new java.util.ArrayList<String>();
+        for (var i = 0; i < refactor.getItemCount(); i++) if (refactor.getItem(i) != null) items.add(refactor.getItem(i).getText());
+        assertThat(items).startsWith("Refactor This...", "Rename...", "Change Signature...").contains("Extract Method...", "More Refactorings");
     }
 }

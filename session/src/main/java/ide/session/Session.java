@@ -81,6 +81,11 @@ public final class Session {
     }
 
     /** The step tree a refactoring would produce, without verifying or keeping anything. */
+    /** What a refactoring suggests for the parameters not given, from those given: its default names. */
+    public Map<String, String> suggest(String refactoring, Map<String, ?> args) {
+        return library.get(refactoring).suggestions(Run.on(project, library), new ide.refactoring.Args(args));
+    }
+
     public List<String> expand(String refactoring, Map<String, ?> args) {
         var tx = new Transaction(project, repairer);
         try {

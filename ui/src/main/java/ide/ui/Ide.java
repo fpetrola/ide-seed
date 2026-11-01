@@ -20,6 +20,11 @@ final class Ide {
         return workspace.capabilities().get(id);
     }
 
+    /** Whether the IDE has a capability by that name. */
+    boolean has(String id) {
+        return workspace.capabilities().ids().contains(id);
+    }
+
     /** What a capability answers, read from its JSON: a map, a list, text, a number, a truth, or nothing. */
     Object call(String capability, Map<String, ?> args) {
         return Json.read(workspace.capabilities().invoke(capability, args));

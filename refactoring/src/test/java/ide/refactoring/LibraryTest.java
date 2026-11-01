@@ -34,4 +34,20 @@ class LibraryTest {
         assertThatThrownBy(() -> library.get("nonexistent")).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unknown refactoring: nonexistent");
     }
+
+    @Test
+    void aRefactoringSuggestsWhatIsNotGivenFromWhatIs() {
+        var library = Library.standard();
+        var projection = ide.projection.kit.MemoryProjection.builder()
+                .type("a.Money").method("a.Money", "add", "Money", "long cents", "int times")
+                .build();
+        var run = Run.on(projection, library);
+        var p = projection.program();
+
+        assertThat(library.get("extract-superclass").suggestions(run, new Args(java.util.Map.of("type", p.find("a.Money").orElseThrow().id()))))
+                .containsExactly(java.util.Map.entry("name", "AbstractMoney"));
+        assertThat(library.get("change-signature").suggestions(run, new Args(java.util.Map.of("method", "a.Money#add(long,int)"))))
+                .containsExactly(java.util.Map.entry("parameters", "long cents, int times"));
+        assertThat(library.get("extract-superclass").suggestions(run, new Args(java.util.Map.of()))).isEmpty();
+    }
 }
