@@ -128,6 +128,31 @@ public record Body(List<Statement> statements) {
         return text.contains("#{");
     }
 
+    /** The body as it is said: a statement a line, each element named by id. */
+    public String text() {
+        return String.join("\n", statements.stream().map(statement -> switch (statement) {
+            case Kept k -> "...";
+            case Construct c -> name(c.constructor()) + "(" + text(c.arguments()) + ")";
+            case Return r -> "return " + text(r.value());
+            case Assign a -> name(a.field()) + " = " + text(a.value());
+        }).toList());
+    }
+
+    /** A value as it is said. */
+    public static String text(Expression value) {
+        return switch (value) {
+            case Field f -> name(f.field());
+            case Parameter p -> name(p.parameter());
+            case Default d -> "default";
+            case Call call -> (call.receiver() == null ? "" : text(call.receiver()) + ".") + name(call.method()) + "(" + text(call.arguments()) + ")";
+            case New n -> "new " + name(n.constructor()) + "(" + text(n.arguments()) + ")";
+        };
+    }
+
+    private static String text(List<Expression> values) {
+        return String.join(", ", values.stream().map(Body::text).toList());
+    }
+
     /** The uses a value makes, in the order it names them. */
     public static List<Use> uses(Expression value) {
         var uses = new ArrayList<Use>();
@@ -227,8 +252,8 @@ public record Body(List<Statement> statements) {
                 if (!next(')')) {
                     do arguments.add(expression());
                     while (next(','));
+                    expect(')');
                 }
-                expect(')');
                 return new New(constructor, arguments);
             }
             var element = element(Kind.FIELD, Kind.PARAM, Kind.METHOD);

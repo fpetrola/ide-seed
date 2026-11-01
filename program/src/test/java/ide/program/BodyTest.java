@@ -116,6 +116,17 @@ class BodyTest {
     }
 
     @Test
+    void itIsWrittenBackAsItIsSaid() {
+        var text = "#{field:2} = #{param:5}\nreturn #{field:2}.#{method:6}(new #{constructor:3}(), #{param:5})\nreturn default";
+
+        var body = Body.parse(text, program(), SET);
+
+        assertThat(body.text()).isEqualTo(text);
+        assertThat(Body.text(((Body.Assign) body.statements().getFirst()).value())).isEqualTo("#{param:5}");
+        assertThat(new Body(body.statements().subList(1, 3)).text()).isEqualTo(text.substring(text.indexOf('\n') + 1));
+    }
+
+    @Test
     void anythingElseIsNotABody() {
         var program = program();
 
