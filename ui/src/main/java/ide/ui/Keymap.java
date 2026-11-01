@@ -22,6 +22,7 @@ final class Keymap {
     static final List<Key> KEYS = List.of(
             key("apply-edit", "Build Project", "Apply what the editors say to the program, and compile it", "ctrl S", "ctrl F9"),
             key("save", "Save All", "Write the changed files to disk", "ctrl shift S"),
+            key("close-editor", "Close", "Close the editor, applying what it says first", "ctrl F4"),
             key("undo-change", "Undo Change", "Undo the last change to the program", "ctrl alt Z"),
             key("context-actions", "Show Context Actions", "Show context actions: the quick fixes of the line and the refactorings of the caret", "alt ENTER", "ctrl 1"),
             key("complete", "Basic Completion", "Complete the name being written", "ctrl SPACE"),

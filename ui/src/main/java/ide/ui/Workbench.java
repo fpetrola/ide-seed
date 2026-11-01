@@ -129,6 +129,11 @@ final class Workbench extends JPanel {
             public javax.swing.JPopupMenu menu() {
                 return contextMenu();
             }
+
+            @Override
+            public void close(String path) {
+                Workbench.this.close(path);
+            }
         });
         bulbs.setRepeats(false);
         checks.setRepeats(false);
@@ -200,6 +205,7 @@ final class Workbench extends JPanel {
                     refresh();
                 }
                 case "context-actions" -> contextActions();
+                case "close-editor" -> editors.current().ifPresent(this::close);
                 case "complete" -> editors.complete();
                 case "rename" -> rename();
                 case "change-signature", "move", "extract-method", "introduce-constant", "introduce-field", "safe-delete" -> refactor(action);
@@ -308,7 +314,10 @@ final class Workbench extends JPanel {
         }
         tree.setRoot(root);
         for (var row = 0; row < project.getRowCount(); row++) project.expandRow(row);
-        for (var path : editors.open()) if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
+        for (var path : editors.open()) {
+            if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
+            else editors.close(path); // the program no longer has it: undone, deleted, moved
+        }
         editors.problems(problems);
         views.problems(problems);
         views.changes(ide.text("diff", Map.of()));
@@ -351,6 +360,7 @@ final class Workbench extends JPanel {
         file.add(openFolder);
         file.addSeparator();
         file.add(item("save"));
+        file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
         menu(bar, "View", "zoom-in", "zoom-out", "zoom-reset");
@@ -452,6 +462,18 @@ final class Workbench extends JPanel {
     /** What File, Open Folder does: the window opens another project. */
     void opener(java.util.function.Consumer<java.nio.file.Path> opener) {
         this.opener = opener;
+    }
+
+    /**
+     * Closes a file's editor, as IDEs do without losing what it says: applied first. What the program does not take yet
+     * keeps it open, and the status says why.
+     */
+    private void close(String path) {
+        if (editors.unapplied().containsKey(path) && !applyEdits()) {
+            say(path + " stays open: what it says is not applied yet");
+            return;
+        }
+        editors.close(path);
     }
 
     /**

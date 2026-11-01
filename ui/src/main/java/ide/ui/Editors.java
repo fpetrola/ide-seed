@@ -67,6 +67,9 @@ final class Editors extends JTabbedPane {
 
         /** The editor's right-click menu, made when it opens: what can be done where the caret is. */
         javax.swing.JPopupMenu menu();
+
+        /** People asked to close a file's editor (its tab's cross, a middle click): the window decides. */
+        void close(String path);
     }
 
     /** A file's editor and the text it last applied. */
@@ -139,6 +142,27 @@ final class Editors extends JTabbedPane {
         this.keys = keys;
         this.help = help;
         addChangeListener(event -> help.moved());
+        putClientProperty("JTabbedPane.tabClosable", true); // a cross on each tab, as IDEs have
+        putClientProperty("JTabbedPane.tabCloseCallback", (java.util.function.IntConsumer) index -> help.close(pathAt(index)));
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent event) {
+                var index = indexAtLocation(event.getX(), event.getY());
+                if (index >= 0 && javax.swing.SwingUtilities.isMiddleMouseButton(event)) help.close(pathAt(index));
+            }
+        });
+    }
+
+    private String pathAt(int index) {
+        return List.copyOf(editors.keySet()).get(index);
+    }
+
+    /** Closes a file's editor, whatever it says; the one before it shows. */
+    void close(String path) {
+        var index = List.copyOf(editors.keySet()).indexOf(path);
+        if (index < 0) return;
+        editors.remove(path);
+        removeTabAt(index);
     }
 
     /** Shows a file's tab, opening it with {@code text} if it is not open yet. */

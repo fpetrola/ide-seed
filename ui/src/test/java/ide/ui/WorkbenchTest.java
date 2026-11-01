@@ -115,6 +115,50 @@ class WorkbenchTest {
     }
 
     @Test
+    void anEditorClosesAndWhatItSaidIsAppliedFirst() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/B.java", 5, 16);
+        workbench.open("a/A.java", 4, 16);
+        workbench.type("a/A.java", A.replace("public int x;", "public int x, y;"));
+
+        workbench.act("close-editor");
+
+        assertThat(workbench.editors().open()).containsExactly("a/B.java");
+        assertThat(workbench.editors().current()).contains("a/B.java");
+        workbench.open("a/A.java", 1, 1);
+        assertThat(workbench.text("a/A.java")).contains("public int x, y;");
+    }
+
+    @Test
+    void anEditorWithWhatTheProgramDoesNotTakeYetStaysOpen() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 4, 16);
+        var halfway = A.replace("public int x;", "public int x +");
+        workbench.type("a/A.java", halfway);
+
+        workbench.act("close-editor");
+
+        assertThat(workbench.editors().open()).containsExactly("a/A.java");
+        assertThat(workbench.text("a/A.java")).isEqualTo(halfway);
+    }
+
+    @Test
+    void undoingAChangeThatMadeAFileClosesItsEditor() throws IOException {
+        var workbench = workbench();
+        workbench.open("a/A.java", 3, 14); // public class A: on A
+        dialogs.fill(Map.of("name", "Base", "fields", java.util.List.of("a.A#x")));
+        workbench.act("refactor:extract-superclass");
+        assertThat(workbench.files()).contains("a/Base.java");
+        workbench.open("a/Base.java", 1, 1);
+
+        workbench.act("undo-change");
+
+        assertThat(workbench.files()).doesNotContain("a/Base.java");
+        assertThat(workbench.editors().open()).containsExactly("a/A.java");
+        assertThat(workbench.text("a/A.java")).isEqualTo(A);
+    }
+
+    @Test
     void f3GoesToTheDeclarationAndBackComesBack() throws IOException {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 18); // a.m(1): on m
