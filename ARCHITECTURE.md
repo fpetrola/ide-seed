@@ -1381,6 +1381,13 @@ que esto no escala solo:
      (`spelled`, `called-as`), así cada una tiene su título.
    - El rastro de `why` ya no muestra esos efectos aparte: sus caminos son definiciones de `resolves`, tratadas en
      orden con las otras.
+
+   **Ciclo 2 hecho el 2026-11-01**: borrar lo que nada usa. `remove-unused` se fue; quedan 3 efectos.
+   - Existir es un hecho del grafo (`exists(e)`) que solo un primitivo quita, borrando el elemento: es la primera
+     relación que la abducción puede quitar y nunca poner.
+   - `java.rules` dice que un miembro privado, que nada de afuera de su tipo puede usar, se usa o no está
+     (`used-or-gone`). Si nada lo usa, lo que queda es que no esté, y se ofrece "remove ...".
+   - Que de verdad nada lo use lo dice el compilador (es su advertencia), y si algo lo usa el borrado se rechaza.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

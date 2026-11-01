@@ -185,6 +185,11 @@ def called-as(u, m) when target(u, m)
 say target for spelled "change to ${name(value)}"
 say target for called-as "change to ${name(value)}(..)"
 
+# A private member nothing uses (JLS 6.6.1: nothing outside its type can): it is used, or it is not there.
+def used-or-gone(symbol) when known("path", path) and declared(e, path, symbol) and visibility(e, "private") and not exists(e)
+
+say not exists for used-or-gone "remove ${name(element)}"
+
 # What only the person knows of what is created: asked, with what the rules deduce proposed.
 ask type "type of the new field" for type of new field
 

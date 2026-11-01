@@ -45,6 +45,8 @@ final class Abduction {
     static final Set<String> TOGGLED = Set.of("static", "final", "abstract", "initialized");
     /** Relations a tuple of which goes away when something is created: {@code unimplemented(t, m)}, by implementing m in t. */
     static final Set<String> UNDONE_BY_CREATING = Set.of("unimplemented");
+    /** Relations a primitive takes away and never sets: {@code exists(e)}, which deleting e takes away. */
+    static final Set<String> REMOVED = Set.of("exists");
     /**
      * Relations whose first argument a primitive creates, when nothing is there: {@code constructor(k, t)} (one with no
      * parameters), {@code member(e, owner, name, kind)}, {@code parameter(p, callable, name, what calls pass)} and
@@ -224,7 +226,7 @@ final class Abduction {
                 var atom = bound(n.atom(), binding);
                 if (!state.holds(atom)) {
                     explore(forWhat, rest, binding, changes, needs, state, found, stuck);
-                } else if (ground(atom) && TOGGLED.contains(atom.relation())) {
+                } else if (ground(atom) && (TOGGLED.contains(atom.relation()) || REMOVED.contains(atom.relation()))) {
                     var change = new Change(atom.relation(), null, values(atom), forWhat);
                     var verdict = allowed(change, changes);
                     if (verdict.ok()) {

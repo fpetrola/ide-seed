@@ -71,17 +71,9 @@ end
 
 # A method used from a static place, where there is no object to call it on: java.rules says what needs an object.
 
-# A private member nothing uses: it goes.
+# A private member nothing uses: java.rules says it goes.
 goal ecj.UnusedPrivateField needs used-or-gone(symbol)
 goal ecj.UnusedPrivateMethod needs used-or-gone(symbol)
-
-effect remove-unused "remove ${name(e)}"
-  makes used-or-gone(symbol)
-  for e in members-in(path, symbol)
-  do
-    delete ${e}
-  end
-end
 
 # What a file cannot see: the member or type the name at the problem binds.
 goal ecj.NotVisibleMethod needs accessible(top-in(path), element-at(path, line, column))

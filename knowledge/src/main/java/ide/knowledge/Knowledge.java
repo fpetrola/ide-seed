@@ -419,6 +419,7 @@ public final class Knowledge implements Remedy, QuickFix {
                 case "before" -> moved.containsKey(key) ? null
                         : new Primitive.Move(new ElementId(key), projection.program().element(new ElementId(key)).parent(), new ElementId(value));
                 case "target" -> new Primitive.Retarget(key, new ElementId(value));
+                case "exists" -> new Primitive.Delete(new ElementId(key)); // what is not there any more is deleted
                 default -> throw new IllegalStateException("no primitive changes " + change.relation());
             };
             if (primitive == null) continue;

@@ -57,8 +57,6 @@ final class ScriptFunctions {
             case "top-in" -> elem(graph.typesIn(text(args, 0)).getFirst().id());
             case "type-in" -> types(text(args, 0)).stream().filter(t -> t.name().equals(text(args, 1))).findFirst()
                     .map(t -> elem(t.id())).orElse(null);
-            case "members-in" -> elems(types(text(args, 0)).stream().flatMap(t -> graph.members(t.id()).stream())
-                    .filter(m -> m.name().equals(text(args, 1))).toList());
             case "methods-in" -> elems(types(text(args, 0)).stream().flatMap(t -> graph.members(t.id()).stream())
                     .filter(m -> m.kind().name().equals("METHOD") && m.name().equals(text(args, 1))).toList());
             case "inside" -> projection.inside(text(args, 0), Integer.parseInt(text(args, 1)), Integer.parseInt(text(args, 2)))
