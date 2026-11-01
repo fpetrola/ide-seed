@@ -240,7 +240,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   van (`Dropped`) y que el método hace los que el nuevo nombra (`Added`). Desde el ítem 5, `Delete` con `into` fusiona
   un miembro en otro (`Merged`), y `within(element, container)` dice si un elemento está dentro de otro.
 - **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
-  enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
+  enum (no se modelan); sentencias y variables locales como elementos: propuesto en la decisión 32 (sección 9,
+  etapa 3), porque cada pasito que un refactoring da dentro de un cuerpo hoy pide vocabulario nuevo.
 
 ### 5.3 `projection`: el driver de lenguaje
 
@@ -546,7 +547,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `super(...)`) en vez de asignarlo. Lee el cuerpo con `said` (obligación 11) y `value-given`/`said-without`; si el
   cuerpo no se puede decir sin lenguaje, no se ofrece. Conserva el sentido, así que también repara: un extract
   superclass que sube un `final` que el constructor inicializa deja `super(limit)`, como IntelliJ.
-- **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
+- **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
+  misma. Partirlas en efectos chicos que el planificador componga necesita las sentencias en el grafo (decisión 32,
+  propuesta). `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 
 ### 5.8 `session`: el espacio de trabajo
@@ -732,6 +735,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 29 | Lo fijado                | un `Set` fija el atributo que da (visibilidad, static, abstract, final, tipo), no solo la visibilidad: una reparación que lo deshace se descarta. Antes make-final sobre un campo sin inicializar se "aplicaba" y el reparador lo quitaba | tomada, 2026-11-01 |
 | 30 | Errores de antes         | la vista del compilador compara: es violación todo error que no estaba antes de la transacción (mismo archivo, código y mensaje, sin importar la línea). Antes, con un solo error en cualquier archivo, la transacción no se compilaba y quedaba como obligación ("types were not checked"): en un proyecto real, siempre con algo roto, un extract superclass dejaba la superclase y la subclase sin compilar | tomada, 2026-11-01 |
 | 31 | Reparar sin cambiar el sentido | un efecto del conocimiento es un quick fix que la gente elige; solo uno que declara `keeps meaning` (abrir, mover adonde se usa, importar, ampliar un override, declarar el constructor que el lenguaje ya daba) puede reparar solo un refactoring. Un `Plan` dice si `changesMeaning` y el `Repairer` no lo toma. Antes cualquier fix sin preguntas podía reparar: cambiar una llamada a un método de nombre parecido, sacar un `final`, inventar un valor para los llamadores | tomada, 2026-11-01 |
+| 32 | Sentencias y locales     | las sentencias de primer nivel de un cuerpo y las variables locales son elementos del grafo (`STATEMENT`, `LOCAL`), sitio de sus usos; las expresiones siguen opacas; los nueve primitivos alcanzan; `Body` dice una sentencia. Reemplaza en parte la 7 (cuerpos fuera del grafo). Sección 9, etapa 3 | propuesta, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -981,6 +985,123 @@ etapa 2, por valor.
    - 8b760b3: el servidor MCP.
 
    Abierto: lo de la UI que lista la ficha de adaptadores; el build incremental y el runner de la spec.
+
+### Etapa 3 (propuesta): sentencias y locales en el grafo
+
+Propuesta del 2026-11-01, para discutir antes de escribir código (decisión 32, propuesta).
+
+**El diagnóstico.** Lo específico de cada quick fix, refactoring o pasito intermedio está solo en los `.ref`: ningún
+Java nombra un fix ni un refactoring. Se deduce cuándo aplicar una regla y cómo encadenarlas. Ejemplo: el script de
+extract-superclass no sabe nada de constructores, y el reparador encuentra solo que subir un `final` pide
+`create constructor AbstractUnset(), then pass limit to the constructor of AbstractUnset`. Pero cada regla es una
+receta escrita a mano, y cada receta nueva choca con algo que el sistema no sabe decir. De los 13 commits de la mañana
+del 2026-11-01, lo específico fueron unas 40 líneas de `knowledge.ref`. El resto fue:
+
+- vocabulario: `...` y `#{constructor}(...)` en el lenguaje de cuerpos, la pregunta `said` del contrato,
+  `value-given` y `said-without` en los scripts;
+- bugs del driver que el vocabulario destapó: `new`, `super(...)` y `this(...)` no eran llamadas;
+- seguridad del motor: decisiones 30 y 31, y que una reparación se juzgue por lo que quiso.
+
+La causa es una sola: **el grafo llega hasta los miembros**. Dentro de un cuerpo el sistema entiende solo lo que
+dice `Body`, que no tiene locales, literales ni operaciones. Todo pasito que ocurre dentro de un método (mover una
+asignación, pasar un valor por `super`, sacar una expresión a una variable) necesita vocabulario nuevo. Cuando el
+vocabulario no alcanza, la regla no se ofrece y el refactoring se rechaza (`this.limit = limit * 2`). Las señales de
+que esto no escala solo:
+
+- `ScriptFunctions` ya tiene 65 funciones, varias angostas: `value-given`, `said-without`, `unimplemented`.
+- `pass-to-superclass` es una receta de 15 líneas que hace tres cosas distintas.
+- El fragmento de `Extract` es una dirección opaca (`L-L`, `L:C-L:C`).
+- Extract Variable, Inline Variable e Introduce Parameter no se pueden hacer: los locales no existen.
+
+**Las opciones.**
+
+- *A, seguir como hasta ahora:* el lenguaje de cuerpos y el contrato crecen con cada regla. Es barato por regla,
+  pero las reglas siguen siendo recetas grandes, y cada pregunta nueva del contrato la tienen que responder los dos
+  drivers.
+- *B, el árbol entero en el grafo:* cada expresión es un nodo con identidad. Lo descarto. La identidad de una
+  expresión no sobrevive una edición a mano. El diff del verificador explota (en el sample grande, de unas 10.000
+  referencias a cientos de miles de nodos). Y el grafo dejaría de ser estructura para ser el AST de un lenguaje,
+  contra el principio 1.
+- *C, recomendada: sentencias y locales como elementos; las expresiones siguen opacas.* Es el nivel donde ocurren
+  los pasitos de los refactorings: una sentencia se mueve, se borra o se crea, y un local se declara, se lee y se
+  escribe. Lo que hay dentro de una expresión sigue siendo de la proyección, como hoy.
+
+**La opción C.**
+
+- *`program`.* Dos `Kind` nuevos.
+  - `LOCAL`: una variable local o de un `for`, hijo de su método o constructor, con dirección por dueño y nombre
+    (como un parámetro), ambigua si dos bloques reusan el nombre.
+  - `STATEMENT`: una sentencia del primer nivel de un cuerpo, hijo ordenado de su método o constructor (como los
+    parámetros). Lleva el hecho `BODY` con lo que dice en el lenguaje de cuerpos, cuando se puede decir. Si no se
+    puede, es opaca, pero igual tiene identidad, posición y usos.
+
+  El `site` de una referencia pasa a ser el elemento más interno que la contiene (la sentencia o el local), y lo
+  que hoy pregunta por el miembro lo responde `within` (que ya existe). Un uso de un local es una referencia como
+  cualquier otra, verificada por las mismas vistas.
+- *Primitivos.* Ninguno nuevo: los nueve alcanzan con los `Kind` nuevos (principio 3).
+  - `Create(STATEMENT, método, antes de, cuerpo dicho)`, `Delete(sentencia)` y `Move(sentencia, método, antes de)`,
+    también entre métodos.
+  - `Create(LOCAL, ...)`, `Rename(local)` y `Retarget(uso, local o parámetro)`.
+  - `Extract` toma una lista de sentencias en vez del fragmento opaco y dice qué produce: `METHOD` o `LOCAL`.
+  - El fragmento opaco queda solo para lo que una persona selecciona dentro de una expresión.
+- *Cuerpos.* `Body` pasa a decir una sentencia, no un cuerpo entero.
+  - Un `Set` de cuerpo se vuelve `Delete` y `Create` de sentencias.
+  - `...`, `said`, `value-given` y `said-without` se van: cada sentencia se dice sola o es opaca.
+  - La obligación 11 se reemplaza por "cada sentencia dice lo que hace si puede".
+- *Conocimiento.* Las recetas se parten en efectos chicos, con lo que necesitan y lo que hacen sobre hechos del
+  grafo, y el planificador las compone. `pass-to-superclass` pasa a ser la composición de tres efectos:
+  - `takes(constructor, campo)`: el constructor de la superclase recibe un parámetro y crea la sentencia que lo
+    asigna;
+  - `passes(constructor, a, valor)`: crea o completa la sentencia `#{a}(valor)` primero;
+  - `Delete` de la sentencia que asignaba, que solo conserva el sentido si el valor llega por el otro lado.
+
+  Para que el planificador sepa eso hace falta un hecho que se lee del grafo: `initializes(tipo, campo, valor)`, que
+  dice qué valor recibe un campo al construir un objeto. Ese hecho es lo que vuelve deducible "conserva el sentido",
+  que hoy se declara a mano (`keeps meaning`).
+- *Identidad de las sentencias.* Es lo difícil.
+  - Una sentencia no tiene nombre.
+  - Los primitivos saben dónde dejan cada sentencia, así que conservan su id sin ayuda.
+  - Después de una edición a mano, la reconciliación las empareja por orden y por texto (subsecuencia común más
+    larga), como hoy empareja miembros: solo cuando no hay dudas. Si hay dudas, la sentencia es nueva, lo que es
+    seguro: el verificador la juzga como agregada.
+
+**Costos y riesgos.**
+
+- El grafo crece con las sentencias: en el sample grande, unas 5 a 10 veces más elementos. La invalidación
+  selectiva relee por archivo, así que el costo va a la lectura completa, que se mide en `PerformanceProbe`.
+- Cambiar el `site` de las referencias toca las vistas, la navegación y los tests que miran sitios.
+- Los dos drivers responden obligaciones nuevas (locales, sentencias, sentencias dichas). `MemoryProjection` tiene que
+  modelar cuerpos como listas de sentencias.
+- La reconciliación de sentencias en ediciones a mano es nueva.
+
+**La migración**, por estrangulación y con un commit por ciclo, como las fases anteriores:
+
+1. *Locales.* `LOCAL` y sus usos en el grafo, con obligación del contrato. Lo que gana: rename de locales verificado
+   (y el rename en el lugar de la UI), Inline Variable.
+2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
+   sentencias, y `Extract` por lista de sentencias. Lo que gana: el fragmento de extract-method deja de ser opaco.
+3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
+4. *Conocimiento compuesto.* `initializes` como hecho; `pass-to-superclass` e `initialize-in-constructors` reescritos
+   como composición de efectos chicos; `keeps meaning` deducido donde se pueda.
+5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
+
+**Cómo se sabe si funcionó.**
+
+- La fase 4 baja la cantidad de funciones de `ScriptFunctions` y el tamaño de las reglas específicas.
+- El ejemplo del `super(limit)` sale de componer efectos de no más de cinco líneas cada uno.
+- Las fases 4 y 5 no tocan ningún archivo de los drivers.
+- Ahora sí se aceptan `this.limit = limit * 2` y cualquier otra sentencia que no se pueda decir: se mueve entera,
+  opaca, en vez de rechazarse.
+
+**Preguntas abiertas para decidir antes de la fase 1.**
+
+1. La identidad de una sentencia después de una edición a mano: ¿orden y texto (propuesto) o contenido normalizado?
+2. El `site` de una referencia: ¿la sentencia (propuesto), o el miembro más un campo nuevo con la sentencia? Lo
+   segundo es menos invasivo, pero deja dos maneras de decir dónde está un uso.
+3. Los bloques anidados (`if`, `for`, `try`): ¿sentencias hijas de su sentencia desde el principio, o opacos hasta
+   que un refactoring los pida (propuesto)?
+4. Las expresiones siguen opacas (propuesto). Extract Variable desde una expresión usa la selección de la persona,
+   que el driver convierte en un local y una sentencia.
 
 ## 10. Glosario
 
