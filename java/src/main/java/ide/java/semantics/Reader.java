@@ -259,6 +259,7 @@ public final class Reader {
                 for (var variable : field.getVariables()) {
                     var facts = new HashMap<>(attributes(field));
                     facts.put(Fact.TYPE, variable.getType().asString());
+                    facts.put(Fact.INITIALIZED, String.valueOf(variable.getInitializer().isPresent()));
                     var id = add(elements, new Address.Field(typeId, variable.getNameAsString()), Kind.FIELD,
                             variable.getNameAsString(), typeId, facts);
                     declarations.put(id, new Decl(unit, field));

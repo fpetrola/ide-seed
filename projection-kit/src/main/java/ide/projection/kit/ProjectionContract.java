@@ -191,12 +191,16 @@ public abstract class ProjectionContract {
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
-    /** Obligation 8, for a field: its start said in no language makes the uses it names, from the field. */
+    /**
+     * Obligation 8, for a field: its start said in no language makes the uses it names, from the field, and the field
+     * is then one given its value where it is declared.
+     */
     @Test
     void aFieldsStartSaidInNoLanguageMakesTheUsesItNames() {
         var projection = fixture();
         var p = projection.program();
         var label = id(p, "b.C#label");
+        assertThat(p.element(label).fact(Fact.INITIALIZED)).isNotEqualTo("true");
 
         var change = projection.apply(new Primitive.Set(label, "initializer", Body.name(id(p, "b.C#a"))));
 
@@ -204,6 +208,7 @@ public abstract class ProjectionContract {
         assertThat(after.referencesFrom(label)).filteredOn(r -> !r.mode().isLink())
                 .extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label()).containsExactly("b.C#a read");
         assertThat(change.expectations()).contains(new Change.Added(label, id(p, "b.C#a"), "a", Mode.READ));
+        assertThat(after.element(label).fact(Fact.INITIALIZED)).isEqualTo("true");
     }
 
     /**

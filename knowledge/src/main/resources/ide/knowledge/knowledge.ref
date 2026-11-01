@@ -78,10 +78,10 @@ end
 
 # A blank final field has its value where it is declared or from every constructor of its type; Eclipse says so at
 # the field, or at a constructor that does not give it one, naming the field.
-goal ecj.UninitializedBlankFinalField needs initialized(first(arguments))
+goal ecj.UninitializedBlankFinalField needs given-a-value(first(arguments))
 
 effect initialize-in-declaration "initialize ${field} in its declaration"
-  makes initialized(field)
+  makes given-a-value(field)
   ask value "initial value" "${default-value(type(field-in(path, field)))}"
   do
     set ${field-in(path, field)} initializer ${value}
@@ -91,7 +91,7 @@ end
 # Every constructor takes the value, and the calls pass what its type starts with. A type that declares no
 # constructor has the one the language gives, which assigns nothing: one is declared first (java.rules says how).
 effect initialize-in-constructors "initialize ${field} in the constructors"
-  makes initialized(field)
+  makes given-a-value(field)
   needs constructed-explicitly(owner(field-in(path, field)))
   cost 2
   do
@@ -122,14 +122,6 @@ effect pass-to-superclass "pass ${name(field)} to the constructor of ${name(owne
     set ${p} type ${type(field)}
     set ${made} body "...; ${said(field)} = ${said(p)}"
     set ${constructor} body "${said(made)}(${value}); ${rest}"
-  end
-end
-
-effect drop-final "make ${field} not final"
-  makes initialized(field)
-  cost 2
-  do
-    set ${field-in(path, field)} final false
   end
 end
 

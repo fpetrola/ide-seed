@@ -586,7 +586,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   cada cambio, no solo alrededor de lo cambiado: una violación puede llegar a lo cambiado por su cuerpo. Y que lo que
   un método devuelve, o con lo que arranca un campo, es del tipo que declara (JLS 14.17, 8.3.2), con el tipo de un
   miembro como promesa y el del valor como lo dice el compilador (`argument(0, t)`): se fueron `change-return-type`
-  y `change-field-type`. Y que un tipo escrito en un archivo nombra un tipo
+  y `change-field-type`. Por último, que un `final` sin valor donde se declara lo recibe de cada constructor que no
+  delega con `this(...)` o de un inicializador (JLS 8.3.1.2, 16.9): `drop-final` se fue. Hizo falta un hecho nuevo
+  del driver, `INITIALIZED` (el campo recibe su valor donde se declara; la obligación 8 lo pide). Y enseñó que una
+  regla tiene que nombrar solo lo que la viola: la de un `final` es del campo, no del constructor que le falta, así
+  declarar el constructor que el lenguaje ya daba no cuenta como una violación nueva. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).

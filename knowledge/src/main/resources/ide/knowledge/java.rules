@@ -135,3 +135,23 @@ promise type of field "what it holds is part of how it is used"
 
 say type for answers-its-type "change return type of ${called} to ${value}"
 say type for starts-as-its-type "change type of ${called} to ${value}"
+
+# A final field not given its value where it is declared gets it from each constructor of its type that does not
+# hand the work to another with this(...), or from an initializer of its type; a class that declares no constructor
+# has the language's, which gives nothing (JLS 8.3.1.2, 16.9). The violation is the field's, whichever constructor
+# misses it: declaring the language's constructor does not make it a new one.
+def delegates(k) when self-use(k, c) and kind(c, "constructor") and parent(c, t) and parent(k, t)
+def declares-constructor(t) when constructor(_, t)
+def builds(k, t) when constructor(k, t) and not delegates(k)
+def builds(t, t) when kind(t, "class") and not declares-constructor(t)
+def given-by(k, f) when writes(k, f)
+def given-by(k, f) when builds(k, t) and parent(f, t) and writes(t, f)
+
+rule final-once "a final field is given its value where it is declared, or by each constructor of its type"
+  for f where final(f) and not initialized(f) and parent(f, t) and builds(k, t)
+  must given-by(k, f)
+end
+
+problem ecj.UninitializedBlankFinalField is final-once(field-in(path, first(arguments)))
+
+say not final for final-once "make ${called} not final"

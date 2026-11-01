@@ -24,7 +24,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `core` — Capability, CapabilityRegistry, Param, Json (written and read), EventLog (JSONL), TextDiff. Knows nothing
   else.
 - `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts; LIBRARY marks a library type the
-  workspace names: never changed, its name is its id, out of the workspace hierarchy), Unresolved (a use that binds
+  workspace names: never changed, its name is its id, out of the workspace hierarchy; INITIALIZED a field given its
+  value where it is declared), Unresolved (a use that binds
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
   Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
   no doubt), Reference (id `site@ordinal`, Mode:

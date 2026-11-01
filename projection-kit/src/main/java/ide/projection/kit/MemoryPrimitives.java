@@ -186,6 +186,7 @@ final class MemoryPrimitives {
             for (var use : Body.uses(start)) {
                 graph.uses.add(new MemoryGraph.Use(element, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()));
             }
+            graph.nodes.put(element, graph.nodes.get(element).with(Fact.INITIALIZED, "true"));
             return;
         }
         var fact = switch (attribute) {

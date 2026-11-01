@@ -29,6 +29,7 @@ import java.util.stream.Stream;
  * site(u, s)        target(u, t)      known(name, value)
  * self-use(s, m)    type-use(s, m)    (a use from s of m, made on the object itself, or through a type)
  * writes(s, f)      new-use(s, k)     final(e)          abstract(e)         type(e, t)        (as written)
+ * initialized(f)    (a field given its value where it is declared)
  * unimplemented(t, m)                 (an abstract method t inherits and nothing it has or inherits implements)
  * argument(i, v)    (what the problem names, by place: 0, 1...)
  * </pre>
@@ -56,6 +57,7 @@ final class GraphFacts implements Facts {
             case "static" -> elements(first).filter(e -> "true".equals(e.fact(Fact.STATIC))).map(e -> List.of(id(e)));
             case "final" -> elements(first).filter(e -> "true".equals(e.fact(Fact.FINAL))).map(e -> List.of(id(e)));
             case "abstract" -> elements(first).filter(e -> "true".equals(e.fact(Fact.ABSTRACT))).map(e -> List.of(id(e)));
+            case "initialized" -> elements(first).filter(e -> "true".equals(e.fact(Fact.INITIALIZED))).map(e -> List.of(id(e)));
             case "type" -> elements(first).filter(e -> e.fact(Fact.TYPE) != null).map(e -> List.of(id(e), e.fact(Fact.TYPE)));
             case "writes" -> references(first).filter(r -> r.mode() == Mode.WRITE || r.mode() == Mode.UPDATE)
                     .map(r -> List.of(r.site().value(), r.target().value()));
