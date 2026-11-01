@@ -78,6 +78,10 @@ class PreviewExpandSaveTest {
         Files.createDirectories(root.resolve("a"));
         Files.writeString(root.resolve("a/P.java"), P);
         Files.writeString(root.resolve("notes.txt"), "not a source");
+        for (var built : java.util.List.of("target/generated", "build", "out", ".hidden")) { // what a build or a tool wrote
+            Files.createDirectories(root.resolve(built));
+            Files.writeString(root.resolve(built + "/Gen.java"), "class Gen {}");
+        }
 
         var ws = Workspace.open(root);
         var capabilities = ws.capabilities();

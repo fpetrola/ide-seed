@@ -16,13 +16,17 @@ import ide.refactoring.Run;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -35,6 +39,9 @@ public final class Session {
     /** A refactoring's verified outcome and its diff; the program is left as it was. */
     public record Preview(Result result, String diff) {
     }
+
+    /** The folders builds write to. */
+    private static final Set<String> BUILT = Set.of("target", "build", "out");
 
     private final JavaProjection project;
     private final Library library;
@@ -131,13 +138,29 @@ public final class Session {
         return diff(saved, project.sources());
     }
 
-    /** The Java sources under {@code root}, by path from it: what {@link #save} writes back. */
+    /**
+     * The Java sources under {@code root}, by path from it: what {@link #save} writes back. What builds and tools write
+     * is not a source: folders named target, build or out, and hidden ones.
+     */
     public static Map<String, String> sourcesIn(Path root) {
         var sources = new TreeMap<String, String>();
-        try (var files = Files.walk(root)) {
-            for (var file : files.filter(f -> f.toString().endsWith(".java") && Files.isRegularFile(f)).toList()) {
-                sources.put(root.relativize(file).toString().replace(File.separatorChar, '/'), Files.readString(file));
-            }
+        try {
+            Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path folder, BasicFileAttributes attributes) {
+                    var name = folder.getFileName() == null ? "" : folder.getFileName().toString();
+                    return !folder.equals(root) && (BUILT.contains(name) || name.startsWith("."))
+                            ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                    if (file.toString().endsWith(".java")) {
+                        sources.put(root.relativize(file).toString().replace(File.separatorChar, '/'), Files.readString(file));
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
