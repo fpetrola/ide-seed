@@ -51,7 +51,8 @@ public final class Knowledge implements Remedy, QuickFix {
     record Predicate(String name, List<String> args) {
     }
 
-    record Goal(String code, Predicate needs) {
+    /** What a code needs: a predicate made to hold, or (for a problem that is a rule broken) a violation made not to. */
+    record Goal(String code, Predicate needs, boolean holds) {
     }
 
     /** {@code holds} is true when {@code when} is, with its arguments bound. */
@@ -63,7 +64,11 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     /** A predicate a way needs to hold first, with its arguments' values. */
-    private record Need(String name, List<Value> args) {
+    private record Need(String name, List<Value> args, boolean holds) {
+
+        Need(String name, List<Value> args) {
+            this(name, args, true);
+        }
     }
 
     /** A step of a plan, ready to run: its title, its questions with their defaults, what it costs, and how it runs. */
@@ -90,15 +95,18 @@ public final class Knowledge implements Remedy, QuickFix {
     private final List<Effect> effects;
     private final Rules rules;
     private final Map<String, String> says;
+    private final Map<String, String> promises;
     private final Library library;
     private final Engine engine = Engine.standard();
 
-    Knowledge(List<Goal> goals, List<Fact> facts, List<Effect> effects, Rules rules, Map<String, String> says, Library library) {
+    Knowledge(List<Goal> goals, List<Fact> facts, List<Effect> effects, Rules rules, Map<String, String> says,
+              Map<String, String> promises, Library library) {
         this.goals = List.copyOf(goals);
         this.facts = List.copyOf(facts);
         this.effects = List.copyOf(effects);
         this.rules = rules;
         this.says = Map.copyOf(says);
+        this.promises = Map.copyOf(promises);
         this.library = library;
     }
 
@@ -166,17 +174,26 @@ public final class Knowledge implements Remedy, QuickFix {
                 trace.add(Trace.Kind.DROPPED, goal.needs().name() + ": " + inapplicable.getMessage());
                 continue;
             }
-            ways.addAll(ways(goal.needs().name(), args, known, projection, trace, 1));
+            ways.addAll(ways(goal.needs().name(), args, goal.holds(), known, projection, trace, 1));
         }
         ways.sort(Comparator.comparingInt(way -> way.cost() * 100 + way.rank()));
         return new Search(trace, ways.stream().limit(MOST_PLANS).map(this::plan).toList());
     }
 
-    /** The ways to make {@code predicate(args)} hold, asked at {@code level}: by its definitions, then by its effects. */
-    private List<Way> ways(String predicate, List<Value> args, Map<String, Value> known, Projection projection,
+    /**
+     * The ways to make {@code predicate(args)} hold, asked at {@code level}: by its definitions, then by its effects.
+     * One that must not hold ({@code holds} false) is a broken rule, made to hold by its definitions alone.
+     */
+    private List<Way> ways(String predicate, List<Value> args, boolean holds, Map<String, Value> known, Projection projection,
                            Trace trace, int level) {
-        trace.open(Trace.Kind.QUESTION, predicate + "(" + String.join(", ", args.stream().map(a -> shown(a, projection)).toList()) + ")");
+        var name = holds ? predicate : predicate.replaceFirst("^violates-", "");
+        trace.open(Trace.Kind.QUESTION, name + "(" + String.join(", ", args.stream().map(a -> shown(a, projection)).toList()) + ")");
         var ways = new ArrayList<Way>();
+        if (!holds) {
+            if (rules.defines(predicate)) ways.addAll(against(predicate, args, known, projection, trace, level));
+            trace.close();
+            return ways;
+        }
         if (rules.defines(predicate)) ways.addAll(derived(predicate, args, known, projection, trace, level));
         for (var effect : effects) {
             if (!effect.makes().name().equals(predicate)) continue;
@@ -225,22 +242,63 @@ public final class Knowledge implements Remedy, QuickFix {
             if (constant(arg) == null) return List.of();
             constants.add(constant(arg));
         }
-        var abduction = new Abduction(rules, engine.evaluate(rules, new GraphFacts(projection.program(), known)));
+        var abduction = abduction(known, projection);
         var ways = new ArrayList<Way>();
         var rank = 0;
         for (var attempt : abduction.attempts(predicate, constants)) {
+            dead(attempt.dead(), projection, trace);
             if (attempt.found().isEmpty()) {
-                if (attempt.stuck() != null) trace.add(Trace.Kind.DROPPED, predicate + ": " + shown(attempt.stuck(), projection));
+                if (attempt.stuck() != null && attempt.dead().isEmpty()) trace.add(Trace.Kind.DROPPED, predicate + ": " + shown(attempt.stuck(), projection));
                 continue;
             }
-            for (var found : attempt.found()) {
-                var steps = steps(predicate, found.changes(), projection);
-                var needs = found.needs().stream().map(atom -> new Need(atom.relation(),
-                        atom.terms().stream().map(t -> value(((Term.Constant) t).value(), projection)).toList())).toList();
-                ways.addAll(after(predicate, needs, steps, rank++, known, projection, trace, level));
-            }
+            for (var found : attempt.found()) ways.addAll(after(predicate, needs(found, projection), steps(found.changes(), projection), rank++, known, projection, trace, level));
         }
         return ways;
+    }
+
+    /**
+     * The ways to make a broken rule hold where it is broken: each takes away one of what the broken instance stands
+     * on, and mends what that breaks; the ways given up are in the trace, with why.
+     */
+    private List<Way> against(String violation, List<Value> args, Map<String, Value> known, Projection projection,
+                              Trace trace, int level) {
+        var terms = new ArrayList<Term>();
+        for (var arg : args) {
+            if (constant(arg) == null) return List.of();
+            terms.add(Term.constant(constant(arg)));
+        }
+        var found = abduction(known, projection).against(new Atom(violation, terms));
+        dead(found.dead(), projection, trace);
+        var ways = new ArrayList<Way>();
+        var rank = 0;
+        for (var way : found.found()) ways.addAll(after(violation, needs(way, projection), steps(way.changes(), projection), rank++, known, projection, trace, level));
+        return ways;
+    }
+
+    private Abduction abduction(Map<String, Value> known, Projection projection) {
+        return new Abduction(rules, engine.evaluate(rules, new GraphFacts(projection.program(), known)), promises, new Abduction.Shown() {
+            @Override
+            public String of(Atom atom) {
+                return shown(atom, projection);
+            }
+
+            @Override
+            public String of(String constant) {
+                return shown(value(constant, projection), projection);
+            }
+        });
+    }
+
+    private static List<Need> needs(Abduction.Found found, Projection projection) {
+        return found.needs().stream().map(need -> new Need(need.atom().relation(), need.atom().terms().stream()
+                .map(t -> value(((Term.Constant) t).value(), projection)).toList(), need.holds())).toList();
+    }
+
+    /** The ways given up, as their steps would have been said, and why. */
+    private void dead(List<Abduction.Dead> dead, Projection projection, Trace trace) {
+        for (var way : dead) {
+            trace.add(Trace.Kind.DROPPED, String.join(", then ", steps(way.changes(), projection).stream().map(Step::title).toList()) + ": " + way.why());
+        }
     }
 
     /** One step after the ways to make what it needs; see {@link #after(String, List, List, int, Map, Projection, Trace, int)}. */
@@ -260,9 +318,9 @@ public final class Knowledge implements Remedy, QuickFix {
         var unmet = new ArrayList<String>();
         for (var need : needs) {
             var args = need.args();
-            if (holds(need.name(), args, known, projection)) continue;
-            unmet.add(need.name() + "(" + String.join(", ", args.stream().map(a -> shown(a, projection)).toList()) + ")");
-            var made = level < MOST_STEPS ? ways(need.name(), args, known, projection, below, level + 1) : List.<Way>of();
+            if (holds(need.name(), args, known, projection) == need.holds()) continue;
+            unmet.add((need.holds() ? "" : "not ") + need.name() + "(" + String.join(", ", args.stream().map(a -> shown(a, projection)).toList()) + ")");
+            var made = level < MOST_STEPS ? ways(need.name(), args, need.holds(), known, projection, below, level + 1) : List.<Way>of();
             var next = new ArrayList<Way>();
             for (var way : ways) {
                 for (var other : made) {
@@ -302,21 +360,24 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     /**
-     * The changes a definition asks for, as the primitives that make them, in the order they were found. A move and
-     * a place before another member are one move; each step is said as {@code say <relation> for <predicate>} says.
+     * The changes a way asks for, as the primitives that make them, in the order they were found. A move and a place
+     * before another member are one move; a toggled relation is set to true or false. Each step is said as
+     * {@code say [not] <relation> for <what it was done for>} says.
      */
-    private List<Step> steps(String predicate, List<Abduction.Change> changes, Projection projection) {
+    private List<Step> steps(List<Abduction.Change> changes, Projection projection) {
         var steps = new ArrayList<Step>();
         var moved = new HashMap<String, Abduction.Change>();
-        for (var change : changes) if (change.relation().equals("parent")) moved.put(change.values().getFirst(), change);
+        for (var change : changes) if (change.relation().equals("parent")) moved.put(change.element(), change);
         for (var change : changes) {
-            var key = change.values().getFirst();
-            var value = change.values().get(1);
+            var key = change.element();
+            var on = change.added() != null;
+            var value = on && change.added().size() > 1 ? change.added().get(1) : null;
             Primitive primitive = switch (change.relation()) {
+                case "static" -> new Primitive.Set(new ElementId(key), "static", String.valueOf(on));
                 case "visibility" -> new Primitive.Set(new ElementId(key), "visibility", value);
                 case "parent" -> new Primitive.Move(new ElementId(key), new ElementId(value), changes.stream()
-                        .filter(c -> c.relation().equals("before") && c.values().getFirst().equals(key))
-                        .map(c -> new ElementId(c.values().get(1))).findFirst().orElse(null));
+                        .filter(c -> c.relation().equals("before") && c.element().equals(key))
+                        .map(c -> new ElementId(c.added().get(1))).findFirst().orElse(null));
                 case "before" -> moved.containsKey(key) ? null
                         : new Primitive.Move(new ElementId(key), projection.program().element(new ElementId(key)).parent(), new ElementId(value));
                 case "target" -> new Primitive.Retarget(key, new ElementId(value));
@@ -327,10 +388,11 @@ public final class Knowledge implements Remedy, QuickFix {
             if (primitive == null) continue;
             var variables = new LinkedHashMap<String, Value>();
             variables.put("element", change.relation().equals("constructor") ? null : value(key, projection));
-            variables.put("value", value(value, projection));
-            variables.put("was", change.was() == null ? null : value(change.was().get(1), projection));
-            var template = says.getOrDefault(change.relation() + " for " + predicate,
-                    change.relation() + " ${element} ${was} -> ${value}");
+            variables.put("called", change.relation().equals("constructor") ? null : new Value.Text(called(key, projection)));
+            variables.put("value", value == null ? null : value(value, projection));
+            variables.put("was", change.removed() == null || change.removed().size() < 2 ? null : value(change.removed().get(1), projection));
+            var said = (on ? "" : "not ") + change.relation() + " for " + change.forWhat();
+            var template = says.getOrDefault(said, (on ? "" : "not ") + change.relation() + " ${element} ${was} -> ${value}");
             var title = Script.render(template, Run.on(projection, library), variables);
             steps.add(new Step(title, List.of(), 1, true, (target, answers) -> target.apply(primitive)));
         }
@@ -343,6 +405,13 @@ public final class Knowledge implements Remedy, QuickFix {
         var asks = way.steps().stream().flatMap(step -> step.asks().stream()).toList();
         var changesMeaning = way.steps().stream().anyMatch(step -> !step.keepsMeaning());
         return new Plan(title, asks, changesMeaning, (projection, answers) -> way.steps().forEach(step -> step.run().accept(projection, answers)));
+    }
+
+    /** How an element is called in a title: a method or a constructor with {@code ()}, anything else by its name. */
+    private static String called(String id, Projection projection) {
+        if (!projection.program().contains(new ElementId(id))) return id;
+        var element = projection.program().element(new ElementId(id));
+        return element.kind() == Kind.METHOD || element.kind() == Kind.CONSTRUCTOR ? element.name() + "()" : element.name();
     }
 
     /** What a value is to the rules: an element or a use by its id, anything else as text; null if it has none. */

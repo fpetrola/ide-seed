@@ -127,6 +127,65 @@ class KnowledgeTest {
         assertThat(projection.program().children(id(p, "a.A"))).extracting(e -> e.name()).containsExactly("y", "x");
     }
 
+    private static final String STATIC = """
+            rule no-object "a static member uses an instance member of its own object only through an object"
+              for s, m where self-use(s, m) and not static(m)
+              must not static(s)
+            end
+            promise static of field "one value for all objects, or one for each"
+            problem test.static is no-object(site, target)
+            say static for no-object "make ${called} static"
+            say not static for no-object "make ${called} not static"
+            """;
+
+    /** class Prices { double rate; double gross(double) calls factor(); double factor() reads rate?; static double check(double) calls gross(double) } */
+    private static MemoryProjection prices(boolean factorReadsRate) {
+        var builder = MemoryProjection.builder().rules(MemoryProjection.PRIVATE_TO_TOP_LEVEL)
+                .type("a.Prices").field("a.Prices", "rate", "double")
+                .method("a.Prices", "gross", "double", "double net").method("a.Prices", "factor", "double")
+                .method("a.Prices", "check", "double", "double net").fact("a.Prices#check(double)", Fact.STATIC, "true")
+                .use("a.Prices#check(double)", "a.Prices#gross(double)", Mode.CALL)
+                .use("a.Prices#gross(double)", "a.Prices#factor()", Mode.CALL);
+        if (factorReadsRate) builder.use("a.Prices#factor()", "a.Prices#rate", Mode.READ);
+        return builder.build();
+    }
+
+    /**
+     * A rule broken is made to hold by taking away one of what it stands on, and what that breaks is mended in the same
+     * plan: making gross() static breaks the rule in gross(), which makes factor() static, which reads rate; making
+     * rate static would break a promise, so that way stops, and making check() not static is what is left.
+     */
+    @Test
+    void aBrokenRuleIsMendedWithWhatItBreaksAndAPromiseStopsAWay() {
+        var projection = prices(true);
+        var p = projection.program();
+
+        var search = Knowledge.parse(STATIC, Library.standard()).search("test.static",
+                Map.of("site", id(p, "a.Prices#check(double)"), "target", id(p, "a.Prices#gross(double)")), projection);
+
+        assertThat(search.plans()).extracting(Plan::title).containsExactly("make check() not static");
+        assertThat(search.trace().lines()).containsExactly(
+                "? no-object(a.Prices#check(double), a.Prices#gross(double))",
+                "  X make gross() static, then make factor() static, then make rate static: promise static of a.Prices#rate: one value for all objects, or one for each",
+                "  ! make check() not static");
+        assertThat(search.plans()).noneMatch(Plan::changesMeaning);
+    }
+
+    @Test
+    void withNothingToStopItTheChainIsAWayToo() {
+        var projection = prices(false);
+        var p = projection.program();
+
+        var search = Knowledge.parse(STATIC, Library.standard()).search("test.static",
+                Map.of("site", id(p, "a.Prices#check(double)"), "target", id(p, "a.Prices#gross(double)")), projection);
+
+        assertThat(search.plans()).extracting(Plan::title).containsExactly(
+                "make check() not static", "make gross() static, then make factor() static");
+        search.plans().get(1).apply(projection);
+        assertThat(projection.program().elements()).filteredOn(e -> "true".equals(e.fact(Fact.STATIC)))
+                .extracting(e -> e.name()).containsExactlyInAnyOrder("check", "gross", "factor");
+    }
+
     @Test
     void plansAreDeducedFromTheEffectsThatMakeTheGoalCheapestFirst() {
         var projection = program();

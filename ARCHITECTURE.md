@@ -564,7 +564,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   no se prueba `protected` donde no alcanza. Después, dónde se usa un miembro sin decir de quién es (JLS 8.2) y el
   orden de los inicializadores (JLS 8.3.3): `pull-up-dependency` se fue, y subir un campo que un inicializador usa
   es un cambio de padre y uno de lugar que se juntan en un solo `Move`. Y que un override es por lo menos tan visible
-  como lo que sobrescribe (JLS 8.4.8.3): `widen-override` se fue. Y que un tipo escrito en un archivo nombra un tipo
+  como lo que sobrescribe (JLS 8.4.8.3): `widen-override` se fue.
+  Con los estáticos llegaron las restricciones: `rule nombre … for … where … must … end` dice lo que Java exige, y se
+  compila a la relación de sus violaciones (`violates-nombre`); `problem código is nombre(args)` dice que un error es
+  esa regla rota ahí. Una regla rota se hace cumplir quitándole uno de los hechos en que se apoya (la abducción
+  también sabe quitar: `static` se pone o se saca), y después de cada cambio supuesto se buscan las violaciones nuevas
+  alrededor de lo que cambió y se arreglan en el mismo plan, nunca deshaciendo un cambio propio. `promise relación of
+  tipo "por qué"` corta un camino, y el rastro dice por qué. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).

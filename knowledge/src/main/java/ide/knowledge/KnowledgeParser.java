@@ -21,7 +21,13 @@ import java.util.List;
  * def p(x, "constant") when q(x, y) and not r(y, _) and x != y     (Datalog: a name is a variable, a quoted text a
  *   and s(y)                                                        constant, _ any value; it goes on in "and" lines)
  * order name "low" "high" ...      (facts: name-value(v), and name-at-least(a, b) for each a not below b)
- * say relation for p "title with ${element}, ${was} and ${value}"  (how a change p asks for is said)
+ * say [not] relation for p "title with ${element}, ${was} and ${value}"   (how a change made for p is said)
+ * rule name "what the language says"     (a constraint: where it does not hold, violates-name(vars) does)
+ *   for v, w where q(v, w) and not r(w)
+ *   must s(v) or not t(w)
+ * end
+ * problem &lt;code&gt; is name(expr, expr)    (the code is the rule broken there: the plans make it hold)
+ * promise relation of kind "why"         (no change of relation on an element of that kind is ever deduced)
  * fact p(x, y) when expr
  * effect &lt;name&gt; "title with ${expr}"
  *   makes p(x, y)
@@ -48,6 +54,7 @@ final class KnowledgeParser {
         var effects = new ArrayList<Knowledge.Effect>();
         var clauses = new ArrayList<Clause>();
         var says = new HashMap<String, String>();
+        var promises = new HashMap<String, String>();
         for (var i = 0; i < lines.size(); i++) {
             var line = lines.get(i).strip();
             if (line.isEmpty() || line.startsWith("# ")) continue;
@@ -66,13 +73,45 @@ final class KnowledgeParser {
                     }
                 }
             } else if (line.startsWith("say ")) {
-                var words = line.substring(4).strip().split("\\s+", 4);
-                if (words.length < 4 || !words[1].equals("for")) throw new IllegalArgumentException("knowledge: expected say <relation> for <predicate> \"title\": " + line);
-                var title = words[3].strip();
-                says.put(words[0] + " for " + words[2], title.substring(1, title.length() - 1));
+                var said = java.util.regex.Pattern.compile("say (not )?(\\S+) for (\\S+) \"(.*)\"").matcher(line);
+                if (!said.matches()) throw new IllegalArgumentException("knowledge: expected say [not] <relation> for <predicate> \"title\": " + line);
+                says.put((said.group(1) == null ? "" : "not ") + said.group(2) + " for " + said.group(3), said.group(4));
+            } else if (line.startsWith("promise ")) {
+                var promised = java.util.regex.Pattern.compile("promise (\\S+) of (\\S+) \"(.*)\"").matcher(line);
+                if (!promised.matches()) throw new IllegalArgumentException("knowledge: expected promise <relation> of <kind> \"why\": " + line);
+                promises.put(promised.group(1) + " of " + promised.group(2), promised.group(3));
+            } else if (line.startsWith("problem ")) {
+                var is = line.indexOf(" is ");
+                var broken = predicate(line.substring(is + 4));
+                goals.add(new Knowledge.Goal(line.substring(8, is).strip(), new Knowledge.Predicate("violates-" + broken.name(), broken.args()), false));
+            } else if (line.startsWith("rule ")) {
+                String where = null;
+                String must = null;
+                List<String> variables = List.of();
+                var name = line.substring(5).strip().split("\\s+", 2)[0];
+                for (i++; !lines.get(i).strip().equals("end"); i++) {
+                    var clause = lines.get(i).strip();
+                    if (clause.startsWith("for ")) {
+                        var written = new StringBuilder(clause);
+                        while (lines.get(i + 1).strip().startsWith("and ")) written.append(' ').append(lines.get(++i).strip());
+                        var at = written.indexOf(" where ");
+                        variables = split(written.substring(4, at < 0 ? written.length() : at), ",").stream().map(String::strip).toList();
+                        where = at < 0 ? null : written.substring(at + 7);
+                    } else if (clause.startsWith("must ")) {
+                        must = clause.substring(5);
+                    } else if (!clause.isEmpty() && !clause.startsWith("# ")) {
+                        throw new IllegalArgumentException("knowledge: unexpected clause in rule " + name + ": " + clause);
+                    }
+                }
+                if (must == null) throw new IllegalArgumentException("knowledge: rule " + name + " says nothing it must");
+                var head = "violates-" + name + "(" + String.join(", ", variables) + ")";
+                var body = new ArrayList<String>();
+                if (where != null) body.add(where);
+                for (var alternative : split(must, " or ")) body.add(negated(alternative.strip()));
+                clauses.add(definition(head + " when " + String.join(" and ", body)));
             } else if (line.startsWith("goal ")) {
                 var needs = line.indexOf(" needs ");
-                goals.add(new Knowledge.Goal(line.substring(5, needs).strip(), predicate(line.substring(needs + 7))));
+                goals.add(new Knowledge.Goal(line.substring(5, needs).strip(), predicate(line.substring(needs + 7)), true));
             } else if (line.startsWith("fact ")) {
                 var when = line.indexOf(" when ");
                 facts.add(new Knowledge.Fact(predicate(line.substring(5, when)), line.substring(when + 6).strip()));
@@ -123,7 +162,7 @@ final class KnowledgeParser {
                 throw new IllegalArgumentException("knowledge: unexpected line: " + line);
             }
         }
-        return new Knowledge(goals, facts, effects, Rules.of(clauses), says, library);
+        return new Knowledge(goals, facts, effects, Rules.of(clauses), says, promises, library);
     }
 
     /** {@code def head when literal and literal ...}: one clause of Datalog. */
@@ -149,6 +188,14 @@ final class KnowledgeParser {
             }
         }
         return new Clause(head, body);
+    }
+
+    /** A literal that holds where {@code literal} does not: an atom and its negation, {@code =} and {@code !=}. */
+    private static String negated(String literal) {
+        if (literal.startsWith("not ")) return literal.substring(4);
+        if (literal.contains("(")) return "not " + literal;
+        if (literal.contains("!=")) return literal.replace("!=", "=");
+        return literal.replace("=", "!=");
     }
 
     private static Atom atom(String text) {

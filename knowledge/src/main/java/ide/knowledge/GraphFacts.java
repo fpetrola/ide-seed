@@ -7,6 +7,7 @@ import ide.program.Fact;
 import ide.program.Kind;
 import ide.program.Mode;
 import ide.program.Program;
+import ide.program.Reference;
 import ide.refactoring.Value;
 import ide.rules.Facts;
 
@@ -21,11 +22,12 @@ import java.util.stream.Stream;
  * uses are named by id; kinds in lower case. Plus {@code known(name, value)}: what came with the problem being solved
  * (its path, its symbol...). Nothing here is of a language.
  * <pre>
- * kind(e, k)        name(e, n)        parent(e, p)      visibility(e, v)    top-level(t)
+ * kind(e, k)        name(e, n)        parent(e, p)      visibility(e, v)    top-level(t)        static(e)
  * top(e, t)         package(e, p)     enclosing(e, t)   subclass(a, b)      (a is b, or extends it)
  * overrides(m, n)   alike(a, b)       before(a, b)      constructor(k, t)   named(t, n)        (types)
  * unresolved(u, path, name, kind)     (kind: type, value, call or new)
  * site(u, s)        target(u, t)      known(name, value)
+ * self-use(s, m)    type-use(s, m)    (a use from s of m, made on the object itself, or through a type)
  * </pre>
  */
 final class GraphFacts implements Facts {
@@ -48,6 +50,9 @@ final class GraphFacts implements Facts {
             case "visibility" -> elements(first).filter(e -> e.fact(Fact.VISIBILITY) != null)
                     .map(e -> List.of(id(e), e.fact(Fact.VISIBILITY)));
             case "top-level" -> elements(first).filter(this::topLevel).map(e -> List.of(id(e)));
+            case "static" -> elements(first).filter(e -> "true".equals(e.fact(Fact.STATIC))).map(e -> List.of(id(e)));
+            case "self-use" -> uses(first, Reference.Receiver.SELF);
+            case "type-use" -> uses(first, Reference.Receiver.TYPE);
             case "top" -> inTypes(first).map(e -> List.of(id(e), id(program.topLevel(e.id()))));
             case "package" -> inTypes(first).map(e -> List.of(id(e), packageOf(program.topLevel(e.id()))));
             case "enclosing" -> inTypes(first).map(e -> List.of(id(e), id(program.enclosingType(e.id()))));
@@ -75,6 +80,14 @@ final class GraphFacts implements Facts {
             default -> Stream.empty();
         };
         return tuples.filter(tuple -> Facts.matches(tuple, pattern));
+    }
+
+    /** The uses made from {@code site} (or from anywhere) on {@code receiver}: site and target. */
+    private Stream<List<String>> uses(String site, Reference.Receiver receiver) {
+        var references = site == null ? program.references().stream()
+                : program.contains(new ElementId(site)) ? program.referencesFrom(new ElementId(site)).stream() : Stream.<Reference>empty();
+        return references.filter(r -> r.receiver() == receiver && !r.mode().isLink())
+                .map(r -> List.of(r.site().value(), r.target().value()));
     }
 
     /** The element named, if any is; every element, if none is. */
