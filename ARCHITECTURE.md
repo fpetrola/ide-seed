@@ -583,7 +583,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   Después, que una clase no abstracta implementa lo que hereda sin cuerpo (JLS 8.1.1.1) y que nadie crea objetos de
   una abstracta (15.9.1), con el `abstract` de una clase como promesa: `make-abstract` se fue, y ya no se ofrece
   volver abstracta una clase de la que algo crea objetos. Para verlo hubo que preguntar las reglas enteras después de
-  cada cambio, no solo alrededor de lo cambiado: una violación puede llegar a lo cambiado por su cuerpo. Y que un tipo escrito en un archivo nombra un tipo
+  cada cambio, no solo alrededor de lo cambiado: una violación puede llegar a lo cambiado por su cuerpo. Y que lo que
+  un método devuelve, o con lo que arranca un campo, es del tipo que declara (JLS 14.17, 8.3.2), con el tipo de un
+  miembro como promesa y el del valor como lo dice el compilador (`argument(0, t)`): se fueron `change-return-type`
+  y `change-field-type`. Y que un tipo escrito en un archivo nombra un tipo
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).

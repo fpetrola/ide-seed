@@ -119,3 +119,19 @@ promise abstract of class "whether objects of it can be made"
 problem ecj.AbstractMethodMustBeImplemented is complete(type-in(path, symbol))
 
 say abstract for complete "make ${called} abstract"
+
+# What a method answers, or a field starts with, is of the type it declares (JLS 14.17, 8.3.2): the compiler says of
+# what type the value is (its first argument).
+def answers-its-type(m) when kind(m, "method") and argument("0", t) and type(m, t)
+def starts-as-its-type(f) when kind(f, "field") and argument("0", t) and type(f, t)
+
+goal ecj.ReturnTypeMismatch needs answers-its-type(inside(path, line, column))
+goal ecj.TypeMismatch needs answers-its-type(inside(path, line, column))
+goal ecj.TypeMismatch needs starts-as-its-type(inside(path, line, column))
+
+# A type is part of how a member is used.
+promise type of method "what it answers is part of how it is called"
+promise type of field "what it holds is part of how it is used"
+
+say type for answers-its-type "change return type of ${called} to ${value}"
+say type for starts-as-its-type "change type of ${called} to ${value}"
