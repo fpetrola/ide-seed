@@ -185,7 +185,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - Vocabulario de cambio. `Primitive`, un tipo sellado de records:
     - `Create(kind, parent, name, spec)`: `spec` trae hechos textuales iniciales (type, default para parámetros,
       body), así la creación es un paso y no dos con marcadores.
-    - `Delete(element)`.
+    - `Delete(element, into)`: sin `into`, borra lo que nada usa; con `into`, fusiona: un campo en un campo, un
+      método en un método, y los usos del borrado pasan al otro.
     - `Move(element, parent, before)`: también reordena parámetros.
     - `Rename(element, name)`.
     - `Set(element, fact, value)`: hechos cerrados y hechos textuales (type textual, initializer). Un cuerpo se
@@ -201,7 +202,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     de lo que está fuera del método. Como `Fact`, crece solo cuando una plantilla necesita decir algo que no puede.
   - `Change`: lo que un primitivo devuelve. `produced` (el elemento creado, si hay), `expectations` y `pins`.
     `Expectation`: `Retargeted(site, from, to)`, `Resited(target, from, to)`, `Dropped(site, target)`,
-    `Added(site, target, name, mode)`, `Bound(use, to)`, `UsesGone(element)`. `Pin(element, aspect)` con aspecto
+    `Added(site, target, name, mode)`, `Bound(use, to)`, `UsesGone(element)`, `Merged(element, into)`. `Merged`
+    saca el elemento de la línea base: sus usos ligan `into`, y lo que lo sobrescribía no es un override perdido.
+    `Pin(element, aspect)` con aspecto
     parent, name o visibility: lo que el refactoring hizo a propósito y una reparación no puede deshacer.
 - **Qué ignora.** Texto, posiciones, archivos, parser, compilador, y los cuerpos como los escribe un lenguaje: de un
   cuerpo sabe solo lo que dice `Body`.
@@ -223,7 +226,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   cuerpo de un método, el lugar de un parámetro, lo que contiene un tipo, o ser el único de su clase que se fue de un
   padre mientras llegaba otro. `Identity.transfer` le da al id viejo la dirección nueva. Desde el ítem 4 de la
   etapa 2 el vocabulario de cambio dice cuerpos: `Body`, y un `Set` de cuerpo declara que los usos del cuerpo viejo se
-  van (`Dropped`) y que el método hace los que el nuevo nombra (`Added`).
+  van (`Dropped`) y que el método hace los que el nuevo nombra (`Added`). Desde el ítem 5, `Delete` con `into` fusiona
+  un miembro en otro (`Merged`), y `within(element, container)` dice si un elemento está dentro de otro.
 - **Abierto.** Claves de tipo con genéricos anidados (hoy el texto descrito con los ids sustituidos); constantes de
   enum (no se modelan); variables locales como elementos (no, hasta que un refactoring lo pida).
 
@@ -245,7 +249,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     uso podría nombrar.
 - **Obligaciones del driver**, que el kit de conformidad (un test abstracto que corre contra cada implementación)
   verifica:
-  1. Identidad: un elemento conserva su id a través de rename, move, set y link; lo creado recibe un id nuevo; lo
+  1. Identidad: un elemento conserva su id a través de rename, move, set, link y retarget, también cuando eso le
+     cambia la dirección (un método cuyo parámetro pasa a declararse con otro tipo); lo creado recibe un id nuevo; lo
      borrado desaparece y no vuelve.
   2. Cada primitivo declara exactamente lo que cambió a propósito: su `Change` es la única fuente de expectativas.
   3. Lectura reproducible: `program()` después de un `apply` es igual al de una proyección nueva sobre el mismo
@@ -253,7 +258,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   4. `snapshot` y `restore` devuelven texto, identidad y grafo idénticos.
   5. Un primitivo rechazado no deja ningún cambio.
   6. Un elemento de biblioteca nunca cambia: todo primitivo que lo cambiaría se rechaza (`projection.library`, la
-     regla vive en `PrimitiveRejected.unlessInWorkspace` y la usan los dos drivers).
+     regla vive en `PrimitiveRejected.unlessInWorkspace` y la usan los dos drivers). Lo mismo para fusionar lo que no
+     es de la misma clase (`delete.into`, en `PrimitiveRejected.unlessMergeable`).
   7. Un retarget de un uso sin resolver lo liga: desde ahí es una referencia.
   8. Un cuerpo dicho sin lenguaje (`Body`) se escribe en el del driver, y el método hace los usos que el cuerpo
      nombra, en ese orden. Sus parámetros son valores, no usos.
@@ -270,7 +276,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   driver de Java, donde encontró un bug: crear un campo con un nombre existente no se rechazaba. En la etapa 2 el
   fixture nombra `String` (de la biblioteca) y `Money` (que no existe), y suma las obligaciones 6 y 7. El ítem 4 suma
   la obligación 8 y dos escenarios para las obligaciones 2 y 3: escribir un cuerpo, y reemplazar uno que tenía usos.
-  La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra.
+  La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. El ítem 5 suma al fixture una
+  clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
+  de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
   hasta que estorbe.
 
@@ -318,10 +326,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   (`syntax.Shape`); `resolvedLastTime()` dice qué archivos resolvió la última lectura. Desde el ítem 4 escribe en Java
   los cuerpos dichos sin lenguaje (`primitives.WriteBody`, con las formas de Java en `syntax.Render`): un campo o un
   parámetro por su nombre, un campo a través de `this` (o de su tipo, si es estático) cuando un parámetro del mismo
-  nombre lo tapa, y un objeto nuevo por el nombre simple de su tipo, importado si hace falta.
+  nombre lo tapa, y un objeto nuevo por el nombre simple de su tipo, importado si hace falta. Desde el ítem 5 borra
+  tipos anidados (sus líneas, como un miembro); fusiona un miembro en otro renombrando los usos que lo nombran
+  distinto en la misma edición que lo quita, así ningún uso liga otra cosa en el medio; un retarget del tipo escrito
+  en un parámetro le lleva la identidad al método; y un archivo nombra sin import los tipos que declara.
 - **Abierto.** Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
-  cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez. Borrado de
-  tipos anidados. Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
+  cuerpo (`binding.rebound`). javac es ahora casi todo el costo de una transacción: compila todos los archivos cada vez.
+  Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
   cuerpo, porque esos usos no son referencias del grafo.
 
@@ -366,7 +377,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   la etapa 2 el paso de una edición a mano dice qué se entendió de ella: cada elemento que conserva su id con otra
   dirección (`a.P#x -> a.P#count`). Desde el ítem 4 la línea base sabe qué usos hace un cuerpo nuevo (`Added`), y la
   vista de ligaduras ve si lo que escribió el lenguaje liga otra cosa (`binding.rebound`) o nada; nombra también un
-  destino nacido con el cambio.
+  destino nacido con el cambio. Desde el ítem 5 la vista de despacho no reporta un override que ninguna llamada del
+  método sobrescrito puede alcanzar: las llamadas de un método subido se hacían sobre el tipo de donde vino, y un
+  hermano fuera de esa jerarquía nunca corre para ellas (decisión 21).
 
 ### 5.6 `refactoring`: lenguaje de refactorings
 
@@ -404,18 +417,23 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   nada se registra a mano. Desde la etapa 2 no quedan fugas de Java en el catálogo. `import` dejó de ser una en el
   ítem 1: es un retarget (funciones `unresolved-in` y `types-named`). En el ítem 4 los cuerpos de generate-getter,
   generate-setter e introduce-factory pasaron al lenguaje de cuerpos (decisión 12), y generate-setter perdió su rama
-  para estáticos: cómo se califica un campo lo decide el lenguaje. `default-value` le pregunta a las reglas.
+  para estáticos: cómo se califica un campo lo decide el lenguaje. `default-value` le pregunta a las reglas. En el
+  ítem 5 llegó pull-up-unifying (sube un miembro y fusiona en él el mismo miembro de los hermanos: mismo nombre,
+  firma, tipo, cuerpo y estaticidad), merge-duplicate pasó a ser un solo `delete ... into=`, `member-named` compara
+  también los tipos de los parámetros de un método, y `can-access` le pregunta a las reglas si un sitio alcanza algo.
 - **Abierto.** Quedan dos convenciones de Java fuera de los drivers: `is-type-name` (un nombre con mayúscula es un
   tipo) y el `int` que create-field propone en el conocimiento. Las resuelve lo abierto del ítem 1, cuando el uso sin
-  resolver diga qué es y qué tipo espera. El rastro muestra los cuerpos con ids, no con direcciones.
+  resolver diga qué es y qué tipo espera. El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
+  spec faltan annotate, delegate y delegates, generate-constructor, make-final, make-static, rename-with-delegate,
+  use-supertype-where-possible, extract-interface-and-use, fold-constructors y delete-tree.
 
 ### 5.7 `knowledge`: planificador por metas
 
 - **Qué es.** Dada una base de metas (qué debe valer para que un problema desaparezca) y efectos (qué hace valer un
   predicado, bajo qué condición, con qué costo, con qué preguntas), propone planes ordenados por costo con una traza
   explicable. Podría planificar otra cosa que código.
-- **Dominio.** `Goal(code, predicate)`, `Effect(name, title, makes, when, for, cost, asks, do)`, `Predicate`,
-  `Search` con su traza, `Plan`. Implementa `Remedy` y `QuickFix` del motor y ejecuta acciones por el `Run` de
+- **Dominio.** `Goal(code, predicate)`, `Fact(predicate, when)` (cuándo vale un predicado), `Effect(name, title,
+  makes, when, for, needs, cost, asks, do)`, `Predicate`, `Search` con su traza, `Plan`. Implementa `Remedy` y `QuickFix` del motor y ejecuta acciones por el `Run` de
   `refactoring`. ArchUnit garantiza que nadie más implementa `Remedy` ni `QuickFix`.
 - **Qué ignora.** Lenguajes, texto, sesión.
 - **Prueba de autonomía.** Una base de tres efectos sobre predicados inventados, sobre `MemoryProjection`.
@@ -428,9 +446,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   `search(Diagnostic)`); antes la sesión cargaba la base por su ruta y armaba esos hechos. Desde la etapa 2 el fix de
   import liga el uso sin resolver al que apunta el diagnóstico con un tipo de ese nombre: un retarget, sin Java. Desde
   el ítem 4 el valor que propone el fix de un `final` sin inicializar lo dan las reglas del lenguaje, y el que se
-  escribe es el del usuario, en su lenguaje: la base no escribe código.
-- **Abierto.** Encadenamiento hacia atrás en varios niveles (la spec pedía 8 niveles, 4 pasos y 12 planes; hoy hay
-  un nivel); `fact` e `invariant` del lenguaje de conocimiento.
+  escribe es el del usuario, en su lenguaje: la base no escribe código. Desde el ítem 5 encadena hacia atrás: lo que
+  un efecto necesita (`needs`) vale por un `fact` o lo hace antes otro efecto, deducido igual, con los topes de la
+  spec (planes de hasta 4 efectos, 8 niveles de pregunta y respuesta, los 12 más baratos). El `why` anida cada
+  necesidad bajo la respuesta que la tiene. El fix de import necesita que el archivo alcance el tipo: uno
+  package-private de otro paquete se abre antes de importarlo; antes se importaba solo y quedaba un error.
+- **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
+  ya valga.
 
 ### 5.8 `session`: el espacio de trabajo
 
@@ -506,17 +528,17 @@ Al empezar la fase 2 la pirámide estaba invertida: casi todo se probaba de punt
 tenían ningún test propio. Cada fase baja a los productos que toca los casos borde que les pertenecen. Los tests
 nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hicieron verificable sin Java.
 
-| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 | Etapa 2, ítem 4 |
-|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|-----------------|
-| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   | 24              |
-| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   | 11              |
-| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   | 39              |
-| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   | 20              |
-| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   | 12              |
-| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    | 6               |
-| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    | 0               |
-| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   | 22              |
-| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  | 108             |
+| Módulo           | Al empezar la fase 2 | Al cerrar la fase 2 | Al cerrar la fase 3 | Al cerrar la fase 4 | Al cerrar la fase 5 | Al cerrar la fase 6 | Etapa 2, ítems 1 a 3 | Etapa 2, ítem 4 | Etapa 2, ítem 5 |
+|------------------|----------------------|---------------------|---------------------|---------------------|---------------------|---------------------|----------------------|-----------------|-----------------|
+| program          | 8                    | 12                  | 12                  | 12                  | 12                  | 13                  | 19                   | 24              | 25              |
+| projection-kit   | (no existía)         | 8                   | 8                   | 8                   | 8                   | 8                   | 10                   | 11              | 11              |
+| java             | 0                    | 8                   | 24                  | 24                  | 24                  | 24                  | 36                   | 39              | 39              |
+| engine           | 0                    | 9                   | 9                   | 17                  | 19                  | 19                  | 19                   | 20              | 21              |
+| refactoring      | 1                    | 3                   | 3                   | 3                   | 11                  | 11                  | 11                   | 12              | 12              |
+| knowledge        | 0                    | 0                   | 0                   | 0                   | 3                   | 5                   | 6                    | 6               | 8               |
+| core, projection | 0                    | 0                   | 0                   | 0                   | 0                   | 0                   | 0                    | 0               | 0               |
+| session          | 13                   | 13                  | 13                  | 13                  | 13                  | 22                  | 22                   | 22              | 22              |
+| acceptance       | 102                  | 103                 | 104                 | 104                 | 104                 | 104                 | 107                  | 108             | 114             |
 
 ## 7. Decisiones
 
@@ -541,6 +563,9 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 17 | Transacción y reparador  | la transacción nace con su reparador; `attempt(label, body)`, `commit()`, `Run.in(tx, library)` | tomada, 2026-10-31 (85bb676) |
 | 18 | Tipos de biblioteca      | los que el workspace nombra son elementos `LIBRARY`, con su nombre como identidad; nada los cambia y la jerarquía es la del workspace | tomada, 2026-10-31 (a5fdf89) |
 | 19 | Código en el catálogo    | el catálogo y el conocimiento no escriben código de ningún lenguaje: dicen cuerpos en el lenguaje de cuerpos, pasan lo que el usuario escribe y le preguntan a las reglas lo que solo el lenguaje sabe escribir | tomada, 2026-10-31 (37c903e, 77e0742) |
+| 20 | Fusión                   | dos miembros pasan a ser uno con `Delete(element, into)`, sin estado intermedio: retarget y después delete no pueden fusionar un override en lo que sobrescribe | tomada, 2026-11-01 (8eb59b1) |
+| 21 | Despacho                 | un override nuevo es un cambio de despacho solo si alguna llamada del método sobrescrito puede alcanzarlo; subir un método ya no aborta porque un hermano tenga la misma firma | tomada, 2026-11-01 (3909198) |
+| 22 | Encadenamiento           | `fact` dice cuándo vale un predicado y `needs` qué requiere un efecto; los planes se deducen hacia atrás, de hasta 4 efectos, y una búsqueda responde los 12 más baratos | tomada, 2026-11-01 (8695c28) |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -751,7 +776,21 @@ etapa 2, por valor.
    Abierto: el lenguaje tiene solo lo que el catálogo pide (no hay llamadas, literales ni variables locales); Java no
    escribe `Outer.this.x`, y ese caso se rechaza; quedan dos convenciones de Java fuera de los drivers (sección 8).
 5. Lo que falta del catálogo: pull-up-unifying, borrado de tipos anidados, encadenamiento en varios niveles del
-   conocimiento.
+   conocimiento. Hecho en cuatro ciclos:
+   - ffb46e6: Java borra tipos anidados, así collapse-hierarchy anda sobre una clase anidada. Colapsar una destapó
+     dos bugs, cada uno arreglado donde vivía. Retargetear el tipo escrito en un parámetro le cambiaba la dirección
+     al método sin llevarle la identidad, en los dos drivers; ahora la obligación 1 del contrato incluye retarget.
+     El otro: se importaba un tipo que el mismo archivo declara.
+   - 8eb59b1: un miembro borrado "dentro de" otro se fusiona en él (decisión 20). Fusionar un override redundante en
+     el método que sobrescribe fallaba: la llamada se lee igual y seguía ligando el override.
+   - 3909198: pull-up-unifying, y la regla de despacho de la decisión 21. Un test de aceptación esperaba la regla
+     vieja (subir un método abortaba si un hermano tenía la misma firma) y ahora espera que el hermano lo sobrescriba.
+   - 8695c28: el conocimiento encadena hacia atrás (decisión 22). El caso real: importar un tipo package-private de
+     otro paquete dejaba un error de acceso; ahora el fix lo abre antes.
+
+   Abierto: fusionar tipos (un `delete` de un tipo `into` otro) no existe, y collapse-hierarchy sigue retargeteando y
+   borrando; `invariant` del conocimiento; de la lista de la spec faltan los refactorings que nombra la ficha de
+   `refactoring`.
 6. Adaptadores: CLI, luego UI, luego MCP, cada uno como módulo que declara solo `session` y `core`.
 
 ## 10. Glosario
@@ -769,6 +808,9 @@ etapa 2, por valor.
 - **Primitivo**: un pedido de cambio abstracto, record de `Primitive`.
 - **Cuerpo**: lo que hace un método, dicho sin lenguaje sobre elementos (`Body`); cada proyección lo escribe en el
   suyo, y el motor verifica que lo escrito liga lo que el cuerpo nombró.
+- **Fusión**: borrar un miembro dentro de otro (`Delete` con `into`); sus usos pasan al otro y los dos son uno.
+- **Necesidad**: lo que un efecto del conocimiento requiere antes (`needs`); vale por un `fact` o lo hace otro efecto,
+  deducido hacia atrás.
 - **Change**: lo que un primitivo devuelve: producido, expectativas, pins.
 - **Expectativa**: una diferencia entre antes y después que el cambio hizo a propósito; el verificador la espera.
 - **Pin**: un aspecto que el refactoring fijó a propósito; una reparación no puede moverlo.

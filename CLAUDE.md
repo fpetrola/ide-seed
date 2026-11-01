@@ -27,13 +27,15 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
   parameter type keys) and Identity (address → id; rebindType, rename, move, resign, forget). The vocabulary of
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
-  its `intent`), Change (produced element, expectations, pins) and Body (what a method does in no language: return,
+  its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
+  baseline), Change (produced element, expectations, pins) and Body (what a method does in no language: return,
   assign a field, new, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
   the old body's uses Dropped and the ones it names Added).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`), LanguageRules (access, visibilities, how
   the language writes a field's default value), Diagnostic,
-  CompletionContext, PrimitiveRejected (and the rule every driver applies: nothing changes a library element).
+  CompletionContext, PrimitiveRejected (and the rules every driver applies: nothing changes a library element; a
+  field merges only into a field, a method into a method).
 - `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
   with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,
@@ -47,7 +49,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. An edit by hand reconciles identity (types, members, parameters,
-  reading again between rounds) and forgets what it removed. A reading after a change re-reads the files changed and
+  reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
+  into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
   the changed member's type, supertypes and subtypes); `resolvedLastTime()` tells which. The AST is never edited.
   Other modules use
@@ -56,7 +59,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins
   too; `commit()` verifies and repairs),
   Verifier (a list of Views compared through a Comparison: BindingView, which also sees a written body binding
-  something else than it names, AccessView, DispatchView, and CompilerView, costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
+  something else than it names, AccessView, DispatchView, which ignores an override no call of the overridden method
+  can reach, and CompilerView, costly, last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
   only place that writes sigils), Result, Plan/Remedy/QuickFix. Tested alone over MemoryProjection.
 - `refactoring` (projection, engine) — Refactoring (`apply(Run, Args)` answers an ElementId), Library, Run (one
   kind, two places: `Run.in(tx, library)` inside a transaction; `Run.on(projection, library)` with no
@@ -65,10 +69,11 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   only Java composite); the `.ref` language in `ide.refactoring.script` (in a text, `${expr}` writes a value and
   `#{expr}` writes elements as a body names them); the catalog
   `refactoring/src/main/resources/ide/refactoring/standard.ref`, which writes no code of any language.
-- `knowledge` (engine, refactoring) — goals/effects planner over
+- `knowledge` (engine, refactoring) — goals/facts/effects planner over
   `knowledge/src/main/resources/ide/knowledge/knowledge.ref` (`Knowledge.standard(library)`); it searches a
-  violation or a diagnostic with the facts each gives; effects run on the real Run, straight on the projection; no
-  remedy or quick fix is written in Java.
+  violation or a diagnostic with the facts each gives, backward: what an effect `needs` holds by a `fact` or is made
+  first by another effect (plans of at most 4 effects, the 12 cheapest); effects run on the real Run, straight on the
+  projection; no remedy or quick fix is written in Java.
 - `session` (java, engine, refactoring, knowledge; JavaParser only at run time) — parts over a `JavaProjection`:
   Session (each operation a transaction; undo, event log, saving; a fix must make its diagnostic disappear), Fixes
   (the quick fixes of a line; a Fix is a diagnostic and its plan), Navigation and Completion (no language: tested
