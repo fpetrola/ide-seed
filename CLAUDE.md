@@ -34,7 +34,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
   its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
   baseline), Change (produced element, expectations, pins) and Body (what a method does in no language: return,
-  assign a field, new, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
+  assign a field, new, the type's default, over elements named `#{id}`; its parameters are values, not uses; a Set of a body expects
   the old body's uses Dropped and the ones it names Added).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
@@ -55,7 +55,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. A field or call that surely binds nothing (for a call: no method of that
-  name where it is looked up) is an unresolved use too; binding it renames the use. An edit by hand reconciles identity (types, members, parameters,
+  name where it is looked up) is an unresolved use too, with the type its place expects and, for a call, the name and
+  type of each argument (semantics.Needs); binding it renames the use. An edit by hand reconciles identity (types, members, parameters,
   reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through

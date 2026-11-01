@@ -6,6 +6,7 @@ package shop.fixes;
  *  - Vault: in another package, and not public; the fix opens it, then imports it (two steps, deduced backward).
  *  - count: no such field; the fix creates it, asking its type.
  *  - itmes, sizee(): misspelled; the fixes change them to the field and the method they almost name.
+ *  - sum(items, 2): no such method; the fix creates it, taking what the call passes and answering a double.
  */
 public class Broken {
     List<String> names;
@@ -23,5 +24,9 @@ public class Broken {
 
     int size() {
         return 0;
+    }
+
+    double average() {
+        return sum(items, 2);
     }
 }

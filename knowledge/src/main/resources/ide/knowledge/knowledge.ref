@@ -64,11 +64,34 @@ end
 effect create-field "create field ${symbol} in ${name(scope(unresolved-in(path, symbol, "value")))}"
   makes resolves(symbol)
   when nonempty(scope(unresolved-in(path, symbol, "value")))
-  ask type "type of the new field" "int"
+  ask type "type of the new field" "${expected(unresolved-in(path, symbol, "value"))}"
   cost 2
   do
     f := create FIELD ${scope(unresolved-in(path, symbol, "value"))} ${symbol}
     set ${f} type ${type}
+  end
+end
+
+# A call to no method: the method, where the call looks for it, taking what the call passes; static if it is called
+# from a static place of its own type, and answering what its type starts with until it is written.
+effect create-method "create method ${symbol} in ${name(scope(unresolved-in(path, symbol, "call")))}"
+  makes resolves(symbol)
+  when nonempty(scope(unresolved-in(path, symbol, "call")))
+  ask type "return type of the new method" "${expected(unresolved-in(path, symbol, "call"))}"
+  cost 2
+  do
+    let call = unresolved-in(path, symbol, "call")
+    let where = scope(call)
+    let alone = and(eq(where, enclosing(site(call))), eq(attr(site(call), "static"), "true"))
+    let passed = arguments(call)
+    m := create METHOD ${where} ${symbol}
+    set ${m} static ${alone}
+    set ${m} type ${type}
+    for a in passed
+      p := create PARAM ${m} ${first(a)}
+      set ${p} type ${last(a)}
+    end
+    set ${m} body "return default"
   end
 end
 

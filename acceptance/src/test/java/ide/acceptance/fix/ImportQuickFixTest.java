@@ -107,7 +107,8 @@ class ImportQuickFixTest {
                 "      ! open-visibility b.Money package -> public",
                 "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",
-                "  X create-field: nonempty(scope(unresolved-in(path, symbol, \"value\")))");
+                "  X create-field: nonempty(scope(unresolved-in(path, symbol, \"value\")))",
+                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))");
 
         ws.fix("a/U.java", 4, "open-visibility b.Money package -> public, then import b.Money");
 
@@ -133,6 +134,7 @@ class ImportQuickFixTest {
                 "  ! import java.util.List",
                 "  X use-similar: nonempty(unresolved-in(path, symbol, \"value\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",
-                "  X create-field: nonempty(scope(unresolved-in(path, symbol, \"value\")))");
+                "  X create-field: nonempty(scope(unresolved-in(path, symbol, \"value\")))",
+                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))");
     }
 }

@@ -333,7 +333,9 @@ public final class Reader {
             var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
             nodes.put(id, use);
             var mode = typeName ? Mode.TYPE : modeOf(use);
-            if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use)));
+            if (bindsNothing && use instanceof ClassOrInterfaceType) unresolved.add(new Unresolved(id, site, name, mode));
+            else if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, scopeOf(use), Needs.expected((Expression) use),
+                    use instanceof MethodCallExpr call ? Needs.arguments(call) : List.of()));
             else references.add(new Reference(id, site, target, name, mode));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));

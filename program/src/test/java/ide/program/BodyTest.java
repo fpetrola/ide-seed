@@ -53,6 +53,12 @@ class BodyTest {
     }
 
     @Test
+    void itsDefaultIsWhatAMethodAnswersWhenItHasNothingToSay() {
+        assertThat(Body.parse("return default", program(), SET).statements()).containsExactly(new Body.Return(new Body.Default()));
+        assertThat(Body.parse("return default", program(), SET).uses()).isEmpty();
+    }
+
+    @Test
     void itsUsesAreOfWhatIsOutsideItsMethodInTheOrderTheyAreWritten() {
         var body = Body.parse("#{field:2} = #{param:5}\nreturn new #{constructor:3}(#{field:2})", program(), SET);
 

@@ -24,6 +24,16 @@ public final class Render {
         return "{\n" + statements.lines().map(line -> indent + "    " + line + "\n").collect(Collectors.joining()) + indent + "}";
     }
 
+    /** What a field of a type starts with: a primitive's zero, {@code false} or {@code '\0'}; {@code null} for any other. */
+    public static String defaultValue(String type) {
+        return switch (type) {
+            case "byte", "short", "int", "long", "float", "double" -> "0";
+            case "boolean" -> "false";
+            case "char" -> "'\\0'";
+            default -> "null";
+        };
+    }
+
     public static String returning(String value) {
         return "return " + value + ";";
     }

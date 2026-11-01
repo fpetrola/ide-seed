@@ -38,12 +38,28 @@ class MemberHolesTest {
                             if (names instanceof java.util.ArrayList<String> list) local += list.size();
                             java.util.function.Supplier<Integer> size = names::size;
                             local += names.stream().map(n -> n.length()).max(java.util.Comparator.comparingInt(n -> n)).get();
+                            Shape shape = null;
+                            local += shape.toString().length() + shape.getClass().hashCode() + Color.values().length + shape.side()
+                                    + new Square(1).side() + Color.valueOf("RED").ordinal();
                             return twice.applyAsInt(local) + Math.max(1, 2) + names.size() + sizeOf(names) + java.util.List.of().size();
                         }
 
                         int length(List<String> names) {
                             return names.size();
                         }
+                    }
+                    """,
+            "a/Shape.java", """
+                    package a;
+
+                    interface Shape {
+                        int side();
+                    }
+                    """,
+            "a/Square.java", """
+                    package a;
+
+                    record Square(int side) {
                     }
                     """,
             "a/Color.java", """
@@ -70,6 +86,34 @@ class MemberHolesTest {
 
         assertThat(program.unresolved()).extracting(u -> u.name() + " in " + program.element(u.scope()).qualified())
                 .containsExactlyInAnyOrder("cuont in a.A", "missing in a.A", "tally in a.A", "sizeOf in a.A");
+    }
+
+    @Test
+    void aUseThatBindsNothingSaysWhatItsPlaceExpectsAndACallWhatItPasses() {
+        var program = JavaProjection.of(Map.of("a/B.java", """
+                package a;
+
+                import java.util.List;
+
+                class B {
+                    long total(List<String> names, int limit) {
+                        log(names, limit, "done", limit + 1, new java.util.Date());
+                        String title = describe(this);
+                        boolean ok = count > 0;
+                        ratio = 0.5;
+                        return measure(names.size());
+                    }
+                }
+                """)).program();
+
+        assertThat(program.unresolved()).extracting(u -> u.name() + " " + u.expected() + " "
+                        + u.arguments().stream().map(a -> a.name() + " " + a.type()).toList())
+                .containsExactlyInAnyOrder(
+                        "log void [names List<String>, limit int, string String, i int, date java.util.Date]",
+                        "describe String [b B]",
+                        "count int []",
+                        "ratio double []",
+                        "measure long [size int]");
     }
 
     @Test

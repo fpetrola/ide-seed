@@ -1,5 +1,6 @@
 package ide.java;
 
+import ide.java.syntax.Render;
 import ide.program.Element;
 import ide.program.ElementId;
 import ide.program.Fact;
@@ -32,12 +33,7 @@ public final class JavaRules implements LanguageRules {
     /** A primitive's zero, {@code false} or {@code '\0'}; {@code null} for any other type. */
     @Override
     public String defaultValue(String type) {
-        return switch (type) {
-            case "byte", "short", "int", "long", "float", "double" -> "0";
-            case "boolean" -> "false";
-            case "char" -> "'\\0'";
-            default -> "null";
-        };
+        return Render.defaultValue(type);
     }
 
     /** Top-level types are package-private or public; members may be anything. */

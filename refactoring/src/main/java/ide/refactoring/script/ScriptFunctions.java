@@ -62,6 +62,9 @@ final class ScriptFunctions {
                     .filter(use -> args.size() < 3 || used(use.mode()).equals(text(args, 2)))
                     .<Value>map(use -> new Value.Ref(use.id())).findFirst().orElse(null);
             case "scope" -> args.getFirst() == null ? null : elem(hole(args.getFirst()).scope());
+            case "expected" -> text(hole(args.getFirst()).expected());
+            case "arguments" -> new Value.Items(hole(args.getFirst()).arguments().stream() // each its name, then its type
+                    .<Value>map(a -> texts(List.of(a.name(), a.type()))).toList());
             case "types-named" -> elems(graph.types().stream().filter(type -> type.name().equals(text(args, 0))).toList());
             case "similar" -> args.getFirst() == null ? elems(List.of()) : elems(similar(element(args, 0), text(args, 1), text(args, 2)));
             // queries
@@ -93,6 +96,7 @@ final class ScriptFunctions {
             case "nonempty" -> bool(Value.truthy(args.get(0)));
             case "count" -> text(String.valueOf(Value.items(args.get(0)).size())); // numbers are text; eq compares them so
             case "first" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getFirst();
+            case "last" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getLast();
             default -> throw new IllegalArgumentException("unknown script function: " + name);
         };
     }

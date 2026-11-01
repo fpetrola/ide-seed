@@ -172,7 +172,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     vínculo es una referencia porque la jerarquía y el verificador lo tratan igual que a un uso: hoy son strings
     duplicados en atributos y eso obliga a re-resolver nombres en todos lados.
   - `Unresolved`: un uso cuyo nombre no liga nada (site, nombre, modo, y `scope`: el tipo donde se busca un
-    miembro, el del receptor o el que lo escribe; nulo para un tipo). Su id está en el mismo espacio que el de
+    miembro, el del receptor o el que lo escribe; nulo para un tipo; `expected`, el tipo que su lugar espera de su
+    valor; y, de una llamada, `arguments`: nombre y tipo de lo que pasa, escritos como los escribe su lenguaje). Su id está en el mismo espacio que el de
     las referencias (`site@ordinal`), así un primitivo puede nombrarlo. Vive aparte de las referencias, que siempre
     ligan algo: nada de lo que lee referencias tiene que preguntar si tienen destino.
   - Elementos de biblioteca: los tipos de una biblioteca que el workspace nombra, con su paquete, marcados con el
@@ -448,9 +449,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   también los tipos de los parámetros de un método, y `can-access` le pregunta a las reglas si un sitio alcanza algo.
   Con los usos de miembros sin resolver, `unresolved-in` toma qué uso se busca (`type`, `value` o `call`), `site`
   y `scope` leen un uso sin resolver, `similar` da los miembros de un tipo cuyo nombre está a una o dos letras, y
-  se fue `is-type-name`.
-- **Abierto.** Queda una convención de Java fuera de los drivers: el `int` que create-field propone en el
-  conocimiento. La resuelve que el uso sin resolver diga qué tipo espera. El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
+  se fue `is-type-name`. Para create-method, `expected` y `arguments` (pares nombre y tipo) leen lo que el uso
+  necesita, y `last` acompaña a `first`. El lenguaje de cuerpos ganó `return default`: lo que el tipo del método
+  vale al empezar, o nada si no responde nada.
+- **Abierto.** El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
   spec faltan annotate, delegate y delegates, generate-constructor, make-final, make-static, rename-with-delegate,
   use-supertype-where-possible, extract-interface-and-use, fold-constructors y delete-tree.
 
@@ -481,7 +483,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   usos de miembros sin resolver, cada fix parte del uso y no del nombre: import, de un tipo; create-field, de un
   valor, y crea el campo en el tipo donde se busca (`create field size in V` para `v.size`); y use-similar y
   call-similar cambian un nombre mal escrito por un miembro accesible de ese tipo cuyo nombre está a una o dos letras
-  (`change to count`, `change to size(..)`).
+  (`change to count`, `change to size(..)`). create-method crea el método que una llamada no encuentra, donde lo
+  busca, con un parámetro por argumento (nombrado y tipado por el driver), estático si se llama desde un lugar
+  estático de su propio tipo, y con `return default`; pregunta el tipo de retorno y propone el que espera el lugar de
+  la llamada. create-field propone también ese tipo, ya no `int`. Un `ask` acepta comillas dentro de `${...}`.
 - **Abierto.** `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 
@@ -678,7 +683,7 @@ Registro de deuda de diseño, con la fase que la resuelve.
 | Runtime de refactorings como clase anónima de la sesión; `Ctx` falso en knowledge (resuelto en 6911992) | `ide.session`, `ide.knowledge` | 5 |
 | Valores de scripts como strings; id o dirección resuelto en cada función (resuelto en fb7e3e9) | `ide.refactoring.script` | 5 |
 | Plantillas de cuerpo en Java dentro del catálogo e `initializer` en el conocimiento (marcadas en fb7e3e9; `set import` se fue en 0a738bf; resuelto en 37c903e y 77e0742) | `standard.ref`, `knowledge.ref` | etapa 2 |
-| Convenciones de Java fuera de los drivers: `is-type-name` (resuelto con los usos de miembros sin resolver) y el `int` que propone create-field | `ScriptFunctions`, `knowledge.ref` | etapa 2, ítem 1 |
+| Convenciones de Java fuera de los drivers: `is-type-name` y el `int` que propone create-field (resueltos con los usos de miembros sin resolver y lo que esperan) | `ScriptFunctions`, `knowledge.ref` | etapa 2, ítem 1 |
 | Los usos de bibliotecas no se verificaban: un rename podía capturar los usos de un import con comodín (resuelto en a5fdf89) | `ide.java`, `ide.engine` | etapa 2 |
 | El reparador entra dos veces en el código que coordina (decisión 17; resuelto en 85bb676) | `ide.engine`, `ide.session` | 6 |
 | La sesión carga `knowledge.ref` por su ruta y arma los hechos de un diagnóstico (resuelto en a288c2e) | `ide.session` | 6 |
@@ -830,12 +835,17 @@ etapa 2, por valor.
      campo, local ni parámetro con ese nombre; de una llamada, cuando ningún método tiene ese nombre donde se busca.
      Nunca lo que va antes de un punto o de `::` (puede ser un paquete o un tipo), una etiqueta de `case` ni un nombre
      dentro de una anotación. Sobre una copia del emulador del usuario (229 archivos sin errores) no aparece ninguno;
-     la primera versión daba falsos en llamadas con lambdas sobre `Stream` y en receptores de `::`. Un retarget lo
+     la primera versión daba falsos en llamadas con lambdas sobre `Stream` y en receptores de `::`, y la que decide
+     por nombre, en los métodos de `Object` sobre interfaces y en el `values()` de un enum. Un retarget lo
      liga renombrando el uso, si el destino es lo que el uso pide. El símbolo de un diagnóstico sobre `v.size` es
      `size`.
 
+   - create-method: el uso dice qué tipo espera su lugar y, si es una llamada, qué pasa; el fix crea el método con
+     eso.
+
    Abierto: la completion y los fixes todavía no comparten una sola pregunta (qué puede ligar este uso desde su
-   sitio); falta create-method para una llamada sin resolver; un nombre sin resolver antes de un punto no es uso.
+   sitio); un nombre sin resolver antes de un punto no es uso; los tipos de lo que necesita un uso se escriben como
+   los nombra su archivo, aunque el método o el campo se cree en otro; un método creado en otro paquete no se abre.
 2. Reconciliación estructural de identidad en ediciones manuales (hoy un rename a mano equivale a borrar y crear).
    Hecho en dos ciclos:
    - afd56af: lo que una edición a mano renombra, cambia de firma o mueve de paquete conserva su id, y lo que quita

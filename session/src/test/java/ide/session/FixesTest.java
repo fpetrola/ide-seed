@@ -37,6 +37,7 @@ class FixesTest {
                 "? resolves(total)",
                 "  X import: nonempty(unresolved-in(path, symbol, \"type\"))",
                 "  X call-similar: nonempty(unresolved-in(path, symbol, \"call\"))",
-                "  ! create field total in P");
+                "  ! create field total in P",
+                "  X create-method: nonempty(scope(unresolved-in(path, symbol, \"call\")))");
     }
 }

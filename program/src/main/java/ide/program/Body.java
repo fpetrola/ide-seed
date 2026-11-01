@@ -11,6 +11,7 @@ import java.util.List;
  * return #{field:2}                              answers the value of a field or of a parameter
  * #{field:2} = #{param:7}                        gives a field a value
  * return new #{constructor:3}(#{param:7}, ...)   answers a new object
+ * return default                                 answers what its type starts with; nothing, if it answers nothing
  * </pre>
  * A body is the body of one method: its parameters are values the body has, not uses between elements. Like
  * {@link Fact}, it grows only when a template needs to say something it cannot.
@@ -41,6 +42,10 @@ public record Body(List<Statement> statements) {
 
     /** The value of one of the method's parameters. */
     public record Parameter(ElementId parameter) implements Expression {
+    }
+
+    /** What the method's type starts with, as a field of that type does: what a method answers that knows nothing yet. */
+    public record Default() implements Expression {
     }
 
     /** A new object, made by {@code constructor} with {@code arguments}. */
@@ -93,6 +98,9 @@ public record Body(List<Statement> statements) {
             case Parameter p -> {
                 // a value of the body itself
             }
+            case Default d -> {
+                // no element at all
+            }
             case New n -> {
                 uses.add(new Use(n.constructor(), Mode.NEW));
                 n.arguments().forEach(argument -> uses(argument, uses));
@@ -129,6 +137,11 @@ public record Body(List<Statement> statements) {
         }
 
         private Expression expression() {
+            spaces();
+            if (text.startsWith("default", at) && (at + 7 == text.length() || !Character.isJavaIdentifierPart(text.charAt(at + 7)))) {
+                at += 7;
+                return new Default();
+            }
             if (keyword("new")) {
                 var constructor = element(Kind.CONSTRUCTOR);
                 expect('(');

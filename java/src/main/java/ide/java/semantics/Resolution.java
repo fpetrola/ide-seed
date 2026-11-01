@@ -221,8 +221,14 @@ public final class Resolution {
         }
     }
 
+    /** What every object answers, which the solver does not list for an interface. */
+    private static final java.util.Set<String> OBJECT = java.util.Set.of("equals", "hashCode", "toString", "getClass",
+            "notify", "notifyAll", "wait", "clone", "finalize");
+
+    /** Whether a type has a method by that name: its own, inherited, every object's, or an enum's implicit ones. */
     private static boolean declares(ResolvedReferenceTypeDeclaration type, String method) {
-        return type.getAllMethods().stream().anyMatch(m -> m.getName().equals(method));
+        return OBJECT.contains(method) || type.isEnum() && (method.equals("values") || method.equals("valueOf"))
+                || type.getAllMethods().stream().anyMatch(m -> m.getName().equals(method));
     }
 
     /** The field the expression resolves to, or null if it is not a (resolvable) field use. */

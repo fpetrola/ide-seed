@@ -63,8 +63,8 @@ final class KnowledgeParser {
                     else if (clause.startsWith("needs ")) needs.add(predicate(clause.substring(6)));
                     else if (clause.startsWith("cost ")) cost = Integer.parseInt(clause.substring(5).strip());
                     else if (clause.startsWith("ask ")) {
-                        var parts = clause.substring(4).strip().split("\"");
-                        asks.add(new ide.engine.Plan.Ask(parts[0].strip(), parts[1], parts.length > 3 ? parts[3] : ""));
+                        var parts = quoted(clause.substring(4).strip());
+                        asks.add(new ide.engine.Plan.Ask(parts.getFirst(), parts.get(1), parts.size() > 2 ? parts.get(2) : ""));
                     }
                     else if (clause.startsWith("for ")) {
                         var in = clause.indexOf(" in ");
@@ -112,5 +112,28 @@ final class KnowledgeParser {
         }
         args.add(inside.substring(start).strip());
         return new Knowledge.Predicate(text.substring(0, open).strip(), List.copyOf(args));
+    }
+
+    /** A word, then texts in quotes; a quote inside a {@code ${...}} is the expression's, not the end of the text. */
+    private static List<String> quoted(String clause) {
+        var parts = new ArrayList<String>();
+        var space = clause.indexOf(' ');
+        parts.add(space < 0 ? clause : clause.substring(0, space));
+        StringBuilder text = null;
+        var depth = 0;
+        for (var i = space < 0 ? clause.length() : space; i < clause.length(); i++) {
+            var c = clause.charAt(i);
+            if (text == null) {
+                if (c == '"') text = new StringBuilder();
+            } else if (c == '"' && depth == 0) {
+                parts.add(text.toString());
+                text = null;
+            } else {
+                if (c == '{' && i > 0 && clause.charAt(i - 1) == '$') depth++;
+                else if (c == '}' && depth > 0) depth--;
+                text.append(c);
+            }
+        }
+        return parts;
     }
 }

@@ -18,7 +18,8 @@ import java.util.stream.Collectors;
 /**
  * A body in no language ({@link Body}) written in Java, in place of a method's: a field or a parameter by its name, a
  * field through {@code this} (or through its type, if static) where a parameter of the same name hides it, and a new
- * object by its type's simple name, imported if the file cannot name it yet.
+ * object by its type's simple name, imported if the file cannot name it yet. The default is the one of the method's
+ * type, as a field would start with it; a void method answers nothing.
  */
 final class WriteBody {
 
@@ -27,12 +28,14 @@ final class WriteBody {
     private final EditSet edits;
     private final Unit unit;
     private final Map<String, String> named = new HashMap<>();
+    private final String type;
 
-    private WriteBody(Program program, List<String> parameters, EditSet edits, Unit unit) {
+    private WriteBody(Program program, List<String> parameters, EditSet edits, Unit unit, String type) {
         this.program = program;
         this.parameters = parameters;
         this.edits = edits;
         this.unit = unit;
+        this.type = type;
     }
 
     static void apply(Context c, ElementId method, String text) {
@@ -42,8 +45,8 @@ final class WriteBody {
         var callable = declaration.as(MethodDeclaration.class);
         var unit = declaration.unit();
         var edits = new EditSet();
-        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit);
-        var statements = body.statements().stream().map(writer::statement).collect(Collectors.joining("\n"));
+        var writer = new WriteBody(program, Shared.parameterNames(callable), edits, unit, callable.getType().asString());
+        var statements = body.statements().stream().map(writer::statement).filter(s -> !s.isEmpty()).collect(Collectors.joining("\n"));
         var indent = unit.indentation(callable.getBegin().orElseThrow().line);
         edits.replace(unit, callable.getBody().orElseThrow(), Render.block(statements, indent));
         c.sources().apply(edits);
@@ -51,6 +54,7 @@ final class WriteBody {
 
     private String statement(Body.Statement statement) {
         return switch (statement) {
+            case Body.Return r when r.value() instanceof Body.Default && type.equals("void") -> "";
             case Body.Return r -> Render.returning(value(r.value()));
             case Body.Assign a -> Render.assignment(field(a.field()), value(a.value()));
         };
@@ -60,6 +64,7 @@ final class WriteBody {
         return switch (expression) {
             case Body.Field f -> field(f.field());
             case Body.Parameter p -> program.element(p.parameter()).name();
+            case Body.Default d -> Render.defaultValue(type);
             case Body.New n -> Render.creation(type(program.element(n.constructor()).parent()),
                     n.arguments().stream().map(this::value).toList());
         };

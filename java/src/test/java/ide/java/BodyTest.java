@@ -48,6 +48,24 @@ class BodyTest {
     }
 
     @Test
+    void theDefaultIsWhatItsTypeStartsWithAndNothingForVoid() {
+        var projection = JavaProjection.of(Map.of("a/P.java", P));
+        var p = projection.program();
+
+        projection.apply(new Primitive.Set(id(p, "a.P#get()"), "body", "return default"));
+        projection.apply(new Primitive.Set(id(p, "a.P#setX(int)"), "body", "return default"));
+
+        assertThat(projection.source("a/P.java")).contains("""
+                    void setX(int x) {
+                    }
+                """, """
+                    int get() {
+                        return 0;
+                    }
+                """);
+    }
+
+    @Test
     void aFieldHiddenByAParameterIsWrittenThroughItsReceiver() {
         var projection = JavaProjection.of(Map.of("a/P.java", P));
         var p = projection.program();
