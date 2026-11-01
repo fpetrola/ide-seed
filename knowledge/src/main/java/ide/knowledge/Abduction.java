@@ -25,11 +25,13 @@ import java.util.Set;
  * primitive changes its relation; one of a defined relation is made first, with its own definitions.
  * <p>
  * To make a rule hold where it is broken ({@code violates-<rule>}), one of what the broken instance stands on is
- * taken away: a fact it needs removed, or one it needs absent added.
+ * taken away: a fact it needs removed, or one it needs absent added; a defined one it needs absent made to hold, by
+ * its own definitions.
  * <p>
  * Either way, every rule is asked again around what changed: what the changes break is mended in the same plan, never
  * by undoing one of its own changes. A promise is broken only on purpose: as the first change of a plan, the one the
- * plan is about, which then changes meaning; never as a consequence. A plan is at most {@link #MOST_CHANGES} changes.
+ * plan is about, which then changes meaning; never as a consequence. A plan is at most {@link #MOST_CHANGES} steps: an
+ * element created and the changes of it are one.
  */
 final class Abduction {
 
@@ -53,8 +55,11 @@ final class Abduction {
      * {@code constructor-for(k, type, use)} (one taking what a use passes).
      */
     static final Set<String> CREATED = Set.of("constructor", "member", "parameter", "constructor-for");
-    /** Relations made to hold by several primitives at once: {@code takes-arguments(m, use)}, a parameter for each argument. */
-    static final Set<String> COMPOSED = Set.of("takes-arguments");
+    /**
+     * Relations made to hold by several primitives at once: {@code takes-arguments(m, use)}, a parameter for each
+     * argument; {@code stores(p, k, f)}, a statement of k giving f the value of its parameter p.
+     */
+    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores");
     /** What a created element is called until it is: {@code new:<relation>:<n>}. */
     static final String NEW = "new:";
     private static final java.util.concurrent.atomic.AtomicInteger CREATIONS = new java.util.concurrent.atomic.AtomicInteger();
@@ -269,43 +274,81 @@ final class Abduction {
         var support = supports.getFirst();
         var ways = new ArrayList<List<Change>>();
         for (var literal : support.clause().body()) {
-            var options = new ArrayList<Change>();
+            var options = new ArrayList<List<Change>>();
             if (conditions.contains(literal)) continue; // a condition is never what is taken away
             switch (literal) {
                 case Literal.Positive p -> {
                     var standing = bound(p.atom(), support.binding());
                     if (ground(standing) && (TOGGLED.contains(standing.relation()) || UNDONE_BY_CREATING.contains(standing.relation()))) {
-                        options.add(new Change(standing.relation(), null, values(standing), forWhat));
+                        options.add(List.of(new Change(standing.relation(), null, values(standing), forWhat)));
                     }
                 }
                 case Literal.Negative n -> {
                     var absent = bound(n.atom(), support.binding());
                     if (ground(absent) && TOGGLED.contains(absent.relation())) {
-                        options.add(new Change(absent.relation(), values(absent), null, forWhat));
+                        options.add(List.of(new Change(absent.relation(), values(absent), null, forWhat)));
+                    } else if (ground(absent) && rules.defines(absent.relation())) {
+                        options.addAll(making(absent, state));
                     }
                 }
                 case Literal.Comparison c -> {
                     // a comparison cannot be changed
                 }
             }
+            options:
             for (var option : options) {
-                var all = plus(done, option);
-                if (all.size() > MOST_CHANGES) continue;
-                var verdict = allowed(option, done);
-                if (!verdict.ok()) {
-                    if (!verdict.why().startsWith(UNDO)) dead.add(new Dead(all, verdict.why()));
-                    continue;
+                var all = new ArrayList<>(done);
+                var made = new ArrayList<Change>();
+                var applied = state;
+                for (var proposed : option) {
+                    var verdict = allowed(proposed, all);
+                    if (!verdict.ok()) {
+                        all.add(proposed);
+                        if (!verdict.why().startsWith(UNDO)) dead.add(new Dead(all, verdict.why()));
+                        continue options;
+                    }
+                    var change = proposed.breaking(verdict.promise());
+                    all.add(change);
+                    made.add(change);
+                    applied = suppose(applied, change);
                 }
-                var change = option.breaking(verdict.promise());
-                all = plus(done, change);
-                for (var more : unsupport(atom, all, suppose(state, change), dead)) {
-                    var way = new ArrayList<>(List.of(change));
+                if (steps(all) > MOST_CHANGES) continue;
+                for (var more : unsupport(atom, all, applied, dead)) {
+                    var way = new ArrayList<>(made);
                     way.addAll(more);
                     ways.add(way);
                 }
             }
         }
         return ways;
+    }
+
+    /** The ways a ground atom of a defined relation is made to hold from {@code state}, each needing nothing more. */
+    private List<List<Change>> making(Atom atom, Evaluation state) {
+        var ways = new ArrayList<List<Change>>();
+        for (var clause : rules.defining(atom.relation())) {
+            var renamed = renamed(clause);
+            var binding = bind(renamed.head(), values(atom));
+            if (binding == null) continue;
+            var found = new ArrayList<Found>();
+            explore(atom.relation(), renamed.body(), binding, List.of(), List.of(), state, found, new Literal[1]);
+            for (var way : found) if (way.needs().isEmpty()) ways.add(way.changes());
+        }
+        return ways;
+    }
+
+    /** How many steps changes make: a change of an element created among them is part of its creation. */
+    static int steps(List<Change> changes) {
+        var created = new java.util.HashSet<String>();
+        var steps = 0;
+        for (var change : changes) {
+            if (change.added() != null && change.element().startsWith(NEW) && CREATED.contains(change.relation())) {
+                if (created.add(change.element())) steps++;
+            } else if (!created.contains(change.element())) {
+                steps++;
+            }
+        }
+        return steps;
     }
 
     /** {@code found}, and what it breaks mended in the same plan: every way that leaves no rule broken around what changed. */
@@ -450,6 +493,7 @@ final class Abduction {
                     added.add(new Tuple("parent", List.of(made, values.get(1))));
                     if (change.relation().equals("constructor-for")) added.add(new Tuple("constructor", List.of(made, values.get(1))));
                 }
+                case "stores" -> added.add(new Tuple("writes", List.of(values.get(1), values.get(2)))); // its callable writes the field
                 default -> {
                     // nothing more is known of it
                 }

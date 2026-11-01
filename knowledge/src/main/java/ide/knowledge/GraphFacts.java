@@ -40,6 +40,7 @@ import java.util.stream.Stream;
  * similar(e, type, name, kind)        (a member type has, declared or inherited, named one or two letters away from
  *                                     name, as a typo is; the nearest first)
  * exists(e)         declared(e, path, name)   (an element of the workspace; a member the file at path declares)
+ * stores(p, k, f)   (a statement k makes to give f the value of its parameter p: only made, never read)
  * </pre>
  */
 final class GraphFacts implements Facts {
@@ -119,6 +120,7 @@ final class GraphFacts implements Facts {
                     : similar(new ElementId(pattern.get(1)), pattern.get(2)).map(m -> List.of(id(m), pattern.get(1), pattern.get(2),
                     m.kind().name().toLowerCase(Locale.ROOT)));
             case "exists" -> elements(first).filter(e -> !e.inLibrary()).map(e -> List.of(id(e)));
+            case "stores" -> Stream.empty();
             case "declared" -> elements(first).filter(e -> e.kind() == Kind.FIELD || e.kind() == Kind.METHOD)
                     .filter(e -> Objects.equals(program.topLevel(e.id()).fact(Fact.FILE), pattern.size() > 1 ? pattern.get(1) : null)
                             || pattern.size() < 2 || pattern.get(1) == null)

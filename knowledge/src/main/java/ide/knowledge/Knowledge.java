@@ -305,7 +305,7 @@ public final class Knowledge implements Remedy, QuickFix {
     /** The ways given up, as their steps would have been said, and why. */
     private void dead(List<Abduction.Dead> dead, Projection projection, Trace trace) {
         for (var way : dead) {
-            trace.add(Trace.Kind.DROPPED, String.join(", then ", steps(way.changes(), projection).stream().map(Step::title).toList()) + ": " + way.why());
+            trace.add(Trace.Kind.DROPPED, said(steps(way.changes(), projection)) + ": " + way.why());
         }
     }
 
@@ -343,7 +343,7 @@ public final class Knowledge implements Remedy, QuickFix {
         }
         var cost = steps.stream().mapToInt(Step::cost).sum();
         if (steps.isEmpty()) trace.append(below);
-        else trace.open(Trace.Kind.ANSWER, String.join(", then ", steps.stream().map(Step::title).toList())).append(below).close();
+        else trace.open(Trace.Kind.ANSWER, said(steps)).append(below).close();
         return ways.stream().map(way -> way.then(steps, cost)).toList();
     }
 
@@ -455,20 +455,26 @@ public final class Knowledge implements Remedy, QuickFix {
             default -> projection.program().element(owner).name();
         };
         var asks = new ArrayList<Plan.Ask>();
-        var sets = new ArrayList<java.util.function.BiFunction<Map<String, String>, ElementId, List<Primitive>>>();
+        var sets = new ArrayList<Setting>();
         for (var change : group.subList(1, group.size())) {
             var on = change.added() != null;
             var value = on && change.added().size() > 1 ? change.added().get(1) : null;
             switch (change.relation()) {
                 case "takes-arguments" -> {
                     var arguments = projection.needs(change.added().get(1)).map(n -> n.arguments()).orElse(List.of());
-                    sets.add((answers, id) -> {
+                    sets.add((answers, id, done) -> {
                         var made2 = new ArrayList<Primitive>();
                         for (var argument : arguments) made2.add(new Primitive.Create(Kind.PARAM, id, argument.name(), Map.of(ide.program.Fact.TYPE, argument.type()), null));
                         return made2;
                     });
                 }
-                case "static", "final", "abstract" -> sets.add((answers, id) -> List.of(new Primitive.Set(id, change.relation(), String.valueOf(on))));
+                case "static", "final", "abstract" -> sets.add((answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), String.valueOf(on))));
+                case "stores" -> { // a statement of its callable gives the field the parameter's value
+                    var callable = change.added().get(1);
+                    var field = change.added().get(2);
+                    sets.add((answers, id, done) -> List.of(new Primitive.Create(Kind.STATEMENT, resolved(callable, done), "",
+                            Map.of(ide.program.Fact.BODY, ide.program.Body.name(resolved(field, done)) + " = " + ide.program.Body.name(id)), null)));
+                }
                 default -> {
                     var question = questions.get(change.relation() + " of new " + kind);
                     if (question != null) {
@@ -476,18 +482,13 @@ public final class Knowledge implements Remedy, QuickFix {
                         while (!asked.add(name)) name = name + "'";
                         var answer = name;
                         asks.add(new Plan.Ask(answer, question.get(1), value));
-                        sets.add((answers, id) -> List.of(new Primitive.Set(id, change.relation(), answers.getOrDefault(answer, value))));
+                        sets.add((answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), answers.getOrDefault(answer, value))));
                     } else {
-                        sets.add((answers, id) -> List.of(new Primitive.Set(id, change.relation(), value)));
+                        sets.add((answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), value)));
                     }
                 }
             }
         }
-        var primitive = switch (creation.relation()) {
-            case "member" -> new Primitive.Create(Kind.valueOf(kind.toUpperCase(java.util.Locale.ROOT)), owner, named);
-            case "parameter" -> new Primitive.Create(Kind.PARAM, owner, named, Map.of(), values.get(3));
-            default -> new Primitive.Create(Kind.CONSTRUCTOR, owner, named);
-        };
         var variables = new LinkedHashMap<String, Value>();
         variables.put("kind", new Value.Text(kind));
         variables.put("named", new Value.Text(named));
@@ -495,12 +496,37 @@ public final class Knowledge implements Remedy, QuickFix {
         variables.put("value", value(owner.value(), projection));
         var title = title(creation.relation(), creation.forWhat(), variables, projection);
         var method = kind.equals("method");
-        return new Step(title, List.copyOf(asks), 2, true, (target, answers, done) -> {
+        var keeps = !creation.relation().equals("parameter"); // what every call passes a new parameter is made up
+        return new Step(title, List.copyOf(asks), 2, keeps, (target, answers, done) -> {
+            var in = resolved(values.get(1), done); // what it is created in may have been created by the plan
+            var primitive = switch (creation.relation()) {
+                case "member" -> new Primitive.Create(Kind.valueOf(kind.toUpperCase(java.util.Locale.ROOT)), in, named);
+                case "parameter" -> new Primitive.Create(Kind.PARAM, in, named, Map.of(), values.get(3));
+                default -> new Primitive.Create(Kind.CONSTRUCTOR, in, named);
+            };
             var id = target.apply(primitive).produced();
             done.put(made, id);
-            for (var set : sets) set.apply(answers, id).forEach(target::apply);
+            for (var set : sets) set.of(answers, id, done).forEach(target::apply);
             if (method) answeringItsDefault(target, id);
         });
+    }
+
+    /** What is set of an element created, once it is: with the answers given and what the plan created so far. */
+    @FunctionalInterface
+    private interface Setting {
+        List<Primitive> of(Map<String, String> answers, ElementId id, Map<String, ElementId> created);
+    }
+
+    /** An element a way names: one the plan created, by its placeholder, or one of the program. */
+    private static ElementId resolved(String element, Map<String, ElementId> created) {
+        return created.getOrDefault(element, new ElementId(element));
+    }
+
+    /** Steps as a plan says them: their titles in order, one said again right after itself said once. */
+    private static String said(List<Step> steps) {
+        var titles = new ArrayList<String>();
+        for (var step : steps) if (titles.isEmpty() || !titles.getLast().equals(step.title())) titles.add(step.title());
+        return String.join(", then ", titles);
     }
 
     /**
@@ -565,7 +591,7 @@ public final class Knowledge implements Remedy, QuickFix {
 
     /** A way as a plan: its steps' titles in the order they run, their questions, and running them in that order. */
     private Plan plan(Way way) {
-        var title = String.join(", then ", way.steps().stream().map(Step::title).toList());
+        var title = said(way.steps());
         var asks = way.steps().stream().flatMap(step -> step.asks().stream()).toList();
         var changesMeaning = way.steps().stream().anyMatch(step -> !step.keepsMeaning());
         return new Plan(title, asks, changesMeaning, (projection, answers) -> {

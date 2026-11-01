@@ -1388,6 +1388,21 @@ que esto no escala solo:
    - `java.rules` dice que un miembro privado, que nada de afuera de su tipo puede usar, se usa o no está
      (`used-or-gone`). Si nada lo usa, lo que queda es que no esté, y se ofrece "remove ...".
    - Que de verdad nada lo use lo dice el compilador (es su advertencia), y si algo lo usa el borrado se rechaza.
+
+   **Ciclo 3 hecho el 2026-11-01**: dar valor a un `final` en los constructores, deducido de `final-once`.
+   `initialize-in-constructors` se fue; quedan 2 efectos.
+   - La abducción aprendió a sacar el apoyo de una regla haciendo verdadero un predicado definido que la regla
+     necesita falso: `not given-by(k, f)` se deshace con las definiciones de `given-by`, leídas desde el estado
+     supuesto.
+   - Una definición nueva dice cómo un constructor da el valor: toma un parámetro del tipo del campo, al que cada
+     llamada le pasa lo que ese tipo vale al empezar, y lo guarda (`stores(p, k, f)`, una sentencia que el plan crea).
+     Una clase sin constructores declara uno que lo hace. De ahí salen "create constructor Q(), then initialize
+     limit in the constructors" e "initialize limit in the constructors", con los mismos títulos que tenía el efecto.
+   - Un plan mide sus pasos, no sus cambios: un elemento creado y lo que se le hace es uno, como lo muestra. Un título
+     repetido seguido se dice una vez.
+   - Crear un parámetro cambia el sentido: cada llamada pasa un valor que inventa el plan. Se ofrece como arreglo, y
+     nunca repara solo (decisión 31). Lo encontraron make-final y la garantía: el reparador inicializaba en los
+     constructores lo que nadie inicializaba, en vez de deshacer el refactoring.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

@@ -147,6 +147,11 @@ def builds(k, t) when constructor(k, t) and not delegates(k)
 def builds(t, t) when kind(t, "class") and not declares-constructor(t)
 def given-by(k, f) when writes(k, f)
 def given-by(k, f) when builds(k, t) and parent(f, t) and writes(t, f)
+# A constructor gives a field its value with a parameter of the field's type, which every call passes what that type
+# starts with: it takes it, and stores it. A class that declares no constructor declares one that does.
+def given-by(k, f) when kind(k, "constructor") and type(f, ty) and name(f, n) and start-value(ty, v)
+  and parameter(p, k, n, v) and type(p, ty) and stores(p, k, f)
+def given-by(t, f) when kind(t, "class") and constructor(k, t) and given-by(k, f)
 
 rule final-once "a final field is given its value where it is declared, or by each constructor of its type"
   for f where final(f) and not initialized(f) and parent(f, t) and builds(k, t)
@@ -157,6 +162,8 @@ problem ecj.UninitializedBlankFinalField is final-once(field-in(path, first(argu
 
 say not final for final-once "make ${called} not final"
 say initialized for final-once "initialize ${called} in its declaration"
+say parameter for given-by "initialize ${named} in the constructors"
+say constructor for given-by "create constructor ${name(value)}()"
 
 # What a field starts with, where it is declared, is the person's to say: the language's start for its type proposed.
 def start-of(f, v) when type(f, t) and start-value(t, v)

@@ -25,25 +25,8 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 
 # A call to no method, a new no constructor makes, a type nothing declares: java.rules says what is created for each.
 
-# A blank final field has its value where it is declared or from every constructor of its type; Eclipse says so at
-# the field, or at a constructor that does not give it one, naming the field.
-goal ecj.UninitializedBlankFinalField needs given-a-value(first(arguments))
-
-# Every constructor takes the value, and the calls pass what its type starts with. A type that declares no
-# constructor has the one the language gives, which assigns nothing: one is declared first (java.rules says how).
-effect initialize-in-constructors "initialize ${field} in the constructors"
-  makes given-a-value(field)
-  needs constructed-explicitly(owner(field-in(path, field)))
-  cost 2
-  do
-    let f = field-in(path, field)
-    for c in constructors(owner(f))
-      p := create PARAM ${c} ${field} argument=${default-value(type(f))}
-      set ${p} type ${type(f)}
-      create STATEMENT ${c} "" facts="body=#{f} = #{p}"
-    end
-  end
-end
+# A blank final field has its value where it is declared or from every constructor of its type: java.rules says it,
+# and how each constructor takes the value and gives it.
 
 # A constructor may not give a final field of its superclass its value: the superclass's constructor takes the value
 # and gives it, and the constructor passes it to that constructor first, instead of giving it. The field gets the
