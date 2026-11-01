@@ -51,6 +51,19 @@ public final class Bodies {
     private Bodies() {
     }
 
+    /** The statements of a method's or constructor's body, in order; none if it has no body. */
+    public static List<Statement> statements(CallableDeclaration<?> callable) {
+        var body = callable instanceof MethodDeclaration method ? method.getBody().orElse(null)
+                : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
+        return body == null ? List.of() : body.getStatements();
+    }
+
+    /** Where a statement is among its body's, by what it is and not by how it looks; -1 if it is none of them. */
+    public static int place(List<Statement> statements, Node statement) {
+        for (var i = 0; i < statements.size(); i++) if (statements.get(i) == statement) return i;
+        return -1;
+    }
+
     /**
      * The variables a method or constructor declares in its own body, in the order they are written; those of a class
      * or a lambda inside it are theirs.

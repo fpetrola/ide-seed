@@ -39,6 +39,27 @@ public final class TextDiff {
         return out.toString();
     }
 
+    /**
+     * What two sequences share in order, the most they can: for each item of {@code after}, the place in
+     * {@code before} of the item it is, or -1 if it is new.
+     */
+    public static int[] common(List<String> before, List<String> after) {
+        var lcs = new int[before.size() + 1][after.size() + 1];
+        for (var i = before.size() - 1; i >= 0; i--) {
+            for (var j = after.size() - 1; j >= 0; j--) {
+                lcs[i][j] = before.get(i).equals(after.get(j)) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+            }
+        }
+        var places = new int[after.size()];
+        java.util.Arrays.fill(places, -1);
+        for (int i = 0, j = 0; i < before.size() && j < after.size(); ) {
+            if (before.get(i).equals(after.get(j))) places[j++] = i++;
+            else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++;
+            else j++;
+        }
+        return places;
+    }
+
     private static String range(int start, int count) {
         if (count == 1) return String.valueOf(start + 1);
         return (count == 0 ? start : start + 1) + "," + count;

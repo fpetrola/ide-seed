@@ -77,6 +77,25 @@ class IdentityTest {
     }
 
     @Test
+    void statementsTakeTheirPlacesAndAFreeOneWaitsForTheReading() {
+        var ids = new Identity();
+        var a = ids.of(new Address.Type("a.A"), Kind.CLASS);
+        var m = ids.of(new Address.Callable(a, "m", List.of()), Kind.METHOD);
+        var n = ids.of(new Address.Callable(a, "n", List.of()), Kind.METHOD);
+        var first = ids.of(new Address.Statement(m, 0), Kind.STATEMENT);
+        var second = ids.of(new Address.Statement(m, 1), Kind.STATEMENT);
+        var third = ids.of(new Address.Statement(m, 2), Kind.STATEMENT);
+
+        ids.placeStatements(n, List.of(second)); // the second went into n
+        ids.placeStatements(m, java.util.Arrays.asList(first, null, third)); // and a new one took its place
+
+        assertThat(ids.get(new Address.Statement(n, 0))).isEqualTo(second);
+        assertThat(ids.get(new Address.Statement(m, 2))).isEqualTo(third);
+        assertThat(ids.has(new Address.Statement(m, 1))).isFalse();
+        assertThat(ids.render(ids.address(third))).isEqualTo("a.A#m()[3]");
+    }
+
+    @Test
     void anElementReadAnewCanBeTheOneItWas() {
         var ids = new Identity();
         var a = ids.of(new Address.Type("a.A"), Kind.CLASS);

@@ -22,6 +22,7 @@ import ide.program.Change;
 import ide.program.Element;
 import ide.program.ElementId;
 import ide.program.Identity;
+import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
 import ide.program.Reconciliation;
@@ -177,12 +178,55 @@ public final class JavaProjection implements Projection {
         return JavaPrimitives.apply(primitive, context);
     }
 
-    /** The user's text for a file; what it renamed, re-signed or moved is still the element it was. */
+    /**
+     * The user's text for a file; what it renamed, re-signed or moved is still the element it was, and so is a statement
+     * it kept, by its order and text.
+     */
     @Override
     public void edit(String path, String text) {
         var before = program();
+        var said = said(path);
         sources.put(Map.of(path, text));
         reconcile(before);
+        restate(before, said);
+    }
+
+    /** What each statement of a file says, as last read. */
+    private Map<ElementId, String> said(String path) {
+        var said = new java.util.HashMap<ElementId, String>();
+        reading().declarations().forEach((id, declaration) -> {
+            if (declaration.unit().path().equals(path) && program().element(id).kind() == Kind.STATEMENT) said.put(id, text(declaration));
+        });
+        return said;
+    }
+
+    private static String text(Decl declaration) {
+        return declaration.unit().textOf(declaration.node()).replaceAll("\\s+", " ");
+    }
+
+    /**
+     * The statements of each body the edit touched are paired with what they were by their order and text; what is
+     * left is new, which is safe: the verifier sees it as added.
+     */
+    private void restate(Program before, Map<ElementId, String> said) {
+        var program = program();
+        var placed = false;
+        for (var callable : said.keySet().stream().map(id -> before.element(id).parent()).distinct().toList()) {
+            if (!program.contains(callable)) continue;
+            var olds = before.children(callable).stream().filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList();
+            var news = program.children(callable).stream().filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList();
+            var paired = Reconciliation.statements(olds, olds.stream().map(said::get).toList(),
+                    news.stream().map(id -> text(reading().declarations().get(id))).toList());
+            if (paired.equals(news)) continue;
+            for (var id : olds) if (!paired.contains(id)) ids.forget(id);
+            for (var id : news) if (!paired.contains(id)) ids.forget(id);
+            ids.placeStatements(callable, paired);
+            placed = true;
+        }
+        if (placed) {
+            afresh = true; // a free place is read with a new id
+            invalidate(Set.of());
+        }
     }
 
     /**

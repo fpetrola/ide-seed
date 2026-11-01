@@ -1,5 +1,8 @@
 package ide.program;
 
+import ide.core.TextDiff;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -39,6 +42,17 @@ public final class Reconciliation {
         return pairs;
     }
 
+    /**
+     * The statements of a body after an edit by hand, paired with those of before by their order and text (what both
+     * say in order, the most they can): for each statement after, the one of before it is, or null if it is new. A
+     * statement whose text changed is new, which is safe.
+     */
+    public static List<ElementId> statements(List<ElementId> before, List<String> said, List<String> saying) {
+        var paired = new ArrayList<ElementId>();
+        for (var place : TextDiff.common(said, saying)) paired.add(place < 0 ? null : before.get(place));
+        return paired;
+    }
+
     private static boolean same(Element old, Program before, Element fresh, Program after,
                                 Map<List<Object>, Integer> leaving, Map<List<Object>, Integer> coming) {
         if (old.kind() != fresh.kind()) return false;
@@ -54,6 +68,7 @@ public final class Reconciliation {
             case PARAM -> sole || sameParent && position(before, old) == position(after, fresh)
                     && (old.name().equals(fresh.name()) || Objects.equals(old.fact(Fact.TYPE), fresh.fact(Fact.TYPE)));
             case LOCAL -> sole; // the one local of its method that went, and the one that came
+            case STATEMENT -> false; // a statement has no name: the projection pairs them by their order and text
         };
     }
 

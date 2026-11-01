@@ -31,6 +31,11 @@ final class Shared {
     private Shared() {
     }
 
+    /** A body written anew, or gone: its statements and its locals are no one now. */
+    static void forgetBody(Context c, ide.program.Program before, ElementId callable) {
+        for (var element : before.children(callable)) if (element.kind().inBody()) c.ids().forget(element.id());
+    }
+
     static void requireIdentifier(String name) {
         if (!javax.lang.model.SourceVersion.isName(name) || name.contains(".")) {
             throw new PrimitiveRejected("projection.invalid-identifier", "'" + name + "' is not a Java identifier");

@@ -53,6 +53,9 @@ public abstract class ProjectionContract {
             "LOCAL a.A#total()/sum",
             "METHOD a.A#k(int)", "METHOD a.A#m(int)", "METHOD a.A#total()", "METHOD a.B#n()", "METHOD b.C#use(A)",
             "PARAM a.A#k(int)/p", "PARAM a.A#m(int)/p", "PARAM b.C#use(A)/other",
+            "STATEMENT a.A#k(int)[1]", "STATEMENT a.A#m(int)[1]",
+            "STATEMENT a.A#total()[1]", "STATEMENT a.A#total()[2]", "STATEMENT a.A#total()[3]",
+            "STATEMENT a.B#n()[1]", "STATEMENT b.C#use(A)[1]",
             "a.A#m(int) -> a.A#x (read)",
             "a.A#total() -> a.A#m(int) (call)", "a.A#total() -> a.A#total()/sum (read)",
             "a.A#total() -> a.A#total()/sum (read)", "a.A#total() -> a.A#total()/sum (write)", "a.A#total() -> a.A#x (read)",
@@ -176,6 +179,32 @@ public abstract class ProjectionContract {
         assertThat(change.expectations()).containsExactly(new Change.Added(made, base, "A", Mode.CALL));
         assertThat(after.referencesFrom(made)).extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label())
                 .containsExactly("a.A#new() call");
+        assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
+    }
+
+    /**
+     * Obligation 14: the statements of a body are elements of its method or constructor, in the order they are written;
+     * what one holds, a block too, is part of it. A body that keeps what the method does adds statements after the
+     * method's own, which stay who they are; one that replaces it brings new ones.
+     */
+    @Test
+    void theStatementsOfABodyAreElementsOfItsMethodInOrder() {
+        var projection = fixture();
+        var p = projection.program();
+        var m = id(p, "a.A#m(int)");
+        var total = id(p, "a.A#total()");
+        var own = id(p, "a.A#m(int)[1]");
+        var replaced = id(p, "a.A#total()[1]");
+
+        projection.apply(new Primitive.Set(m, "body", "...\n" + Body.name(id(p, "a.A#x")) + " = " + Body.name(id(p, "a.A#m(int)/p"))));
+        projection.apply(new Primitive.Set(total, "body", "return " + Body.name(id(p, "a.A#x"))));
+
+        var after = projection.program();
+        assertThat(p.children(total)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::qualified)
+                .containsExactly("a.A#total()[1]", "a.A#total()[2]", "a.A#total()[3]");
+        assertThat(after.children(m)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id).hasSize(2).startsWith(own);
+        assertThat(after.children(total)).filteredOn(e -> e.kind() == Kind.STATEMENT).extracting(Element::id)
+                .hasSize(1).doesNotContain(replaced);
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 
@@ -394,7 +423,7 @@ public abstract class ProjectionContract {
 
         var after = projection.program();
         assertThat(after.find("a.A#m(long,int)")).map(Element::id).contains(m);
-        assertThat(after.children(m)).extracting(Element::name).containsExactly("q", "p");
+        assertThat(after.children(m)).filteredOn(e -> e.kind() == Kind.PARAM).extracting(Element::name).containsExactly("q", "p");
         assertThat(before.diff(after).lost()).isEmpty();
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }

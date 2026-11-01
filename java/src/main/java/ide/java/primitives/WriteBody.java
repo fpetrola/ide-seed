@@ -61,6 +61,7 @@ final class WriteBody {
             edits.replace(unit, block, Render.block(statements, indent));
         }
         c.sources().apply(edits);
+        if (!body.keeps()) Shared.forgetBody(c, program, method);
     }
 
     /** A value said in no language, as the file of {@code site} writes it: a field's start. */

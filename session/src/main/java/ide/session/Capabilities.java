@@ -93,7 +93,7 @@ final class Capabilities {
                             answer.put("diff", preview.diff());
                             return answer;
                         }))
-                .register(Capability.of("inside", "The innermost element whose declaration a line and column of a file is inside",
+                .register(Capability.of("inside", "The innermost member, parameter or type a line and column of a file is inside",
                         List.of(path, line, Param.of("column", "text")),
                         args -> workspace.inside(text(args, "path"), number(args, "line"), number(args, "column"))
                                 .map(e -> entries("element", e.qualified(), "kind", e.kind().name())).orElse(null)))

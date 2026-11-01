@@ -77,7 +77,9 @@ final class SetAttribute {
         var body = method.getBody().orElseThrow();
         var signatureEnd = unit.previousToken(body.getBegin().orElseThrow());
         edits.replace(unit, Unit.after(signatureEnd), body.getEnd().orElseThrow(), ";");
+        var before = c.program();
         c.sources().apply(edits);
+        Shared.forgetBody(c, before, id);
     }
 
     /** The extends clause: a qualified name of the same package written simply, any other text as it is. */

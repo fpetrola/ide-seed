@@ -21,9 +21,10 @@ Every structural change is made of a few primitives; correctness comes from veri
 One Maven module per product; each pom declares only the products it uses, so the poms are the dependency map and
 the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package `ide.<product>`.
 
-- `core` — Capability, CapabilityRegistry, Param, Json (written and read), EventLog (JSONL), TextDiff. Knows nothing
-  else.
-- `program` (core) — the graph: Element/ElementId/Kind, Fact (typed facts; LIBRARY marks a library type the
+- `core` — Capability, CapabilityRegistry, Param, Json (written and read), EventLog (JSONL), TextDiff (also what two
+  sequences share in order). Knows nothing else.
+- `program` (core) — the graph: Element/ElementId/Kind (what a body is made of, `inBody`: LOCAL and STATEMENT, the
+  top-level statements of a body, in order; nested blocks are part of theirs), Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy; INITIALIZED a field given its
   value where it is declared), Unresolved (a use that binds
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
@@ -32,9 +33,11 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   uses read|write|update|call|new|type and links extends|implements|declared; Receiver: what a use is made on, the
   object itself, a type or another object, none for links, types and news), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
-  parameter type keys, locals by their callable's id, name and which of that name they are: `m()/i'2`) and Identity
-  (address → id; rebindType, rename, move, placeLocals: a callable's locals in written order, each numbered among those
-  of its name, all at once; resign, forget). The vocabulary of
+  parameter type keys, locals by their callable's id, name and which of that name they are: `m()/i'2`, statements by
+  their callable's id and place: `m()[1]`) and Identity (address → id; rebindType, rename, move, placeLocals: a
+  callable's locals in written order, each numbered among those of its name, all at once; placeStatements, the same
+  for statements, with free places for new ones; resign, forget). `Program.memberOf` is the method a statement or a
+  local is part of. Reconciliation also pairs a body's statements after an edit by hand by their order and text. The vocabulary of
   change: Primitive (sealed records Create, Delete, Move, Rename, Set, Link, Retarget, Extract, Inline; each states
   its `intent`; a Delete `into` another member merges it: expectation Merged, which takes the element out of the
   baseline), Change (produced element, expectations, pins: what a repair may not take back) and Body (what a method
@@ -69,7 +72,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline
   replaces a read of a local by its value (InlineLocal) and refuses what would change behavior without changing a
   binding (another value later, effects, another type, what it reads changed between, a read in a lambda); a local
-  nothing reads is deleted with its lines. An edit by hand reconciles identity (types, members,
+  nothing reads is deleted with its lines. The top-level statements of each body are elements; the primitives that
+  change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
+  `inside` answers the innermost element, a statement or a local too. An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
@@ -114,7 +119,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   Session (each operation a transaction; undo, event log, saving; a fix must make its diagnostic disappear), Fixes
   (the quick fixes of a line; a Fix is a diagnostic and its plan), Navigation and Completion (no language: tested
   over MemoryProjection), Capabilities (each refactoring and operation with its schema, including what the adapters
-  asked for: save, edit, asks, at, where, elements). `Workspace` builds the parts and only delegates;
+  asked for: save, edit, asks, at, where, elements; `inside` is the member a place is in, as scripts' inside is).
+  `Workspace` builds the parts and only delegates;
   `Workspace.open(folder)` reads a project (skipping target, build, out and hidden folders), gives the Java driver
   the classpath Maven says it has (cached in `.ide/classpath.txt`), logs to `.ide/events.jsonl` there and saves there.
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,

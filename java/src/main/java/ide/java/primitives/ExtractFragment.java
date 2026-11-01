@@ -75,15 +75,17 @@ final class ExtractFragment {
         edits.replace(unit, expression, name + "(" + String.join(", ", inputs.keySet()) + ")");
         Members.append(edits, unit, typeDeclaration, modifiers + type + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
-        return created(extract, c, before, source, owner, unit, name, locals);
+        return created(extract, c, before, source, owner, unit, name, locals, null);
     }
 
     /** What an extraction made: the new method, which the uses moved into it are made from now. */
     private static Change created(Primitive.Extract extract, Context c, Program before, ide.program.Element source,
-                                  ide.program.Element owner, ide.java.text.Unit unit, String name, Locals locals) {
+                                  ide.program.Element owner, ide.java.text.Unit unit, String name, Locals locals,
+                                  Statements statements) {
         var created = Shared.typeIn(c.sources().unit(unit.path()), owner.qualified()).getMethodsByName(name).getFirst();
         var id = c.ids().of(new Address.Callable(owner.id(), name, c.keys().of(created)), Kind.METHOD);
         locals.move(c.ids(), source.id(), id);
+        if (statements != null) statements.move(c.ids(), source.id(), id);
         var change = extract.intent(before, id);
         for (var gone : locals.gone()) change = change.expect(gone);
         for (var moved : c.program().referencesFrom(id)) { // the fragment's uses are made from the new method
@@ -131,6 +133,9 @@ final class ExtractFragment {
         if (output != null) body += indent + "    return " + output + ";\n";
         var locals = Locals.of(c, before, source.id(), method, new Range(selected.getFirst().getBegin().orElseThrow(),
                 selected.getLast().getEnd().orElseThrow()), selected, output != null && flow.declaredInside(output) ? output : null);
+        var at = Bodies.place(Bodies.statements(method), selected.getFirst());
+        var statements = at < 0 ? null : new Statements(before.children(source.id()).stream()
+                .filter(e -> e.kind() == Kind.STATEMENT).map(ide.program.Element::id).toList(), at, at + selected.size(), output != null);
         var call = name + "(" + String.join(", ", flow.inputs().keySet()) + ")";
         var callLine = returning ? "return " + call + ";" : output == null ? call + ";"
                 : flow.declaredInside(output) ? outputType + " " + output + " = " + call + ";"
@@ -139,7 +144,25 @@ final class ExtractFragment {
         var edits = new EditSet().replaceLines(unit, begin, end, unit.indentation(begin) + callLine + "\n");
         Members.append(edits, unit, type, modifiers + outputType + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
-        return created(extract, c, before, source, owner, unit, name, locals);
+        return created(extract, c, before, source, owner, unit, name, locals, statements);
+    }
+
+    /**
+     * The method's statements, when the fragment is some of them ({@code from} to {@code to}, not included): they move
+     * into the new method, where a new return of what it answers may follow them, and the call takes their place.
+     */
+    private record Statements(List<ElementId> own, int from, int to, boolean answers) {
+
+        /** Identity follows, before anything is read again: those that went first, so that those left close ranks. */
+        void move(Identity ids, ElementId source, ElementId method) {
+            var moved = new ArrayList<ElementId>(own.subList(from, to));
+            if (answers) moved.add(null);
+            ids.placeStatements(method, moved);
+            var left = new ArrayList<ElementId>(own.subList(0, from));
+            left.add(null);
+            left.addAll(own.subList(to, own.size()));
+            ids.placeStatements(source, left);
+        }
     }
 
     /**

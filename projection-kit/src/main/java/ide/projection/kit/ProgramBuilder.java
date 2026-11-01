@@ -83,6 +83,12 @@ public final class ProgramBuilder {
         return this;
     }
 
+    /** One more statement at the end of a method's body. */
+    public ProgramBuilder statement(String method) {
+        projection.apply(new Primitive.Create(Kind.STATEMENT, id(method), ""));
+        return this;
+    }
+
     /** A local of a method, of {@code type}: its uses are made from the method. */
     public ProgramBuilder local(String method, String name, String type) {
         var local = projection.apply(new Primitive.Create(Kind.LOCAL, id(method), name)).produced();

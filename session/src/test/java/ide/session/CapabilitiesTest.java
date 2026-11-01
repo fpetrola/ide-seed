@@ -32,6 +32,23 @@ class CapabilitiesTest {
     }
 
     @Test
+    void aPlaceInABodyIsInsideItsMethodForWhatTheAdaptersAsk() {
+        var ws = Workspace.of(Map.of("a/A.java", """
+                package a;
+
+                class A {
+                    int twice(int n) {
+                        int sum = n + n;
+                        return sum * 2;
+                    }
+                }
+                """));
+
+        assertThat(ws.capabilities().invoke("inside", Map.of("path", "a/A.java", "line", "5", "column", "23")))
+                .isEqualTo("{\"element\":\"a.A#twice(int)\",\"kind\":\"METHOD\"}");
+    }
+
+    @Test
     void capabilitiesAreInvokedWithAMapAndAnswerJson() {
         var ws = Workspace.of(Map.of("a/P.java", P));
         var registry = ws.capabilities();

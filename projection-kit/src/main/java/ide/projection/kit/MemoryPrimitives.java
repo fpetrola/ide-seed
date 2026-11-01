@@ -72,7 +72,7 @@ final class MemoryPrimitives {
 
     private static ElementId create(MemoryGraph graph, Kind kind, ElementId parent, String name, String argument) {
         var ids = graph.ids;
-        requireName(name, kind == Kind.PACKAGE);
+        if (kind != Kind.STATEMENT) requireName(name, kind == Kind.PACKAGE); // a statement has no name
         if (kind == Kind.PARAM && argument == null && graph.uses.stream().anyMatch(u -> parent.equals(u.target()) && u.mode() == Mode.CALL)) {
             throw new PrimitiveRejected("create.argument", "the calls of " + graph.render(parent) + " need an argument for " + name);
         }
@@ -84,6 +84,7 @@ final class MemoryPrimitives {
             case PARAM -> new Address.Param(parent, name);
             case LOCAL -> new Address.Local(parent, name, (int) graph.nodes.values().stream()
                     .filter(n -> n.kind() == Kind.LOCAL && parent.equals(n.parent()) && n.name().equals(name)).count());
+            case STATEMENT -> new Address.Statement(parent, graph.statements(parent).size()); // the last of its body
             case CONSTRUCTOR -> new Address.Callable(parent, "new", List.of());
         };
         if (ids.has(address)) throw duplicate(ids.render(address));
@@ -203,12 +204,22 @@ final class MemoryPrimitives {
     }
 
     /**
-     * A body in no language is its own text, and the uses it makes take the place of the old body's; one that keeps
-     * the old body ({@code ...}) is the old text followed by what it adds, and its uses are added.
+     * A body in no language is its own text, and the uses and statements it makes take the place of the old body's; one
+     * that keeps the old body ({@code ...}) is the old text followed by what it adds, and its uses and statements are added.
      */
     private static void body(MemoryGraph graph, ElementId method, String text) {
         var body = Body.parse(text, graph.read(), method);
-        if (!body.keeps()) graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
+        if (!body.keeps()) {
+            graph.uses.removeIf(use -> use.site().equals(method) && !use.mode().isLink());
+            for (var statement : graph.statements(method)) {
+                graph.order.remove(statement);
+                graph.nodes.remove(statement);
+                graph.ids.forget(statement);
+            }
+        }
+        for (var statement : body.statements()) {
+            if (!(statement instanceof Body.Kept)) create(graph, Kind.STATEMENT, method, "", null);
+        }
         for (var use : body.uses()) {
             graph.uses.add(new MemoryGraph.Use(method, use.element(), graph.nodes.get(use.element()).name(), use.mode(), use.receiver()));
         }

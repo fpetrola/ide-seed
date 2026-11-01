@@ -124,9 +124,9 @@ public final class Workspace {
         return session.preview(refactoring, args);
     }
 
-    /** The innermost element whose declaration a place of a file is inside. */
+    /** The innermost member, parameter or type a place of a file is inside: a place in a body is inside its method. */
     public Optional<Element> inside(String path, int line, int column) {
-        return project.inside(path, line, column).map(id -> project.program().element(id));
+        return project.inside(path, line, column).map(id -> project.program().memberOf(id));
     }
 
     /** What a place of a file is inside, innermost first, as an editor widens a selection. */

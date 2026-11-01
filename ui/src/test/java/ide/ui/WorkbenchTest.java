@@ -102,6 +102,30 @@ class WorkbenchTest {
     }
 
     @Test
+    void inABodyTheMethodIsWhatTheCaretIsInside() throws IOException {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/C.java"), """
+                package a;
+
+                class C {
+                    int twice(int n) {
+                        int sum = n + n;
+                        return sum * 2;
+                    }
+                }
+                """);
+        var workbench = workbench();
+        workbench.open("a/C.java", 5, 23); // int sum = n + n: on the second n
+        workbench.select(5, 9, 5, 24);
+        dialogs.fill(Map.of());
+
+        workbench.act("extract-method");
+
+        assertThat(dialogs.filled.getFirst().fields()).extracting(f -> f.param().name() + "=" + f.value())
+                .containsExactly("method=a.C#twice(int)", "lines=5-5", "name=extracted");
+    }
+
+    @Test
     void theInlineKeyOnALocalPutsItsValueWhereItIsRead() throws IOException {
         Files.createDirectories(root.resolve("a"));
         Files.writeString(root.resolve("a/C.java"), """

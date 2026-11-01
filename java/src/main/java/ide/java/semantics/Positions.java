@@ -51,7 +51,7 @@ public final class Positions {
                 .map(Map.Entry::getKey).findFirst();
     }
 
-    /** The innermost element whose declaration a place of a file is inside: a parameter, a method, a field, a type. */
+    /** The innermost element whose declaration a place of a file is inside: a statement, a local, a method, a type... */
     public static Optional<ElementId> inside(Reader.Reading reading, String path, int line, int column) {
         var position = new Position(line, column);
         return reading.declarations().entrySet().stream()

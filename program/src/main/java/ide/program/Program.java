@@ -443,6 +443,13 @@ public final class Program {
         return new Program(elements.values(), kept, unresolved);
     }
 
+    /** What an element is part of as the program's members see it: a statement's or a local's method; any other, itself. */
+    public Element memberOf(ElementId id) {
+        var element = element(id);
+        while (element.kind().inBody()) element = element(element.parent());
+        return element;
+    }
+
     /** Whether {@code element} is {@code container} or is inside it. */
     public boolean within(ElementId element, ElementId container) {
         if (element.equals(container)) return true; // also when this program does not know it: one a change made

@@ -156,7 +156,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
 ### 5.1 `core`: kit de capacidades y utilidades
 
 - **Qué es.** `Capability`, `Param`, `CapabilityRegistry` (esquema más invocación con respuesta JSON), `Json`,
-  `EventLog` (JSONL append-only), `TextDiff`. Sin ningún dominio del IDE.
+  `EventLog` (JSONL append-only), `TextDiff` (también lo que dos secuencias comparten en orden, `common`). Sin ningún
+  dominio del IDE.
 - **Prueba de autonomía.** Ya la pasa: se usa con lambdas en un test.
 - **Estado actual.** Desde el ítem 6 de la etapa 2, `Json` también lee (la CLI escribe las respuestas como texto,
   MCP lee sus pedidos), y `Param` tiene el tipo `map` (nombres a valores). `JsonTest` es el primer test de `core`.
@@ -169,7 +170,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   refactoring sobre otro lenguaje.
 - **Dominio.**
   - `Element`: `id`, `kind`, `name`, `parent`, `facts`. `Kind`: PACKAGE, CLASS, INTERFACE, ENUM, FIELD,
-    CONSTRUCTOR, METHOD, PARAM, LOCAL (una variable de un método o constructor, hija de él; desde la etapa 3).
+    CONSTRUCTOR, METHOD, PARAM, y desde la etapa 3 lo que hace un cuerpo (`inBody`): LOCAL (una variable de un método
+    o constructor, hija de él) y STATEMENT (una sentencia del primer nivel de un cuerpo, hija de su método).
   - `Reference`: `site`, `target`, `mode`, `name` (cómo se escribió) y `receiver`: sobre qué se hace el uso, el
     objeto mismo (escrito solo, o con `this` o `super`), un tipo, u otro objeto; un vínculo, un tipo usado, un
     objeto nuevo o un local, sobre nada. Lo agregó la regla de estáticos: un método estático usa lo que necesita un objeto solo a
@@ -191,13 +193,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `Address`: dirección tipada. Paquete por nombre; tipo por nombre calificado; miembro por id del dueño, nombre y
     claves de tipo de los parámetros (el id si el tipo es del workspace, el nombre si no); parámetro por id del
     miembro y nombre; local por id de su método o constructor, nombre y cuál de ese nombre es, en el orden en que se
-    escriben. Se renderiza como `a.B#m(int)/x` para humanos y tests, y el segundo `i` de dos bloques hermanos como
-    `a.B#m(int)/i'2`. Consecuencia buscada: un miembro no cambia de dirección cuando su dueño o un tipo de parámetro
+    escriben; sentencia por id de su método y su lugar en el cuerpo. Se renderiza como `a.B#m(int)/x` para humanos y
+    tests, el segundo `i` de dos bloques hermanos como `a.B#m(int)/i'2`, y la primera sentencia como `a.B#m(int)[1]`. Consecuencia buscada: un miembro no cambia de dirección cuando su dueño o un tipo de parámetro
     se renombra o se mueve.
   - `Identity`: tabla dirección → id. `of(address)` crea si no existe; `rebind(type, newType)` para rename y move de
     tipos; `placeLocals(método, locales)`: los locales de un método, en el orden en que se escriben y con sus
     nombres, toman su número entre los de su nombre todos a la vez (uno que se mudó o se renombró, o los que se corren
-    porque otro de su nombre vino o se fue); `forget`. Con instantánea. Es la única operación de identidad: el parser nunca decide quién es quién.
+    porque otro de su nombre vino o se fue); `placeStatements(método, sentencias)`, lo mismo para las sentencias, con
+    lugares libres para las que la lectura dé nuevas; `forget`. Con instantánea. Es la única operación de identidad: el parser nunca decide quién es quién.
   - `Program`: el grafo inmutable, con índices por padre, por destino y por dirección. Consultas: children,
     members, referencesTo, referencesFrom, supertypes, superclassChain, isSubclass, overriddenAll, family,
     enclosingType, topLevel, byAddress, signature.
@@ -315,7 +318,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
   La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. La obligación 13 (etapa 3,
   fase 1): un local es un elemento de su método, con su tipo, y cada uso suyo es una referencia desde el método,
-  sin receptor. El ítem 5 suma al fixture una
+  sin receptor. La obligación 14 (fase 2): las sentencias de un cuerpo son elementos de su método, en orden; un
+  cuerpo que conserva lo que el método hace agrega sentencias después de las suyas, que siguen siendo quienes eran, y
+  uno que lo reemplaza trae sentencias nuevas. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
@@ -396,7 +401,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   nombre, que el verificador no ve: un local al que se le da otro valor después, un valor con efectos o de otro tipo
   que el local, uno que se leería después de que cambie lo que lee (una escritura en el medio, una llamada si lee un
   campo, la vuelta siguiente de un ciclo), y una lectura que pasa más tarde, en una lambda o una clase. Un local que
-  nada lee se borra con sus líneas, si su valor no tiene efectos.
+  nada lee se borra con sus líneas, si su valor no tiene efectos. Desde la fase 2 lee las sentencias del primer nivel
+  de cada cuerpo; los primitivos que cambian esa lista les conservan el id, y una edición a mano también, por orden y
+  texto.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
@@ -1276,6 +1283,22 @@ que esto no escala solo:
      sentencia (pregunta abierta 2); que los usos de un parámetro sean referencias.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
    sentencias, y `Extract` por lista de sentencias. Lo que gana: el fragmento de extract-method deja de ser opaco.
+
+   **Ciclo 1 hecho el 2026-11-01**: las sentencias son elementos, en los dos drivers (obligación 14).
+   - Una sentencia es una del primer nivel de un cuerpo, hija de su método o constructor, con dirección por dueño y
+     lugar (`a.A#total()[2]`) y sin nombre.
+   - Conservan su id en los primitivos que cambian la lista de un cuerpo: extract las lleva al método nuevo y la llamada
+     ocupa su lugar; borrar un local se lleva su sentencia; un cuerpo escrito de nuevo, o un método que se vuelve
+     abstracto, olvida las suyas (y sus locales). Después de una edición a mano, por orden y texto.
+   - El `site` todavía es el miembro; la sentencia como `site` es el ciclo 2.
+   - `inside` de la proyección responde lo más interno, una sentencia o un local también, como pide la obligación 9.
+     Lo que preguntan los adaptadores (`inside` de la sesión) y las reglas (`inside(path, line, column)` de los
+     scripts) es el miembro (`Program.memberOf`). Eso ya pasaba con los locales desde la fase 1 sin que un test lo
+     viera: con el cursor en la declaración de un local, `inside` respondía el local.
+   - Costo, medido con `PerformanceProbe` en el sample de 100 archivos: la carga, dentro del ruido (186 a 330 ms
+     con y sin sentencias); el segundo rename, de 48 a 54 ms sin sentencias a 54 a 94 ms con ellas. Crece lo que es
+     proporcional a todos los elementos: armar el `Program` en cada lectura, el diff y las vistas. Hay que mirarlo, y
+     también la memoria en un proyecto grande, donde las sentencias son cientos de miles de elementos más.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
 4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
    (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
@@ -1290,13 +1313,19 @@ que esto no escala solo:
 - Ahora sí se aceptan `this.limit = limit * 2` y cualquier otra sentencia que no se pueda decir: se mueve entera,
   opaca, en vez de rechazarse.
 
-**Preguntas abiertas para decidir antes de la fase 1.**
+**Preguntas abiertas para decidir antes de la fase 1.** Las tres primeras se decidieron el 2026-11-01, al empezar la
+fase 2, con lo propuesto.
 
 1. La identidad de una sentencia después de una edición a mano: ¿orden y texto (propuesto) o contenido normalizado?
+   *Decidida: orden y texto.* Lo que los dos cuerpos dicen en el mismo orden, lo más que se pueda, conserva sus ids
+   (`Reconciliation.statements`); una sentencia cuyo texto cambió es nueva.
 2. El `site` de una referencia: ¿la sentencia (propuesto), o el miembro más un campo nuevo con la sentencia? Lo
-   segundo es menos invasivo, pero deja dos maneras de decir dónde está un uso.
+   segundo es menos invasivo, pero deja dos maneras de decir dónde está un uso. *Decidida: la sentencia*, y el
+   verificador compara un uso por el miembro que lo hace (`Program.memberOf`). Así un cuerpo dicho sigue declarando
+   sus usos sobre el método, y lo que mira quién hace un uso (las reglas de estáticos, la navegación) pregunta por el
+   miembro.
 3. Los bloques anidados (`if`, `for`, `try`): ¿sentencias hijas de su sentencia desde el principio, o opacos hasta
-   que un refactoring los pida (propuesto)?
+   que un refactoring los pida (propuesto)? *Decidida: opacos*; una sentencia es una del primer nivel del cuerpo.
 4. Las expresiones siguen opacas (propuesto). Extract Variable desde una expresión usa la selección de la persona,
    que el driver convierte en un local y una sentencia.
 5. Qué motor evalúa las reglas: resuelta en la decisión 33. Uno propio y sencillo, con la semántica de Datalog,

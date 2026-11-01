@@ -331,7 +331,8 @@ class KnowledgeTest {
         var measure = p.find("a.U#measure(List<String>,int)").orElseThrow();
         assertThat(measure.fact(Fact.TYPE)).isEqualTo("long");
         assertThat(measure.fact(Fact.BODY)).isEqualTo("return default");
-        assertThat(p.children(measure.id())).extracting(e -> e.name() + " " + e.fact(Fact.TYPE)).containsExactly("names List<String>", "i int");
+        assertThat(p.children(measure.id())).filteredOn(e -> e.kind() == Kind.PARAM).extracting(e -> e.name() + " " + e.fact(Fact.TYPE))
+                .containsExactly("names List<String>", "i int");
     }
 
     /** Sealing a field needs it visible: either it is already, or showing it comes first. */

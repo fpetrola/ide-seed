@@ -68,15 +68,22 @@ final class DeleteElement {
         var range = statement.getRange().orElseThrow();
         var gone = before.referencesFrom(local.parent()).stream().filter(r -> c.use(r.id()).getRange().filter(range::contains).isPresent())
                 .map(r -> new Change.Dropped(r.site(), r.target())).toList();
+        CallableDeclaration<?> callable = variable.findAncestor(CallableDeclaration.class).orElseThrow();
         var others = new LinkedHashMap<ElementId, String>();
-        for (var other : Bodies.locals(variable.findAncestor(CallableDeclaration.class).orElseThrow())) {
+        for (var other : Bodies.locals(callable)) {
             if (other != variable) others.put(c.reader().local(other), other.getNameAsString());
         }
+        var place = Bodies.place(Bodies.statements(callable), statement); // a statement of the body, or inside one
+        var own = before.children(local.parent()).stream().filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList();
         var edits = new EditSet();
         Members.remove(edits, unit, statement);
         c.sources().apply(edits);
         c.ids().forget(local.id());
         c.ids().placeLocals(local.parent(), others);
+        if (place >= 0) {
+            c.ids().forget(own.get(place));
+            c.ids().placeStatements(local.parent(), own.stream().filter(s -> !s.equals(own.get(place))).toList());
+        }
         return gone;
     }
 

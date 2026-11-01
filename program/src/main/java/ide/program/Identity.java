@@ -92,12 +92,28 @@ public final class Identity {
         var seen = new HashMap<String, Integer>();
         var placed = new HashMap<ElementId, Address>();
         written.forEach((local, name) -> placed.put(local, new Address.Local(callable, name, seen.merge(name, 1, Integer::sum) - 1)));
+        place(placed);
+    }
+
+    /**
+     * The statements of {@code callable} are these, in order: each takes its place, all at once. A null is a statement
+     * no id is known for yet, whose place stays free for the reading to give one. A statement may come from another
+     * callable; one that is not here keeps its address.
+     */
+    public void placeStatements(ElementId callable, List<ElementId> written) {
+        var placed = new HashMap<ElementId, Address>();
+        for (var i = 0; i < written.size(); i++) if (written.get(i) != null) placed.put(written.get(i), new Address.Statement(callable, i));
+        place(placed);
+    }
+
+    /** Each id at its address, all at once, so that two may trade places; no other element may hold one of them. */
+    private void place(Map<ElementId, Address> placed) {
         for (var address : placed.values()) {
             var holder = ids.get(address);
             if (holder != null && !placed.containsKey(holder)) throw new IllegalStateException(render(address) + " already exists");
         }
         placed.keySet().forEach(this::remove);
-        placed.forEach((local, address) -> put(address, local));
+        placed.forEach((element, address) -> put(address, element));
     }
 
     /** A callable's parameter list changed: same owner and name, new keys. */
@@ -142,7 +158,10 @@ public final class Identity {
         gone.forEach(this::remove);
     }
 
-    /** The address as humans read it: {@code a}, {@code a.B}, {@code a.B#x}, {@code a.B#m(int,Money)}, {@code a.B#m(int)/p}. */
+    /**
+     * The address as humans read it: {@code a}, {@code a.B}, {@code a.B#x}, {@code a.B#m(int,Money)}, {@code a.B#m(int)/p},
+     * and the first statement of a body {@code a.B#m(int)[1]}.
+     */
     public String render(Address address) {
         return switch (address) {
             case Address.Package p -> p.name();
@@ -152,6 +171,7 @@ public final class Identity {
                     + c.keys().stream().map(this::renderKey).collect(Collectors.joining(",", "(", ")"));
             case Address.Param p -> render(address(p.owner())) + "/" + p.name();
             case Address.Local l -> render(address(l.owner())) + "/" + l.name() + (l.ordinal() == 0 ? "" : "'" + (l.ordinal() + 1));
+            case Address.Statement s -> render(address(s.owner())) + "[" + (s.index() + 1) + "]";
         };
     }
 

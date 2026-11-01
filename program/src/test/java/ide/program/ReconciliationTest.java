@@ -28,6 +28,7 @@ class ReconciliationTest {
             case METHOD, CONSTRUCTOR -> new Address.Callable(parent, kind == Kind.CONSTRUCTOR ? "new" : name, List.of());
             case PARAM -> new Address.Param(parent, name);
             case LOCAL -> new Address.Local(parent, name, 0);
+            case STATEMENT -> new Address.Statement(parent, 0);
         };
         elements.add(new Element(element, kind, name, parent, address, id, facts));
         return element;
@@ -47,6 +48,18 @@ class ReconciliationTest {
 
     private static Map<Fact, String> body(String body) {
         return Map.of(Fact.BODY, body);
+    }
+
+    @Test
+    void statementsArePairedByTheirOrderAndTextAndOneThatChangedIsNew() {
+        var one = new ElementId("statement:1");
+        var two = new ElementId("statement:2");
+        var three = new ElementId("statement:3");
+
+        var paired = Reconciliation.statements(List.of(one, two, three), List.of("a++;", "b++;", "return a;"),
+                List.of("log();", "a++;", "b += 2;", "return a;"));
+
+        assertThat(paired).containsExactly(null, one, null, three);
     }
 
     @Test

@@ -271,6 +271,7 @@ public final class Reader {
                 declarations.put(id, new Decl(unit, constructor));
                 addParams(elements, declarations, unit, constructor, id);
                 addLocals(elements, declarations, unit, constructor, id);
+                addStatements(elements, declarations, unit, constructor, id);
             }
             for (var method : type.getMethods()) {
                 var facts = new HashMap<>(attributes(method));
@@ -287,6 +288,7 @@ public final class Reader {
                 declarations.put(id, new Decl(unit, method));
                 addParams(elements, declarations, unit, method, id);
                 addLocals(elements, declarations, unit, method, id);
+                addStatements(elements, declarations, unit, method, id);
             }
         }
         return new Declared(Shape.of(unit), elements, declarations);
@@ -479,6 +481,16 @@ public final class Reader {
             var id = add(elements, new Address.Local(owner, name, ordinal), Kind.LOCAL, name, owner,
                     Map.of(Fact.TYPE, local.getType().asString()));
             declarations.put(id, new Decl(unit, local));
+        }
+    }
+
+    /** The statements of a body, in order: what one holds, a block too, is part of it. A statement has no name. */
+    private void addStatements(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, CallableDeclaration<?> callable,
+                               ElementId owner) {
+        var statements = Bodies.statements(callable);
+        for (var i = 0; i < statements.size(); i++) {
+            var id = add(elements, new Address.Statement(owner, i), Kind.STATEMENT, "", owner, Map.of());
+            declarations.put(id, new Decl(unit, statements.get(i)));
         }
     }
 

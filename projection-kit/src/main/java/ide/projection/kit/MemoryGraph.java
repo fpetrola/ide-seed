@@ -125,10 +125,10 @@ final class MemoryGraph {
     /** Fills this (empty) graph with {@code program} under new ids. */
     void load(Program program) {
         var mapped = new HashMap<ElementId, ElementId>();
-        // packages and types first, since callables key their parameter types by type id; parameters last
+        // packages and types first, since callables key their parameter types by type id; what callables own last
         for (var pass : List.of(0, 1, 2)) {
             for (var e : program.elements()) {
-                var rank = e.kind() == Kind.PACKAGE || e.kind().isType() ? 0 : e.kind() == Kind.PARAM ? 2 : 1;
+                var rank = e.kind() == Kind.PACKAGE || e.kind().isType() ? 0 : e.kind() == Kind.PARAM || e.kind().inBody() ? 2 : 1;
                 if (rank != pass) continue;
                 var address = switch (e.address()) {
                     case Address.Package a -> a;
@@ -138,6 +138,7 @@ final class MemoryGraph {
                             c.keys().stream().map(key -> remap(key, mapped)).toList());
                     case Address.Param a -> new Address.Param(mapped.get(a.owner()), a.name());
                     case Address.Local a -> new Address.Local(mapped.get(a.owner()), a.name(), a.ordinal());
+                    case Address.Statement a -> new Address.Statement(mapped.get(a.owner()), a.index());
                 };
                 mapped.put(e.id(), ids.of(address, e.kind()));
             }
@@ -173,6 +174,11 @@ final class MemoryGraph {
         var facts = kind == Kind.PACKAGE ? Map.of(Fact.LIBRARY, "true") : Map.of(Fact.LIBRARY, "true", Fact.VISIBILITY, "public");
         add(id, new Node(kind, name, parent, facts));
         return id;
+    }
+
+    /** The statements of a callable's body, in order. */
+    List<ElementId> statements(ElementId callable) {
+        return order.stream().filter(id -> nodes.get(id).kind() == Kind.STATEMENT && callable.equals(nodes.get(id).parent())).toList();
     }
 
     /** A use made from {@code site}: of a member, on the object itself; of a local, on nothing. */
@@ -282,6 +288,7 @@ final class MemoryGraph {
         return switch (kind) {
             case PACKAGE -> Map.of();
             case PARAM, LOCAL -> Map.of(Fact.TYPE, "Object");
+            case STATEMENT -> Map.of();
             case CLASS, INTERFACE, ENUM -> modifiers("public", "false");
             case FIELD -> typed(modifiers("package", "false"), "Object");
             case METHOD, CONSTRUCTOR -> typed(modifiers("package", "false"), "void");
