@@ -31,9 +31,10 @@ public final class JavacCheck {
         var files = sources.entrySet().stream().map(e -> source(e.getKey(), e.getValue())).toList();
         var fileManager = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8);
         try {
-            // always the project's classpath, even none: by default javac would read the IDE's own
+            // always the project's classpath, even none: by default javac would read the IDE's own; and every error,
+            // the flow's too (a final left unset) when some name does not resolve
             fileManager.setLocationFromPaths(StandardLocation.CLASS_PATH, classpath.stream().filter(Files::exists).toList());
-            var task = (JavacTask) compiler.getTask(null, fileManager, collector, List.of("-proc:none", "-Xlint:none"), null, files);
+            var task = (JavacTask) compiler.getTask(null, fileManager, collector, List.of("-proc:none", "-Xlint:none", "-XDshould-stop.ifError=FLOW"), null, files);
             task.analyze();
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
