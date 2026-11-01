@@ -77,6 +77,31 @@ class WorkbenchTest {
     }
 
     @Test
+    void aLocalIsRenamedWhereItIsWithItsUses() throws IOException {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/C.java"), """
+                package a;
+
+                class C {
+                    int sum(int[] values) {
+                        int total = 0;
+                        for (int v : values) total += v;
+                        return total;
+                    }
+                }
+                """);
+        var workbench = workbench();
+        workbench.open("a/C.java", 5, 13); // int total = 0: on total
+        dialogs.line("acc");
+
+        workbench.act("rename");
+
+        assertThat(dialogs.asked).containsExactly("Rename a.C#sum(int[])/total [total]");
+        assertThat(workbench.renaming).isEqualTo(3);
+        assertThat(workbench.text("a/C.java")).contains("int acc = 0;", "for (int v : values) acc += v;", "return acc;");
+    }
+
+    @Test
     void anAppliedEditShowsItsProblemsAndAQuickFixTakesThemAway() throws IOException {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 16);

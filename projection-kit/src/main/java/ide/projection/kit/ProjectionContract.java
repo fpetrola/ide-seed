@@ -82,6 +82,7 @@ public abstract class ProjectionContract {
     protected List<Scenario> scenarios() {
         return List.of(
                 new Scenario("rename a field", p -> new Primitive.Rename(id(p, "a.A#x"), "y")),
+                new Scenario("rename a local", p -> new Primitive.Rename(id(p, "a.A#total()/sum"), "s")),
                 new Scenario("move a method", p -> new Primitive.Move(id(p, "a.A#k(int)"), id(p, "a.B"), null)),
                 new Scenario("set a visibility", p -> new Primitive.Set(id(p, "a.A#k(int)"), "visibility", "public")),
                 new Scenario("link a declared type", p -> new Primitive.Link(id(p, "b.C#a"), Mode.DECLARED, id(p, "a.B"))),

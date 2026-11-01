@@ -22,7 +22,7 @@ import ide.projection.PrimitiveRejected;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.SequencedMap;
 import java.util.stream.Collectors;
 
 /**
@@ -145,23 +145,20 @@ final class ExtractFragment {
     /**
      * What an extraction does to the method's locals. Those declared in the fragment move into the new method, all but
      * the one it answers, which stays where the call declares it again; the fragment's uses of the others are gone.
-     * {@code moving} and {@code staying} say which of its name each is, in the new method and in this one.
+     * {@code moving} and {@code staying} are the locals of the new method and of this one, in the order they are written.
      */
-    private record Locals(Map<ElementId, Integer> moving, Map<ElementId, Integer> staying, List<Change.Expectation> gone) {
+    private record Locals(SequencedMap<ElementId, String> moving, SequencedMap<ElementId, String> staying,
+                          List<Change.Expectation> gone) {
 
         /** {@code statements} are the fragment's own (none for an expression), {@code answered} the output it declares. */
         static Locals of(Context c, Program before, ElementId source, MethodDeclaration method,
                          Range fragment, List<Statement> statements, String answered) {
-            var all = Bodies.locals(method);
-            var inside = all.stream().filter(v -> v.getRange().filter(fragment::contains).isPresent()).toList();
-            var moving = new LinkedHashMap<ElementId, Integer>();
-            var left = new ArrayList<VariableDeclarator>();
-            for (var local : all) {
-                if (inside.stream().noneMatch(v -> v == local) || answers(local, statements, answered)) left.add(local);
-                else moving.put(c.reader().local(local), Bodies.ordinal(inside, local));
+            var moving = new LinkedHashMap<ElementId, String>();
+            var staying = new LinkedHashMap<ElementId, String>();
+            for (var local : Bodies.locals(method)) {
+                var inside = local.getRange().filter(fragment::contains).isPresent();
+                (inside && !answers(local, statements, answered) ? moving : staying).put(c.reader().local(local), local.getNameAsString());
             }
-            var staying = new LinkedHashMap<ElementId, Integer>();
-            for (var local : left) staying.put(c.reader().local(local), Bodies.ordinal(left, local));
             var gone = new ArrayList<Change.Expectation>();
             for (var use : before.referencesFrom(source)) {
                 if (before.element(use.target()).kind() == Kind.LOCAL && !moving.containsKey(use.target())
@@ -178,10 +175,13 @@ final class ExtractFragment {
             return local.getNameAsString().equals(answered) && statements.stream().anyMatch(s -> s == statement);
         }
 
-        /** Identity follows, before anything is read again: those that went first, so that those left close ranks. */
+        /**
+         * Identity follows, before anything is read again: those that went first, so that those left close ranks. The
+         * local the new method answers is the last of its name there, and new.
+         */
         void move(Identity ids, ElementId source, ElementId method) {
-            moving.forEach((local, ordinal) -> ids.move(local, method, ordinal));
-            staying.forEach((local, ordinal) -> ids.move(local, source, ordinal));
+            ids.placeLocals(method, moving);
+            ids.placeLocals(source, staying);
         }
     }
 }

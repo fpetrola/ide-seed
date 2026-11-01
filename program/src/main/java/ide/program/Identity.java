@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -82,10 +83,21 @@ public final class Identity {
         rebind(address(id), address(id).withOwner(owner));
     }
 
-    /** A local is now the {@code ordinal}th of its name in {@code owner} (0 the first): it moved, or one before it went. */
-    public void move(ElementId local, ElementId owner, int ordinal) {
-        var address = (Address.Local) address(local);
-        rebind(address, new Address.Local(owner, address.name(), ordinal));
+    /**
+     * The locals of {@code callable} are these, in the order they are written, with these names: each is the next of
+     * its name, and all take their places at once, so that two may trade them. A local may come from another callable;
+     * one that is not here keeps its address.
+     */
+    public void placeLocals(ElementId callable, SequencedMap<ElementId, String> written) {
+        var seen = new HashMap<String, Integer>();
+        var placed = new HashMap<ElementId, Address>();
+        written.forEach((local, name) -> placed.put(local, new Address.Local(callable, name, seen.merge(name, 1, Integer::sum) - 1)));
+        for (var address : placed.values()) {
+            var holder = ids.get(address);
+            if (holder != null && !placed.containsKey(holder)) throw new IllegalStateException(render(address) + " already exists");
+        }
+        placed.keySet().forEach(this::remove);
+        placed.forEach((local, address) -> put(address, local));
     }
 
     /** A callable's parameter list changed: same owner and name, new keys. */

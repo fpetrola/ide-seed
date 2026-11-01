@@ -10,6 +10,76 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RenameTest {
 
+    private static final String INVOICE = """
+            package a;
+
+            class Invoice {
+                double rate;
+
+                double total(double net, int qty) {
+                    double gross = net * qty;
+                    double tax = gross * rate;
+                    return gross + tax;
+                }
+            }
+            """;
+
+    @Test
+    void renamesALocalAndItsUses() {
+        var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
+
+        var result = ws.invoke("rename", Map.of("element", "a.Invoice#total(double,int)/tax", "name", "vat"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Invoice.java")).contains("double vat = gross * rate;", "return gross + vat;");
+    }
+
+    @Test
+    void aLocalNamedLikeAFieldItsMethodReadsAfterwardsWouldHideIt() {
+        var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
+
+        var result = ws.invoke("rename", Map.of("element", "a.Invoice#total(double,int)/gross", "name", "rate"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code).contains("binding.rebound");
+        assertThat(ws.source("a/Invoice.java")).isEqualTo(INVOICE);
+    }
+
+    @Test
+    void aLocalTakesTheNameOfOneInABlockBesideIt() {
+        var ws = Workspace.of(Map.of("a/Counts.java", """
+                package a;
+
+                class Counts {
+                    int both(int[] a, int[] b) {
+                        int n = 0;
+                        for (int j = 0; j < a.length; j++) n += a[j];
+                        for (int i = 0; i < b.length; i++) n += b[i];
+                        return n;
+                    }
+                }
+                """));
+
+        var result = ws.invoke("rename", Map.of("element", "a.Counts#both(int[],int[])/j", "name", "i"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Counts.java")).contains("for (int i = 0; i < a.length; i++) n += a[i];",
+                "for (int i = 0; i < b.length; i++) n += b[i];");
+    }
+
+    @Test
+    void aLocalCannotTakeTheNameOfAnotherInScope() {
+        var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
+
+        var result = ws.invoke("rename", Map.of("element", "a.Invoice#total(double,int)/tax", "name", "gross"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code).contains("binding.rebound");
+        assertThat(ws.source("a/Invoice.java")).isEqualTo(INVOICE);
+    }
+
     @Test
     void renamesMethodAndAllItsCalls() {
         var ws = Workspace.of(Map.of(

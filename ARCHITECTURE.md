@@ -195,8 +195,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     `a.B#m(int)/i'2`. Consecuencia buscada: un miembro no cambia de dirección cuando su dueño o un tipo de parámetro
     se renombra o se mueve.
   - `Identity`: tabla dirección → id. `of(address)` crea si no existe; `rebind(type, newType)` para rename y move de
-    tipos; `move(local, dueño, cuál)` cuando un local se va a otro método, o cuando se fue uno anterior de su nombre;
-    `forget`. Con instantánea. Es la única operación de identidad: el parser nunca decide quién es quién.
+    tipos; `placeLocals(método, locales)`: los locales de un método, en el orden en que se escriben y con sus
+    nombres, toman su número entre los de su nombre todos a la vez (uno que se mudó o se renombró, o los que se corren
+    porque otro de su nombre vino o se fue); `forget`. Con instantánea. Es la única operación de identidad: el parser nunca decide quién es quién.
   - `Program`: el grafo inmutable, con índices por padre, por destino y por dirección. Consultas: children,
     members, referencesTo, referencesFrom, supertypes, superclassChain, isSubclass, overriddenAll, family,
     enclosingType, topLevel, byAddress, signature.
@@ -387,14 +388,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   de su método. Extract dice qué usos de locales se van: los que en el método nuevo son parámetros, y los del local
   que responde, que en el método nuevo es otro. Los locales declarados solo en el fragmento se mudan con su
   identidad, y los que quedan se numeran de nuevo. El flujo de extract distingue dos locales del mismo nombre por lo
-  que liga cada uso: antes, extraer un `for` se rechazaba si un `for` siguiente reusaba su `i`.
+  que liga cada uso: antes, extraer un `for` se rechazaba si un `for` siguiente reusaba su `i`. Un local se renombra
+  con sus usos, y puede tomar el nombre de uno de un bloque hermano: los locales del método se numeran de nuevo.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
   cuerpo (`binding.rebound`).
   Un miembro llevado a mano de un tipo a otro, o de un archivo a otro, no se reconoce: cada edición es de
   un archivo y la reconciliación empareja dentro de un mismo padre. Renombrar un parámetro no renombra sus usos en el
-  cuerpo, porque esos usos no son referencias del grafo. Un local todavía no se renombra (el ciclo 2 de la fase 1).
+  cuerpo, porque esos usos no son referencias del grafo.
 
 ### 5.5 `engine`: motor de transacciones verificadas
 
@@ -1242,6 +1244,14 @@ que esto no escala solo:
      dice, y lleva la identidad de los locales que se mudan con el fragmento.
    - Costo: nada que se mida. En el sample de 100 archivos, la carga pasó de 172 a 185 ms y el segundo rename de 47
      a 46 ms (`PerformanceProbe`, ruido incluido).
+
+   **Ciclo 2 hecho el 2026-11-01**: el rename de un local, verificado, también en el lugar desde la UI (Shift+F6).
+   - La captura no necesitó código: un local que pasa a llamarse como un campo que el método lee después, o como
+     otro local en alcance, hace que esos usos liguen otra cosa, y el verificador lo rechaza como `binding.rebound`.
+   - Lo único nuevo fue la numeración. Tomar el nombre de un local de un bloque hermano es válido en Java, y corre
+     los números de los dos nombres. `Identity.placeLocals` ubica todos los locales de un método a la vez, y extract
+     usa lo mismo.
+   - En la proyección en memoria no hay bloques: un local que toma el nombre de otro de su método es un duplicado.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
    sentencias, y `Extract` por lista de sentencias. Lo que gana: el fragmento de extract-method deja de ser opaco.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.

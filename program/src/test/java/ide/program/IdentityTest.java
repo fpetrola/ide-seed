@@ -2,7 +2,9 @@ package ide.program;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,23 +52,28 @@ class IdentityTest {
     }
 
     @Test
-    void aLocalMovesAsWhichOfItsNameItIsWhereItGoes() {
+    void localsTakeTheirPlacesAmongThoseOfTheirNameAllAtOnce() {
         var ids = new Identity();
         var a = ids.of(new Address.Type("a.A"), Kind.CLASS);
         var m = ids.of(new Address.Callable(a, "m", List.of()), Kind.METHOD);
         var n = ids.of(new Address.Callable(a, "n", List.of()), Kind.METHOD);
-        var first = ids.of(new Address.Local(m, "i", 0), Kind.LOCAL);
-        var second = ids.of(new Address.Local(m, "i", 1), Kind.LOCAL);
-        var third = ids.of(new Address.Local(m, "i", 2), Kind.LOCAL);
+        var i = ids.of(new Address.Local(m, "i", 0), Kind.LOCAL);
+        var j = ids.of(new Address.Local(m, "j", 0), Kind.LOCAL);
+        var k = ids.of(new Address.Local(m, "k", 0), Kind.LOCAL);
+        var later = ids.of(new Address.Local(m, "i", 1), Kind.LOCAL);
 
-        ids.move(second, n, 0);
-        ids.move(third, m, 1);
+        ids.placeLocals(n, new LinkedHashMap<>(Map.of(k, "k"))); // k moved into n
+        var written = new LinkedHashMap<ElementId, String>();
+        written.put(i, "i");
+        written.put(j, "i"); // j renamed i, between the two that were
+        written.put(later, "i");
+        ids.placeLocals(m, written);
 
-        assertThat(ids.get(new Address.Local(m, "i", 0))).isEqualTo(first);
-        assertThat(ids.get(new Address.Local(n, "i", 0))).isEqualTo(second);
-        assertThat(ids.get(new Address.Local(m, "i", 1))).isEqualTo(third);
-        assertThat(ids.has(new Address.Local(m, "i", 2))).isFalse();
-        assertThat(ids.render(ids.address(third))).isEqualTo("a.A#m()/i'2");
+        assertThat(ids.get(new Address.Local(n, "k", 0))).isEqualTo(k);
+        assertThat(ids.get(new Address.Local(m, "i", 1))).isEqualTo(j);
+        assertThat(ids.get(new Address.Local(m, "i", 2))).isEqualTo(later);
+        assertThat(ids.has(new Address.Local(m, "j", 0))).isFalse();
+        assertThat(ids.render(ids.address(later))).isEqualTo("a.A#m()/i'3");
     }
 
     @Test
