@@ -20,6 +20,7 @@
         <module>engine</module>
         <module>refactoring</module>
         <module>knowledge</module>
+        <module>maven</module>
         <module>session</module>
         <module>cli</module>
         <module>ui</module>
@@ -74,6 +75,11 @@
             <dependency>
                 <groupId>ide</groupId>
                 <artifactId>ide-knowledge</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ide</groupId>
+                <artifactId>ide-maven</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
