@@ -391,8 +391,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     `attempt(label, body)` corre parte del cambio como intento: si lo rechazan o no verifica, se deshace y queda en
     el rastro como descartado. `commit()` verifica y repara; si no llega a un punto fijo, deshace todo.
   - `View`: `check(baseline, after, rules)` devuelve violaciones. Vistas: Binding (perdida, religada, sin resolver),
-    Access, Dispatch (overrides perdidos o nuevos), Compiler (solo si el código compilaba antes; corre última porque
-    es la más cara). Futuras: Projection (direcciones duplicadas), Init.
+    Access, Dispatch (overrides perdidos o nuevos), Compiler (todo error que no estaba antes, aunque el código no
+    compilara: mismo archivo, código y mensaje, cualquier línea, tantos como había; corre última porque es la más
+    cara; decisión 30). Futuras: Projection (direcciones duplicadas), Init.
   - `Verifier`: una lista de vistas más la exención de lo que ya estaba roto antes de la transacción.
   - `Violation`: código estable `vista.tipo`, site, target, hechos para los remedios.
   - `Remedy` y `QuickFix`: proponen `Plan`s para una violación o un diagnóstico, sobre la proyección, que trae sus
@@ -718,6 +719,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 27 | Lo que necesita un uso   | qué tipo espera un uso sin resolver y qué pasa una llamada se le pregunta a la proyección por un uso (`needs`, obligación 10), no se guarda en el grafo: solo lo usa un fix, y así se prueba sin lenguaje | tomada, 2026-11-01 |
 | 28 | Compilador               | el de Eclipse (ECJ) en vez de javac, incremental como su builder: compila lo que cambió y lo que nombra un tipo cuya forma cambió (class file con cambios estructurales, o que vino o se fue), leyendo lo demás de los class files anteriores. Da errores y warnings con línea, columna y largo; un warning no es una violación. Los códigos son `ecj.<problema>` | tomada, 2026-11-01 |
 | 29 | Lo fijado                | un `Set` fija el atributo que da (visibilidad, static, abstract, final, tipo), no solo la visibilidad: una reparación que lo deshace se descarta. Antes make-final sobre un campo sin inicializar se "aplicaba" y el reparador lo quitaba | tomada, 2026-11-01 |
+| 30 | Errores de antes         | la vista del compilador compara: es violación todo error que no estaba antes de la transacción (mismo archivo, código y mensaje, sin importar la línea). Antes, con un solo error en cualquier archivo, la transacción no se compilaba y quedaba como obligación ("types were not checked"): en un proyecto real, siempre con algo roto, un extract superclass dejaba la superclase y la subclase sin compilar | tomada, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 

@@ -39,7 +39,7 @@ class ViewsTest {
         projection.apply(new Primitive.Retarget(reference(before, "a.C#m()", "a.A#x"), id(before, "a.B#x")));
         projection.apply(new Primitive.Set(id(before, "a.C#a"), "type", "int"));
 
-        assertThat(new BindingView().check(new Comparison(before, projection, true)))
+        assertThat(new BindingView().check(new Comparison(before, projection)))
                 .extracting(Violation::code, Violation::detail).containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("binding.rebound", "a.C#m() now binds x to a.B#x instead of a.A#x"),
                         org.assertj.core.groups.Tuple.tuple("binding.unresolved", "a.C#a no longer binds to a.A"));
@@ -60,7 +60,7 @@ class ViewsTest {
                 .expecting(new Change.Added(n, y, "y", Mode.READ));
         projection.apply(new Primitive.Set(m, "body", "return " + Body.name(id(before, "a.B#x"))));
 
-        assertThat(new BindingView().check(new Comparison(meant, projection, true)))
+        assertThat(new BindingView().check(new Comparison(meant, projection)))
                 .extracting(Violation::code, Violation::detail).containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("binding.rebound", "a.B#m() now binds x to a.B#x instead of a.A#x"),
                         org.assertj.core.groups.Tuple.tuple("binding.unresolved", "a.B#n() no longer binds to a.B#y"));
@@ -76,7 +76,7 @@ class ViewsTest {
 
         projection.apply(new Primitive.Set(id(before, "a.A#x"), "visibility", "private"));
 
-        assertThat(new AccessView().check(new Comparison(before, projection, true)))
+        assertThat(new AccessView().check(new Comparison(before, projection)))
                 .extracting(Violation::code, Violation::detail)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("access.insufficient", "a.B#m() cannot access private a.A#x"));
     }
@@ -94,7 +94,7 @@ class ViewsTest {
         projection.apply(new Primitive.Rename(id(before, "a.B#m()"), "n"));
         projection.apply(new Primitive.Move(id(before, "a.D#m()"), id(before, "a.C"), null));
 
-        assertThat(new DispatchView().check(new Comparison(before, projection, true))).extracting(Violation::detail)
+        assertThat(new DispatchView().check(new Comparison(before, projection))).extracting(Violation::detail)
                 .containsExactlyInAnyOrder("a.C#m() would override a.A#m()", "a.B#m() no longer overrides a.A#m()");
     }
 
@@ -109,7 +109,7 @@ class ViewsTest {
 
         projection.apply(new Primitive.Create(ide.program.Kind.METHOD, id(before, "a.B"), "m"));
 
-        assertThat(new DispatchView().check(new Comparison(before, projection, true))).isEmpty();
+        assertThat(new DispatchView().check(new Comparison(before, projection))).isEmpty();
     }
 
     /** The calls of a method moved up were made on receivers of the type it was in: a sibling's override they never reach. */
@@ -124,27 +124,30 @@ class ViewsTest {
 
         projection.apply(new Primitive.Move(id(before, "a.B#m()"), id(before, "a.A"), null)); // C's m overrides it now
 
-        assertThat(new DispatchView().check(new Comparison(before, projection, true))).isEmpty();
+        assertThat(new DispatchView().check(new Comparison(before, projection))).isEmpty();
     }
 
     @Test
-    void theCompilerSeesItsErrorsOnlyIfTheCodeCompiledBefore() {
+    void theCompilerSeesTheErrorsThatWereNotThereBefore() {
         var memory = MemoryProjection.builder().type("a.A").build();
-        var projection = reporting(memory, new Diagnostic("ecj.UndefinedType", "a/A.java", 3, "List", "cannot find symbol"));
+        var old = new Diagnostic("ecj.UndefinedName", "a/B.java", 7, "count", "count cannot be resolved");
+        var fresh = new Diagnostic("ecj.UndefinedType", "a/A.java", 3, "List", "cannot find symbol");
+        var projection = reporting(memory, new Diagnostic("ecj.UndefinedName", "a/B.java", 9, "count", "count cannot be resolved"), fresh);
         var view = new CompilerView();
 
-        assertThat(view.check(new Comparison(memory.program(), projection, true))).singleElement().satisfies(v -> {
+        assertThat(view.check(new Comparison(memory.program(), projection))).hasSize(2);
+        assertThat(view.check(new Comparison(memory.program(), projection, List.of(old)))).singleElement().satisfies(v -> {
             assertThat(v.code()).isEqualTo("ecj.UndefinedType");
             assertThat(v.facts()).isEqualTo(Map.of("symbol", "List", "path", "a/A.java", "line", "3"));
         });
-        assertThat(view.check(new Comparison(memory.program(), projection, false))).isEmpty();
+        assertThat(view.check(new Comparison(memory.program(), projection, List.of(old, fresh)))).isEmpty();
         assertThat(view.costly()).isTrue();
     }
 
     @Test
     void costlyViewsRunOnlyWhenTheCheapOnesSeeNothing() {
         var projection = MemoryProjection.builder().type("a.A").build();
-        var comparison = new Comparison(projection.program(), projection, true);
+        var comparison = new Comparison(projection.program(), projection);
         var asked = new ArrayList<String>();
         View costly = new View() {
             @Override

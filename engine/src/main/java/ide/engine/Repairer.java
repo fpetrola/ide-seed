@@ -1,5 +1,6 @@
 package ide.engine;
 
+import ide.projection.Diagnostic;
 import ide.projection.Projection;
 import ide.program.Change;
 import ide.program.Fact;
@@ -41,21 +42,21 @@ public final class Repairer {
         this(Verifier.standard(), remedies);
     }
 
-    /** @param compiled whether the program compiled before the transaction; only then is it held to compile after */
-    public Outcome stabilize(Program baseline, boolean compiled, Projection projection) {
-        return stabilize(baseline, compiled, projection, List.of());
+    /** @param errorsBefore the compiler's errors before the transaction: the only ones it may leave */
+    public Outcome stabilize(Program baseline, List<Diagnostic> errorsBefore, Projection projection) {
+        return stabilize(baseline, errorsBefore, projection, List.of());
     }
 
     /**
      * @param pinned what the transaction changed on purpose. A plan that changes a pinned aspect would undo the
      *               refactoring's intent, so it is undone instead.
      */
-    public Outcome stabilize(Program baseline, boolean compiled, Projection projection, Collection<Change.Pin> pinned) {
+    public Outcome stabilize(Program baseline, List<Diagnostic> errorsBefore, Projection projection, Collection<Change.Pin> pinned) {
         var repairs = new ArrayList<String>();
         var search = new Trace();
         var branches = 0;
         for (var round = 0; round < MAX_ROUNDS; round++) {
-            var violations = verify(baseline, compiled, projection);
+            var violations = verify(baseline, errorsBefore, projection);
             if (violations.isEmpty()) return new Outcome(repairs, List.of(), search);
             String kept = null;
             for (var target : violations) { // one with no plan may follow from another: the next one is tried
@@ -82,7 +83,7 @@ public final class Repairer {
                         search.add(Trace.Kind.DROPPED, plan.title() + ": would undo what the refactoring did");
                         continue;
                     }
-                    if (!same(target, verify(baseline, compiled, projection))) {
+                    if (!same(target, verify(baseline, errorsBefore, projection))) {
                         kept = plan.title();
                         search.add(Trace.Kind.ANSWER, plan.title());
                         break;
@@ -96,7 +97,7 @@ public final class Repairer {
             if (kept == null) return new Outcome(repairs, violations, search);
             repairs.add(kept);
         }
-        return new Outcome(repairs, verify(baseline, compiled, projection), search);
+        return new Outcome(repairs, verify(baseline, errorsBefore, projection), search);
     }
 
     /** The current value of every pinned aspect. */
@@ -114,8 +115,8 @@ public final class Repairer {
         return state;
     }
 
-    private List<Violation> verify(Program baseline, boolean compiled, Projection projection) {
-        return verifier.verify(new Comparison(baseline, projection, compiled));
+    private List<Violation> verify(Program baseline, List<Diagnostic> errorsBefore, Projection projection) {
+        return verifier.verify(new Comparison(baseline, projection, errorsBefore));
     }
 
     /** Whether the violation is still among {@code violations} (same code, site and target). */

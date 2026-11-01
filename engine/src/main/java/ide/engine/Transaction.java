@@ -29,7 +29,7 @@ public final class Transaction implements Projection {
     private final Repairer repairer;
     private final Snapshot start;
     private Program baseline;
-    private final boolean compiled;
+    private final List<Diagnostic> errorsBefore;
     private final Trace trace = new Trace();
     private final Trace search = new Trace();
     private final Set<String> obligations = new LinkedHashSet<>();
@@ -41,15 +41,14 @@ public final class Transaction implements Projection {
         this.repairer = repairer;
         this.start = projection.snapshot();
         this.baseline = projection.program();
-        this.compiled = projection.diagnostics().stream().noneMatch(Diagnostic::isError);
+        this.errorsBefore = projection.diagnostics().stream().filter(Diagnostic::isError).toList();
     }
 
     /** Verifies and repairs; keeps the changes if that reaches a fixpoint, else restores the start. */
     public Result commit() {
-        var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
+        var outcome = repairer.stabilize(baseline, errorsBefore, projection, pinned);
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());
-        if (!compiled) obligations.add("types were not checked: the code did not compile before");
         if (outcome.violations().isEmpty()) return Result.ok(outcome.repairs(), trace, search, List.copyOf(obligations));
         projection.restore(start);
         return Result.aborted(outcome.violations(), trace, search);
@@ -85,7 +84,7 @@ public final class Transaction implements Projection {
 
     /** Verifies and repairs now; returns the first violation left, or null if the state is coherent. */
     private Violation check() {
-        var outcome = repairer.stabilize(baseline, compiled, projection, pinned);
+        var outcome = repairer.stabilize(baseline, errorsBefore, projection, pinned);
         outcome.repairs().forEach(repair -> trace.add(Trace.Kind.ANSWER, repair));
         search.append(outcome.search());
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
