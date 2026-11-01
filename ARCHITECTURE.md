@@ -582,7 +582,17 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     ícono de cada candidato. Quick fix, menú de refactor, rename en el lugar e ir a línea son popups chicos sin marco
     en el cursor; open type y outline, popups de búsqueda que filtran por iniciales; el formulario de un refactoring es
     un diálogo con vista previa coloreada y botón Refactor. Abajo, tool windows: Problems, Changes (diff coloreado),
-    Steps (árbol), Output y Results, con íconos. Teclas de Eclipse (`Keymap`). Se prueba sin pantalla: los diálogos son
+    Steps (árbol), Output y Results, con íconos. Desde la noche del 2026-11-01: los menús son los de IntelliJ (File,
+    Edit, View, Navigate, Code, Refactor, Build, Help; cada refactoring de la biblioteca en su lugar, el resto en More
+    Refactorings) y cada acción tiene la tecla de IntelliJ y la de Eclipse; Alt+Enter (o Ctrl+1) ofrece los quick fixes
+    de la línea y después los refactorings que toman lo que está bajo el cursor o aquello en lo que está; una lamparita
+    roja o amarilla en el margen lo anuncia, en el lugar del ícono del problema; clic derecho abre un menú contextual
+    con submenú Refactor; Ctrl+W y Ctrl+Shift+W agrandan y achican la selección por la sintaxis (`around`); Alt+Insert
+    genera; Ctrl+Shift+A busca una acción. Los formularios toman el elemento bajo el cursor o el que lo contiene
+    (`inside`), las líneas seleccionadas, los nombres sugeridos (`suggest`) y solo los elementos que el refactoring
+    acepta (`options`), con casillas. Los problemas se subrayan en su columna y largo, rojos o amarillos, y se
+    compilan mientras se escribe (`check`, como el reconciler de Eclipse); el árbol marca con un ícono chico el
+    archivo y el paquete que tienen errores o warnings. Se prueba sin pantalla: los diálogos son
     una interfaz (`Dialogs`) que los tests guionan. Sin carpeta abre un proyecto de ejemplo (una tienda, copiada a
     `~/.ideseed/example`) cuyos archivos dicen qué probar en cada uno; `ExampleTest` verifica que cada refactoring y
     quick fix propuesto funciona. `target/ide-ui.jar`.
@@ -590,8 +600,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     herramienta, su esquema un JSON Schema) y `tools/call` (lo que responde la capacidad, o un resultado de error).
     Si una llamada cambia las herramientas, como `define`, avisa con `notifications/tools/list_changed`.
     `target/ide-mcp.jar`.
-- **Abierto.** En la UI: el diff lado a lado, la lamparita en el margen, defaults vivos en los formularios, el árbol
-  de tipos de F4 y Ctrl+T como popup. De la spec quedan fuera de este ítem el build incremental con ECJ y el runner de `main`.
+- **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
+  como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 
 ## 6. Cómo se testea
 
