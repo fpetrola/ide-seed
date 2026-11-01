@@ -50,4 +50,20 @@ class LibraryTest {
                 .containsExactly(java.util.Map.entry("parameters", "long cents, int times"));
         assertThat(library.get("extract-superclass").suggestions(run, new Args(java.util.Map.of()))).isEmpty();
     }
+
+    @Test
+    void aRefactoringNarrowsWhatAParameterTakesFromWhatIsGiven() {
+        var library = Library.standard();
+        var projection = ide.projection.kit.MemoryProjection.builder()
+                .type("a.Money").field("a.Money", "cents", "long").field("a.Money", "currency", "String").method("a.Money", "add", "Money")
+                .type("a.Other").field("a.Other", "unrelated", "int")
+                .build();
+        var run = Run.on(projection, library);
+        var money = projection.program().find("a.Money").orElseThrow().id();
+
+        assertThat(library.get("extract-superclass").options(run, new Args(java.util.Map.of("type", money)), "fields"))
+                .contains(java.util.List.of("a.Money#cents", "a.Money#currency"));
+        assertThat(library.get("extract-superclass").options(run, new Args(java.util.Map.of()), "fields")).isEmpty();
+        assertThat(library.get("extract-superclass").options(run, new Args(java.util.Map.of("type", money)), "type")).isEmpty();
+    }
 }

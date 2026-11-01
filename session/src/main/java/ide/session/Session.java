@@ -26,6 +26,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -81,6 +82,11 @@ public final class Session {
     }
 
     /** The step tree a refactoring would produce, without verifying or keeping anything. */
+    /** The elements a refactoring's parameter may take, given the others; nothing if any of its kinds will do. */
+    public Optional<List<String>> options(String refactoring, String param, Map<String, ?> args) {
+        return library.get(refactoring).options(Run.on(project, library), new ide.refactoring.Args(args), param);
+    }
+
     /** What a refactoring suggests for the parameters not given, from those given: its default names. */
     public Map<String, String> suggest(String refactoring, Map<String, ?> args) {
         return library.get(refactoring).suggestions(Run.on(project, library), new ide.refactoring.Args(args));

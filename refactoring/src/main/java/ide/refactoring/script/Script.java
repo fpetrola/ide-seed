@@ -26,6 +26,7 @@ public final class Script implements Refactoring {
     private final String description;
     private final List<Param> params;
     private final Map<String, String> defaults;
+    private final Map<String, String> sources;
     private final List<Stmt> body;
 
     /** An anonymous script: a block of statements run with the given variables, as knowledge effects are. */
@@ -37,19 +38,21 @@ public final class Script implements Refactoring {
 
     /** Evaluates an expression with the given variables. */
     public static Value evaluate(String expression, Run run, Map<String, Value> variables) {
-        return new Script("expression", "", List.of(), Map.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
+        return new Script("expression", "", List.of(), Map.of(), Map.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
     }
 
     /** Interpolates {@code ${expr}} and {@code #{expr}} in a text with the given variables. */
     public static String render(String text, Run run, Map<String, Value> variables) {
-        return Value.asText(new Script("text", "", List.of(), Map.of(), List.of()).interpolate(text, run, variables));
+        return Value.asText(new Script("text", "", List.of(), Map.of(), Map.of(), List.of()).interpolate(text, run, variables));
     }
 
-    Script(String id, String description, List<Param> params, Map<String, String> defaults, List<Stmt> body) {
+    Script(String id, String description, List<Param> params, Map<String, String> defaults, Map<String, String> sources,
+           List<Stmt> body) {
         this.id = id;
         this.description = description;
         this.params = List.copyOf(params);
         this.defaults = Map.copyOf(defaults);
+        this.sources = Map.copyOf(sources);
         this.body = List.copyOf(body);
     }
 
@@ -81,15 +84,7 @@ public final class Script implements Refactoring {
     /** Each default a parameter not given declares, rendered with the parameters given; one that fails is left out. */
     @Override
     public Map<String, String> suggestions(Run run, Args args) {
-        var env = new HashMap<String, Value>();
-        for (var param : params) {
-            if (args.values().get(param.name()) == null) continue;
-            try {
-                env.put(param.name(), value(param, args, run));
-            } catch (RuntimeException unusable) {
-                // not given in a form a suggestion can use
-            }
-        }
+        var env = given(run, args);
         var suggestions = new LinkedHashMap<String, String>();
         defaults.forEach((name, template) -> {
             if (env.containsKey(name)) return;
@@ -100,6 +95,34 @@ public final class Script implements Refactoring {
             }
         });
         return suggestions;
+    }
+
+    /** The elements the parameter's {@code from} expression gives with the parameters given, if it declares one. */
+    @Override
+    public java.util.Optional<List<String>> options(Run run, Args args, String param) {
+        var source = sources.get(param);
+        if (source == null) return java.util.Optional.empty();
+        try {
+            var graph = run.program();
+            return java.util.Optional.of(Value.items(evaluate(source, run, given(run, args))).stream()
+                    .map(item -> item instanceof Value.Elem e ? graph.element(e.id()).qualified() : Value.asText(item)).toList());
+        } catch (RuntimeException missing) {
+            return java.util.Optional.empty(); // it needs a parameter not given yet
+        }
+    }
+
+    /** The parameters given, as values; one not given, or given in a form that cannot be read, is left out. */
+    private Map<String, Value> given(Run run, Args args) {
+        var env = new HashMap<String, Value>();
+        for (var param : params) {
+            if (args.values().get(param.name()) == null) continue;
+            try {
+                env.put(param.name(), value(param, args, run));
+            } catch (RuntimeException unusable) {
+                // not given in a form a script can use
+            }
+        }
+        return env;
     }
 
     private static Value value(Param param, Args args, Run run) {

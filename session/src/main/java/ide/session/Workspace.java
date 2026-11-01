@@ -134,6 +134,10 @@ public final class Workspace {
         return project.around(path, line, column);
     }
 
+    public Optional<List<String>> options(String refactoring, String param, Map<String, ?> args) {
+        return session.options(refactoring, param, args);
+    }
+
     public Map<String, String> suggest(String refactoring, Map<String, ?> args) {
         return session.suggest(refactoring, args);
     }

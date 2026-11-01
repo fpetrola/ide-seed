@@ -132,12 +132,32 @@ final class SwingDialogs implements Dialogs {
                     readers.put(param.name(), box::isSelected);
                     input = box;
                 }
-                case "elements" -> {
-                    var list = new JList<>(field.options().toArray(String[]::new));
-                    list.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-                    list.setVisibleRowCount(6);
-                    readers.put(param.name(), list::getSelectedValuesList);
-                    input = new JScrollPane(list);
+                case "elements" -> { // a box to tick for each, as IntelliJ lists the members a refactoring takes
+                    var boxes = new javax.swing.JPanel(new java.awt.GridLayout(0, 1));
+                    var ticked = new java.util.LinkedHashMap<String, JCheckBox>();
+                    var given = field.value() instanceof List<?> chosen ? chosen : List.of();
+                    for (var option : field.options()) {
+                        var box = new JCheckBox("", given.contains(option));
+                        var name = new javax.swing.JLabel(option.substring(option.indexOf('#') + 1), Icons.of(option.contains("(") ? "METHOD" : "FIELD"),
+                                javax.swing.SwingConstants.LEADING);
+                        name.addMouseListener(new java.awt.event.MouseAdapter() {
+                            @Override
+                            public void mouseClicked(java.awt.event.MouseEvent event) {
+                                box.setSelected(!box.isSelected());
+                            }
+                        });
+                        var line = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 4, 0));
+                        line.setOpaque(false);
+                        line.setToolTipText(option);
+                        line.add(box);
+                        line.add(name);
+                        ticked.put(option, box);
+                        boxes.add(line);
+                    }
+                    readers.put(param.name(), () -> ticked.entrySet().stream().filter(e -> e.getValue().isSelected()).map(java.util.Map.Entry::getKey).toList());
+                    var scroll = new JScrollPane(boxes);
+                    scroll.setPreferredSize(new java.awt.Dimension(400, Math.min(160, 28 * Math.max(1, field.options().size()) + 6)));
+                    input = scroll;
                 }
                 default -> {
                     if (field.options().isEmpty()) {

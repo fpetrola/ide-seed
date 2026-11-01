@@ -101,6 +101,9 @@ final class Capabilities {
                         List.of(path, line, Param.of("column", "text")), args -> workspace.around(text(args, "path"), number(args, "line"),
                                 number(args, "column")).stream().map(s -> entries("line", s.line(), "column", s.column(),
                                 "endLine", s.endLine(), "endColumn", s.endColumn())).toList()))
+                .register(Capability.of("options", "The elements a refactoring's parameter may take, given the others; nothing if any of its kinds will do",
+                        List.of(refactoring, Param.of("param", "text"), itsArgs),
+                        args -> workspace.options(text(args, "refactoring"), text(args, "param"), nested(args)).orElse(null)))
                 .register(Capability.of("suggest", "What a refactoring suggests for the parameters not given, from those given",
                         List.of(refactoring, itsArgs), args -> workspace.suggest(text(args, "refactoring"), nested(args))))
                 .register(Capability.of("expand", "A refactoring's primitives, without applying them",

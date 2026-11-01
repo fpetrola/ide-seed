@@ -12,7 +12,8 @@ import java.util.Optional;
 /**
  * Parameters as fields to fill in. An element field offers the workspace's elements of the kinds it takes and comes
  * with the element under the caret, or the one the caret is inside, where its kind fits; lines come with the lines
- * selected; a text comes with what the refactoring suggests from the rest (its default name); a choice offers its
+ * selected; a text comes with what the refactoring suggests from the rest (its default name); several elements offer
+ * what the refactoring narrows them to (the fields of the type chosen), if it does; a choice offers its
  * choices; several elements start as none, a truth as false. A form is a capability's schema, or the questions a
  * quick fix asks.
  */
@@ -85,8 +86,12 @@ final class Form {
         } catch (RuntimeException unsuggested) {
             return this;
         }
-        if (suggested == null || suggested.isEmpty()) return this;
-        return new Form(title, fields.stream().map(f -> f.value() == null && suggested.containsKey(f.param().name())
+        var narrowed = fields.stream().map(f -> {
+            if (!f.param().type().startsWith("element") || given.containsKey(f.param().name()) && f.param().type().equals("element")) return f;
+            var options = ide.call("options", Map.of("refactoring", refactoring, "param", f.param().name(), "args", given));
+            return options instanceof List<?> some ? new Field(f.param(), some.stream().map(String::valueOf).toList(), f.value()) : f;
+        }).toList();
+        return new Form(title, narrowed.stream().map(f -> f.value() == null && suggested != null && suggested.containsKey(f.param().name())
                 ? new Field(f.param(), f.options(), String.valueOf(suggested.get(f.param().name()))) : f).toList());
     }
 

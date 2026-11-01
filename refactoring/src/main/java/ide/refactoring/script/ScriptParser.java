@@ -10,7 +10,7 @@ import java.util.List;
  * Parses {@code .ref} text: one statement per line, blocks closed by {@code end}, {@code #} comments.
  * <pre>
  * refactoring &lt;id&gt; ["description"]
- *   param &lt;name&gt; : text|lines|bool|element(KINDS)|elements(KINDS)|choice(A,B) ["description"] [default "template"]
+ *   param &lt;name&gt; : text|lines|bool|element(KINDS)|elements(KINDS)|choice(A,B) ["description"] [default "template"] [from "expr"]
  *   let v = expr  |  v := &lt;id&gt; args  |  &lt;id&gt; args  |  for x in expr ... end  |  if expr ... [else ...] end
  *   try "label" ... end
  *   require expr "message"  |  oblige "assumption"  |  fail "message"  |  return arg
@@ -54,8 +54,14 @@ public final class ScriptParser {
         var description = space < 0 ? "" : unquote(rest.substring(space + 1).strip());
         var params = new ArrayList<Param>();
         var defaults = new java.util.LinkedHashMap<String, String>();
+        var sources = new java.util.LinkedHashMap<String, String>();
         while (skipBlank() && lines.get(next).startsWith("param ")) {
             var line = lines.get(next++);
+            var from = line.indexOf(" from \"");
+            if (from >= 0) {
+                sources.put(line.substring("param ".length(), line.indexOf(':')).strip(), unquote(line.substring(from + 6).strip()));
+                line = line.substring(0, from);
+            }
             var suggested = line.indexOf(" default \"");
             if (suggested >= 0) {
                 defaults.put(line.substring("param ".length(), line.indexOf(':')).strip(), unquote(line.substring(suggested + 9).strip()));
@@ -65,7 +71,7 @@ public final class ScriptParser {
         }
         var body = block("end");
         next++;
-        return new Script(id, description, params, defaults, body);
+        return new Script(id, description, params, defaults, sources, body);
     }
 
     private Param param(String line) {

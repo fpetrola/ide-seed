@@ -31,6 +31,14 @@ public interface Refactoring {
         return Map.of();
     }
 
+    /**
+     * The elements a parameter may take, given the parameters given (the fields of the type chosen), as qualified
+     * names; nothing if the refactoring does not narrow them, and any element of the kinds it takes will do.
+     */
+    default java.util.Optional<List<String>> options(Run run, Args args, String param) {
+        return java.util.Optional.empty();
+    }
+
     /** Applies the change in a run; answers the element it produced or worked on, if any (else null). */
     ElementId apply(Run run, Args args);
 }
