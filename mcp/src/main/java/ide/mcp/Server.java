@@ -12,6 +12,7 @@ import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * The IDE as a Model Context Protocol server: JSON-RPC 2.0 messages, one per line, on its input and its output. Every
@@ -26,9 +27,16 @@ public final class Server {
     private static final String ELEMENT = "an element, by address: a.B, a.B#field, a.B#method(int)";
 
     private final Workspace workspace;
+    private final Consumer<String> called;
 
     public Server(Workspace workspace) {
+        this(workspace, name -> { });
+    }
+
+    /** A server that tells {@code called} the name of each tool it has just run, whether it went well or not. */
+    public Server(Workspace workspace, Consumer<String> called) {
         this.workspace = workspace;
+        this.called = called;
     }
 
     /** Answers every request it reads until its input ends; a notification is not answered. */
@@ -36,42 +44,50 @@ public final class Server {
         try {
             for (var line = in.readLine(); line != null; line = in.readLine()) {
                 if (line.isBlank()) continue;
-                Map<?, ?> message;
-                try {
-                    message = (Map<?, ?>) Json.read(line);
-                } catch (IllegalArgumentException | ClassCastException unreadable) {
-                    out.println(Json.write(error(null, -32700, "not a JSON-RPC message: " + unreadable.getMessage())));
-                    continue;
-                }
-                if (!message.containsKey("id")) continue;
-                answer(message, out);
+                for (var message : handle(line)) out.println(Json.write(message));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    private void answer(Map<?, ?> request, PrintWriter out) {
+    /**
+     * What the server sends for a message, as JSON text: nothing for a notification; for a request its answer, and
+     * after a call that changed the tools, the notification that says so.
+     */
+    public List<Map<String, Object>> handle(String json) {
+        Map<?, ?> message;
+        try {
+            message = (Map<?, ?>) Json.read(json);
+        } catch (IllegalArgumentException | ClassCastException unreadable) {
+            return List.of(error(null, -32700, "not a JSON-RPC message: " + unreadable.getMessage()));
+        }
+        if (!message.containsKey("id")) return List.of();
+        return answer(message);
+    }
+
+    private List<Map<String, Object>> answer(Map<?, ?> request) {
         var id = request.get("id");
         var method = String.valueOf(request.get("method"));
         var params = request.get("params") instanceof Map<?, ?> given ? given : Map.of();
-        switch (method) {
-            case "initialize" -> out.println(Json.write(result(id, Map.of(
+        return switch (method) {
+            case "initialize" -> List.of(result(id, Map.of(
                     "protocolVersion", VERSIONS.contains(params.get("protocolVersion")) ? params.get("protocolVersion") : VERSIONS.getFirst(),
                     "capabilities", Map.of("tools", Map.of("listChanged", true)),
-                    "serverInfo", Map.of("name", "ideseed", "version", "0.1")))));
-            case "ping" -> out.println(Json.write(result(id, Map.of())));
-            case "tools/list" -> out.println(Json.write(result(id, Map.of("tools",
-                    workspace.capabilities().ids().stream().map(name -> tool(workspace.capabilities().get(name))).toList()))));
+                    "serverInfo", Map.of("name", "ideseed", "version", "0.1"))));
+            case "ping" -> List.of(result(id, Map.of()));
+            case "tools/list" -> List.of(result(id, Map.of("tools",
+                    workspace.capabilities().ids().stream().map(name -> tool(workspace.capabilities().get(name))).toList())));
             case "tools/call" -> {
                 var tools = workspace.capabilities().ids();
-                out.println(Json.write(result(id, call(String.valueOf(params.get("name")), params.get("arguments")))));
-                if (!workspace.capabilities().ids().equals(tools)) {
-                    out.println(Json.write(Map.of("jsonrpc", "2.0", "method", "notifications/tools/list_changed")));
-                }
+                var name = String.valueOf(params.get("name"));
+                var answer = result(id, call(name, params.get("arguments")));
+                called.accept(name);
+                yield workspace.capabilities().ids().equals(tools) ? List.of(answer)
+                        : List.of(answer, Map.of("jsonrpc", "2.0", "method", "notifications/tools/list_changed"));
             }
-            default -> out.println(Json.write(error(id, -32601, "no method " + method)));
-        }
+            default -> List.of(error(id, -32601, "no method " + method));
+        };
     }
 
     /** What a capability answers, as text; what goes wrong, as an error result the agent can read. */

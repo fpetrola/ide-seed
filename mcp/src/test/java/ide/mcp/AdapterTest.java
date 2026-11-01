@@ -13,5 +13,6 @@ class AdapterTest {
 
     @ArchTest
     static final ArchRule onlyTheSessionAndTheCore = classes().that().resideInAPackage("ide.mcp..")
-            .should().onlyDependOnClassesThat().resideInAnyPackage("ide.mcp..", "ide.session..", "ide.core..", "java..");
+            .should().onlyDependOnClassesThat().resideInAnyPackage("ide.mcp..", "ide.session..", "ide.core..", "java..",
+                    "com.sun.net.httpserver..");
 }
