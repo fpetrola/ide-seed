@@ -57,9 +57,10 @@ final class Abduction {
     static final Set<String> CREATED = Set.of("constructor", "member", "parameter", "constructor-for");
     /**
      * Relations made to hold by several primitives at once: {@code takes-arguments(m, use)}, a parameter for each
-     * argument; {@code stores(p, k, f)}, a statement of k giving f the value of its parameter p.
+     * argument; {@code stores(p, k, f)}, a statement of k giving f the value of its parameter p; {@code passes(p, s, f)},
+     * s calling p's constructor first with what it gave f, which it gives no more.
      */
-    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores");
+    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores", "passes");
     /** What a created element is called until it is: {@code new:<relation>:<n>}. */
     static final String NEW = "new:";
     private static final java.util.concurrent.atomic.AtomicInteger CREATIONS = new java.util.concurrent.atomic.AtomicInteger();
@@ -473,7 +474,9 @@ final class Abduction {
     /** The state after {@code change}; a creation brings what the created element is: its kind, its parent, its name. */
     private static Evaluation suppose(Evaluation state, Change change) {
         var added = new ArrayList<Tuple>();
+        var removed = new ArrayList<Tuple>();
         if (change.added() != null) added.add(new Tuple(change.relation(), change.added()));
+        if (change.removed() != null) removed.add(new Tuple(change.relation(), change.removed()));
         var values = change.added();
         if (values != null && values.getFirst().startsWith(NEW)) {
             var made = values.getFirst();
@@ -494,12 +497,12 @@ final class Abduction {
                     if (change.relation().equals("constructor-for")) added.add(new Tuple("constructor", List.of(made, values.get(1))));
                 }
                 case "stores" -> added.add(new Tuple("writes", List.of(values.get(1), values.get(2)))); // its callable writes the field
+                case "passes" -> removed.add(new Tuple("writes", List.of(values.get(1), values.get(2)))); // the caller does not
                 default -> {
                     // nothing more is known of it
                 }
             }
         }
-        List<Tuple> removed = change.removed() == null ? List.of() : List.of(new Tuple(change.relation(), change.removed()));
         return state.suppose(added, removed);
     }
 

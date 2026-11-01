@@ -41,6 +41,8 @@ import java.util.stream.Stream;
  *                                     name, as a typo is; the nearest first)
  * exists(e)         declared(e, path, name)   (an element of the workspace; a member the file at path declares)
  * stores(p, k, f)   (a statement k makes to give f the value of its parameter p: only made, never read)
+ * passes(p, s, f)   (s calling p's constructor first with what it gave f, and giving it no more: only made)
+ * assigns(s, f)     (a statement of s gives f a value it says in no language)
  * </pre>
  */
 final class GraphFacts implements Facts {
@@ -120,7 +122,9 @@ final class GraphFacts implements Facts {
                     : similar(new ElementId(pattern.get(1)), pattern.get(2)).map(m -> List.of(id(m), pattern.get(1), pattern.get(2),
                     m.kind().name().toLowerCase(Locale.ROOT)));
             case "exists" -> elements(first).filter(e -> !e.inLibrary()).map(e -> List.of(id(e)));
-            case "stores" -> Stream.empty();
+            case "stores", "passes" -> Stream.empty();
+            case "assigns" -> first == null ? Stream.empty() : elements(first).flatMap(s -> program.children(s.id()).stream())
+                    .filter(e -> e.kind() == Kind.STATEMENT).flatMap(st -> assigned(st).stream()).map(f -> List.of(first, f));
             case "declared" -> elements(first).filter(e -> e.kind() == Kind.FIELD || e.kind() == Kind.METHOD)
                     .filter(e -> Objects.equals(program.topLevel(e.id()).fact(Fact.FILE), pattern.size() > 1 ? pattern.get(1) : null)
                             || pattern.size() < 2 || pattern.get(1) == null)
@@ -162,6 +166,13 @@ final class GraphFacts implements Facts {
             }
         }
         return d[a.length()][b.length()];
+    }
+
+    /** The field a statement gives a value, when all it does can be said in no language. */
+    private java.util.Optional<String> assigned(Element statement) {
+        return projection.said(statement.id()).map(text -> ide.program.Body.parse(text, program, statement.parent()).statements())
+                .filter(said -> said.size() == 1 && said.getFirst() instanceof ide.program.Body.Assign)
+                .map(said -> ((ide.program.Body.Assign) said.getFirst()).field().value());
     }
 
     /** The uses that bind nothing: the one named, or all. */

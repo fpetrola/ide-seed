@@ -1403,6 +1403,22 @@ que esto no escala solo:
    - Crear un parámetro cambia el sentido: cada llamada pasa un valor que inventa el plan. Se ofrece como arreglo, y
      nunca repara solo (decisión 31). Lo encontraron make-final y la garantía: el reparador inicializaba en los
      constructores lo que nadie inicializaba, en vez de deshacer el refactoring.
+
+   **Ciclo 4 hecho el 2026-11-01**: el `super(limit)` sale de las reglas. `pass-to-superclass` se fue; queda 1 efecto.
+   - Una definición de `java.rules` dice cómo un constructor que asigna un `final` de su superclase le pasa el valor a
+     un constructor de la superclase, uno que no toma nada más (y que se declara si no hay ninguno). Ese constructor lo
+     toma y lo guarda (`stores`, como en el ciclo 3). La llamada lo pasa primero, y la asignación se va (`passes(p, s,
+     f)`). Para saber qué da la asignación, el grafo pregunta qué dicen las sentencias (`assigns(s, f)`).
+   - Si conserva el sentido lo deduce el motor. Un parámetro nuevo lo conserva si el mismo plan escribe la llamada que
+     le pasa el valor real, y nadie más puede llamar a ese constructor: uno existente que ninguna llamada nombra, o uno
+     que el plan crea en un tipo que nada usa como tipo (solo `extends`). Un `super()` implícito de otra subclase no lo
+     ve el grafo, pero deja de compilar, y eso lo ve el verificador. Por eso repara el extract superclass, y lo mismo
+     ofrecido a mano también conserva el sentido.
+   - Al hacer verdaderos los predicados definidos aparecieron arreglos absurdos: mover el campo a la subclase, o
+     adentro de un constructor, para que `may-assign` valga. Quién puede asignar un `final` no mueve el campo: en esas
+     definiciones el lugar del campo quedó como condición (`given`).
+   - Un caso nuevo en `FinalFieldQuickFixTest` lo muestra a mano. Sus arreglos son "make limit not final" y "create
+     constructor Base(), then pass limit to the constructor of Base", y el segundo deja `super(limit)`.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

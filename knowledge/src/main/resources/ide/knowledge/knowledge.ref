@@ -28,26 +28,10 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 # A blank final field has its value where it is declared or from every constructor of its type: java.rules says it,
 # and how each constructor takes the value and gives it.
 
-# A constructor may not give a final field of its superclass its value: the superclass's constructor takes the value
-# and gives it, and the constructor passes it to that constructor first, instead of giving it. The field gets the
-# same value when the object is made: it keeps meaning, so it also repairs a refactoring (a field pulled up).
+# A constructor may not give a final field of its superclass its value: java.rules says how the superclass's
+# constructor takes it instead, which keeps meaning, so it also repairs a refactoring (a field pulled up).
 goal ecj.FinalFieldAssignment needs given-by-its-type(element-at(path, line, column), inside(path, line, column))
 
-effect pass-to-superclass "pass ${name(field)} to the constructor of ${name(owner(field))}"
-  makes given-by-its-type(field, constructor)
-  keeps meaning
-  when and(eq(kind(constructor), "CONSTRUCTOR"), nonempty(giving(constructor, field)))
-  needs constructed-explicitly(owner(field))
-  do
-    let made = first(constructors(owner(field)))
-    let given = giving(constructor, field)
-    p := create PARAM ${made} ${name(field)}
-    set ${p} type ${type(field)}
-    create STATEMENT ${made} "" facts="body=#{field} = #{p}"
-    create STATEMENT ${constructor} "" facts="body=#{made}(${value(given)})"
-    delete ${given}
-  end
-end
 
 # A class that does not implement what its supertypes leave abstract: it implements each, or it is abstract too
 # (java.rules says both, and when it may be abstract).

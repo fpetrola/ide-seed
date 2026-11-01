@@ -197,25 +197,4 @@ class RunTest {
         assertThatThrownBy(() -> Run.on(lone(), library).call("hide", Map.of("field", "a.A#x")))
                 .isInstanceOfSatisfying(PrimitiveRejected.class, refused -> assertThat(refused.code()).isEqualTo("plan.assumes"));
     }
-
-    @Test
-    void aScriptReadsWhatAStatementGivesAField() {
-        var projection = program();
-        var a = id(projection.program(), "a.A");
-        var made = projection.apply(new Primitive.Create(Kind.CONSTRUCTOR, a, "A")).produced();
-        var given = projection.apply(new Primitive.Create(Kind.PARAM, made, "x", Map.of(Fact.TYPE, "int"), null)).produced();
-        var x = ide.program.Body.name(id(projection.program(), "a.A#x"));
-        projection.apply(new Primitive.Create(Kind.STATEMENT, made, "", Map.of(Fact.BODY, x + " = " + ide.program.Body.name(given)), null));
-        var library = Library.standard();
-        library.define("""
-                refactoring read-statement
-                  param c : element(CONSTRUCTOR)
-                  param f : element(FIELD)
-                  fail "${qualified(giving(c, f))} gives ${value(giving(c, f))}"
-                end
-                """);
-
-        assertThatThrownBy(() -> Run.on(projection, library).call("read-statement", Map.of("c", made.value(), "f", "a.A#x")))
-                .hasMessageContaining("[1] gives " + ide.program.Body.name(given));
-    }
 }

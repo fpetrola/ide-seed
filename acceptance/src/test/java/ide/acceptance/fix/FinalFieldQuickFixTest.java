@@ -107,4 +107,45 @@ class FinalFieldQuickFixTest {
                     }
                 """);
     }
+
+    /**
+     * A constructor may not give a final of its superclass its value: it is passed to a constructor of the superclass
+     * instead, which takes it and stores it, the call first; the superclass declares one if it has none. Deduced from
+     * who may assign a final and how a constructor gives a field its value.
+     */
+    @Test
+    void aFinalOfTheSuperclassIsPassedToItsConstructor() {
+        var ws = Workspace.of(Map.of("a/Base.java", """
+                package a;
+
+                class Base {
+                    final int limit;
+                }
+                """, "a/Sub.java", """
+                package a;
+
+                class Sub extends Base {
+                    Sub(int limit) {
+                        this.limit = limit;
+                    }
+                }
+                """));
+
+        assertThat(ws.fixes("a/Sub.java", 5)).containsExactly("make limit not final",
+                "create constructor Base(), then pass limit to the constructor of Base");
+
+        ws.fix("a/Sub.java", 5, "create constructor Base(), then pass limit to the constructor of Base");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Base.java")).contains("""
+                    Base(int limit) {
+                        this.limit = limit;
+                    }
+                """);
+        assertThat(ws.source("a/Sub.java")).contains("""
+                    Sub(int limit) {
+                        super(limit);
+                    }
+                """);
+    }
 }

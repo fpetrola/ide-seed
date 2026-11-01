@@ -90,9 +90,6 @@ final class ScriptFunctions {
             case "constructors" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "body" -> text(element(args, 0).fact(Fact.BODY));
             case "statements" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList());
-            case "giving" -> graph.children(element(args, 0).id()).stream().filter(e -> given(e.id()).filter(st -> st.field()
-                    .equals(element(args, 1).id())).isPresent()).findFirst().map(e -> elem(e.id())).orElse(null); // a statement that can be said
-            case "value" -> given(element(args, 0).id()).map(st -> text(ide.program.Body.text(st.value()))).orElse(null); // what it gives, said
             case "types-of" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
             case "subclasses" -> elems(graph.subclasses(element(args, 0).id()));
             case "family" -> elems(graph.family(element(args, 0)));
@@ -204,14 +201,6 @@ final class ScriptFunctions {
     }
 
     /** A body as the projection says it in no language, if it can. */
-    /** What a statement gives a field, when it says it in no language. */
-    private java.util.Optional<ide.program.Body.Assign> given(ide.program.ElementId statement) {
-        if (!graph.contains(statement) || graph.element(statement).kind() != ide.program.Kind.STATEMENT) return java.util.Optional.empty();
-        return projection.said(statement).map(text -> ide.program.Body.parse(text, graph, graph.element(statement).parent()).statements())
-                .filter(said -> said.size() == 1 && said.getFirst() instanceof ide.program.Body.Assign)
-                .map(said -> (ide.program.Body.Assign) said.getFirst());
-    }
-
     private static Value text(String text) {
         return text == null ? null : new Value.Text(text);
     }

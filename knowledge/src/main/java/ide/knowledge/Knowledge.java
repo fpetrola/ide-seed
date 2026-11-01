@@ -389,10 +389,12 @@ public final class Knowledge implements Remedy, QuickFix {
         }
         var asked = new java.util.HashSet<String>();
         var implemented = new java.util.HashSet<String>();
+        var creations = new HashMap<String, Abduction.Change>();
+        groups.forEach((made, group) -> creations.put(made, group.getFirst()));
         for (var change : changes) {
             var key = change.element();
             if (groups.containsKey(key)) {
-                if (groups.get(key).getFirst() == change) steps.add(created(groups.get(key), projection, asked));
+                if (groups.get(key).getFirst() == change) steps.add(created(groups.get(key), creations, projection, asked));
                 continue;
             }
             var on = change.added() != null;
@@ -440,7 +442,8 @@ public final class Knowledge implements Remedy, QuickFix {
      * with the answer given, or the one proposed), a parameter for each argument a use passes, and, for a method, the
      * body that answers what its type starts with.
      */
-    private Step created(List<Abduction.Change> group, Projection projection, java.util.Set<String> asked) {
+    private Step created(List<Abduction.Change> group, Map<String, Abduction.Change> creations, Projection projection,
+                         java.util.Set<String> asked) {
         var creation = group.getFirst();
         var values = creation.added();
         var made = values.getFirst();
@@ -462,18 +465,24 @@ public final class Knowledge implements Remedy, QuickFix {
             switch (change.relation()) {
                 case "takes-arguments" -> {
                     var arguments = projection.needs(change.added().get(1)).map(n -> n.arguments()).orElse(List.of());
-                    sets.add((answers, id, done) -> {
+                    sets.add((target, answers, id, done) -> {
                         var made2 = new ArrayList<Primitive>();
                         for (var argument : arguments) made2.add(new Primitive.Create(Kind.PARAM, id, argument.name(), Map.of(ide.program.Fact.TYPE, argument.type()), null));
                         return made2;
                     });
                 }
-                case "static", "final", "abstract" -> sets.add((answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), String.valueOf(on))));
+                case "static", "final", "abstract" -> sets.add((target, answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), String.valueOf(on))));
                 case "stores" -> { // a statement of its callable gives the field the parameter's value
                     var callable = change.added().get(1);
                     var field = change.added().get(2);
-                    sets.add((answers, id, done) -> List.of(new Primitive.Create(Kind.STATEMENT, resolved(callable, done), "",
+                    sets.add((target, answers, id, done) -> List.of(new Primitive.Create(Kind.STATEMENT, resolved(callable, done), "",
                             Map.of(ide.program.Fact.BODY, ide.program.Body.name(resolved(field, done)) + " = " + ide.program.Body.name(id)), null)));
+                }
+                case "passes" -> { // the caller hands the parameter's constructor what it gave the field, first, and gives it no more
+                    var caller = change.added().get(1);
+                    var field = change.added().get(2);
+                    var constructor = values.get(1);
+                    sets.add((target, answers, id, done) -> passing(target, resolved(caller, done), resolved(field, done), resolved(constructor, done)));
                 }
                 default -> {
                     var question = questions.get(change.relation() + " of new " + kind);
@@ -482,9 +491,9 @@ public final class Knowledge implements Remedy, QuickFix {
                         while (!asked.add(name)) name = name + "'";
                         var answer = name;
                         asks.add(new Plan.Ask(answer, question.get(1), value));
-                        sets.add((answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), answers.getOrDefault(answer, value))));
+                        sets.add((target, answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), answers.getOrDefault(answer, value))));
                     } else {
-                        sets.add((answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), value)));
+                        sets.add((target, answers, id, done) -> List.of(new Primitive.Set(id, change.relation(), value)));
                     }
                 }
             }
@@ -494,9 +503,11 @@ public final class Knowledge implements Remedy, QuickFix {
         variables.put("named", new Value.Text(named));
         variables.put("owner", value(owner.value(), projection));
         variables.put("value", value(owner.value(), projection));
+        variables.put("type", value(typeOf(values.get(1), creations, projection), projection));
         var title = title(creation.relation(), creation.forWhat(), variables, projection);
         var method = kind.equals("method");
-        var keeps = !creation.relation().equals("parameter"); // what every call passes a new parameter is made up
+        var passed = group.stream().anyMatch(change -> change.relation().equals("passes"));
+        var keeps = !creation.relation().equals("parameter") || passed && uncalled(values.get(1), creations, projection);
         return new Step(title, List.copyOf(asks), 2, keeps, (target, answers, done) -> {
             var in = resolved(values.get(1), done); // what it is created in may have been created by the plan
             var primitive = switch (creation.relation()) {
@@ -506,15 +517,66 @@ public final class Knowledge implements Remedy, QuickFix {
             };
             var id = target.apply(primitive).produced();
             done.put(made, id);
-            for (var set : sets) set.of(answers, id, done).forEach(target::apply);
+            for (var set : sets) set.of(target, answers, id, done).forEach(target::apply);
             if (method) answeringItsDefault(target, id);
         });
     }
 
-    /** What is set of an element created, once it is: with the answers given and what the plan created so far. */
+    /** What is set of an element created, once it is: on the projection, with the answers given and what the plan created so far. */
     @FunctionalInterface
     private interface Setting {
-        List<Primitive> of(Map<String, String> answers, ElementId id, Map<String, ElementId> created);
+        List<Primitive> of(Projection target, Map<String, String> answers, ElementId id, Map<String, ElementId> created);
+    }
+
+    /**
+     * The type an element is in, through what the plan creates: a constructor created is in its type, a member in its
+     * owner; an element of the program, a type (or a package) itself, or the type it is in.
+     */
+    private static String typeOf(String element, Map<String, Abduction.Change> creations, Projection projection) {
+        if (creations.containsKey(element)) return typeOf(creations.get(element).added().get(1), creations, projection);
+        var program = projection.program();
+        var id = new ElementId(element);
+        var inType = program.contains(id) && !program.element(id).kind().isType() && program.element(id).kind() != Kind.PACKAGE;
+        return inType ? program.enclosingType(id).id().value() : element; // a package is where it is
+    }
+
+    /**
+     * Whether nothing could be calling a callable the value a new parameter of it is made up for: an existing one no
+     * call names, or a constructor the plan creates in a type nothing uses as a type (only to extend it, say). A call
+     * the graph does not see, an implicit super(), stops compiling instead, which the verifier sees.
+     */
+    private static boolean uncalled(String callable, Map<String, Abduction.Change> creations, Projection projection) {
+        var program = projection.program();
+        if (creations.containsKey(callable)) {
+            var type = new ElementId(typeOf(callable, creations, projection));
+            return program.referencesTo(type).stream().allMatch(r -> r.mode().isLink() && r.mode() != ide.program.Mode.DECLARED);
+        }
+        return program.referencesTo(new ElementId(callable)).stream()
+                .noneMatch(r -> r.mode() == ide.program.Mode.CALL || r.mode() == ide.program.Mode.NEW);
+    }
+
+    /**
+     * A constructor calls another first, giving it what it gave a field, and gives the field nothing more: the
+     * statement that gave it goes, and so does a call to a constructor with nothing, which the new one takes the place of.
+     */
+    private static List<Primitive> passing(Projection target, ElementId caller, ElementId field, ElementId constructor) {
+        var program = target.program();
+        var primitives = new ArrayList<Primitive>();
+        String value = null;
+        ElementId giving = null;
+        for (var statement : program.children(caller).stream().filter(e -> e.kind() == Kind.STATEMENT).toList()) {
+            var said = target.said(statement.id()).map(text -> ide.program.Body.parse(text, program, caller).statements()).orElse(List.of());
+            if (said.size() != 1) continue;
+            if (said.getFirst() instanceof ide.program.Body.Construct made && made.arguments().isEmpty()) primitives.add(new Primitive.Delete(statement.id()));
+            if (said.getFirst() instanceof ide.program.Body.Assign given && given.field().equals(field) && giving == null) {
+                giving = statement.id();
+                value = ide.program.Body.text(given.value());
+            }
+        }
+        if (giving == null) throw new IllegalStateException(program.element(caller).qualified() + " gives " + program.element(field).name() + " nothing it can say");
+        primitives.add(new Primitive.Create(Kind.STATEMENT, caller, "", Map.of(ide.program.Fact.BODY, ide.program.Body.name(constructor) + "(" + value + ")"), null));
+        primitives.add(new Primitive.Delete(giving));
+        return primitives;
     }
 
     /** An element a way names: one the plan created, by its placeholder, or one of the program. */
