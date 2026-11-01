@@ -548,8 +548,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   cuerpo no se puede decir sin lenguaje, no se ofrece. Conserva el sentido, así que también repara: un extract
   superclass que sube un `final` que el constructor inicializa deja `super(limit)`, como IntelliJ.
 - **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
-  misma. Partirlas en efectos chicos que el planificador componga necesita las sentencias en el grafo (decisión 32,
-  propuesta). `invariant` del lenguaje de conocimiento. Un predicado que ningún `fact` define siempre se hace, aunque
+  misma. La propuesta de la etapa 3 (decisión 32) las reemplaza por reglas generales del lenguaje, de las que se
+  deducen las transformaciones, y deja los refactorings como intenciones; necesita las sentencias en el grafo. Un predicado que ningún `fact` define siempre se hace, aunque
   ya valga.
 
 ### 5.8 `session`: el espacio de trabajo
@@ -735,7 +735,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 29 | Lo fijado                | un `Set` fija el atributo que da (visibilidad, static, abstract, final, tipo), no solo la visibilidad: una reparación que lo deshace se descarta. Antes make-final sobre un campo sin inicializar se "aplicaba" y el reparador lo quitaba | tomada, 2026-11-01 |
 | 30 | Errores de antes         | la vista del compilador compara: es violación todo error que no estaba antes de la transacción (mismo archivo, código y mensaje, sin importar la línea). Antes, con un solo error en cualquier archivo, la transacción no se compilaba y quedaba como obligación ("types were not checked"): en un proyecto real, siempre con algo roto, un extract superclass dejaba la superclase y la subclase sin compilar | tomada, 2026-11-01 |
 | 31 | Reparar sin cambiar el sentido | un efecto del conocimiento es un quick fix que la gente elige; solo uno que declara `keeps meaning` (abrir, mover adonde se usa, importar, ampliar un override, declarar el constructor que el lenguaje ya daba) puede reparar solo un refactoring. Un `Plan` dice si `changesMeaning` y el `Repairer` no lo toma. Antes cualquier fix sin preguntas podía reparar: cambiar una llamada a un método de nombre parecido, sacar un `final`, inventar un valor para los llamadores | tomada, 2026-11-01 |
-| 32 | Sentencias y locales     | las sentencias de primer nivel de un cuerpo y las variables locales son elementos del grafo (`STATEMENT`, `LOCAL`), sitio de sus usos; las expresiones siguen opacas; los nueve primitivos alcanzan; `Body` dice una sentencia. Reemplaza en parte la 7 (cuerpos fuera del grafo). Sección 9, etapa 3 | propuesta, 2026-11-01 |
+| 32 | Sentencias y locales     | las sentencias de primer nivel de un cuerpo y las variables locales son elementos del grafo (`STATEMENT`, `LOCAL`), sitio de sus usos; las expresiones siguen opacas; los nueve primitivos alcanzan; `Body` dice una sentencia. El conocimiento pasa a ser reglas generales del lenguaje, sin transformaciones escritas: el motor las deduce de lo que se rompe, y un refactoring es solo una intención. Reemplaza en parte la 7 (cuerpos fuera del grafo). Sección 9, etapa 3 y su apéndice | propuesta, 2026-11-01 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -1048,16 +1048,17 @@ que esto no escala solo:
   - Un `Set` de cuerpo se vuelve `Delete` y `Create` de sentencias.
   - `...`, `said`, `value-given` y `said-without` se van: cada sentencia se dice sola o es opaca.
   - La obligación 11 se reemplaza por "cada sentencia dice lo que hace si puede".
-- *Conocimiento.* Las recetas se parten en efectos chicos, con lo que necesitan y lo que hacen sobre hechos del
-  grafo, y el planificador las compone. `pass-to-superclass` pasa a ser la composición de tres efectos:
-  - `takes(constructor, campo)`: el constructor de la superclase recibe un parámetro y crea la sentencia que lo
-    asigna;
-  - `passes(constructor, a, valor)`: crea o completa la sentencia `#{a}(valor)` primero;
-  - `Delete` de la sentencia que asignaba, que solo conserva el sentido si el valor llega por el otro lado.
-
-  Para que el planificador sepa eso hace falta un hecho que se lee del grafo: `initializes(tipo, campo, valor)`, que
-  dice qué valor recibe un campo al construir un objeto. Ese hecho es lo que vuelve deducible "conserva el sentido",
-  que hoy se declara a mano (`keeps meaning`).
+- *Conocimiento.* Deja de tener transformaciones escritas. Es lo que Java exige de un programa, en reglas
+  generales que no saben de refactorings ni de quick fixes ("un final lo asignan solo los constructores de su
+  tipo", "una llamada da un argumento por parámetro"). Las únicas acciones son los primitivos, con lo que cada uno
+  cambia en el grafo, y eso es fijo y no depende del lenguaje. El motor toma una regla que no se cumple, prueba los
+  primitivos que cambian algo de lo que la regla mira, ve qué se rompe después y sigue. Cada camino que termina
+  coherente es una propuesta, y varios caminos son varios fixes. Si el camino pasa los invariantes de sentido y no
+  toca ninguna promesa del lenguaje (`final`, el `static` de un campo, la firma de algo público), conserva el sentido
+  y se aplica solo; si no, se ofrece. Así `keeps meaning` deja de declararse a mano y se deduce. Un refactoring
+  queda reducido a la intención de la persona (`want`), y lo demás se deduce. El compilador sigue siendo el juez:
+  una regla incompleta pierde un camino, y una equivocada da un candidato que el verificador rechaza. Cómo quedaría
+  todo esto está en el apéndice de esta etapa.
 - *Identidad de las sentencias.* Es lo difícil.
   - Una sentencia no tiene nombre.
   - Los primitivos saben dónde dejan cada sentencia, así que conservan su id sin ayuda.
@@ -1076,19 +1077,25 @@ que esto no escala solo:
 
 **La migración**, por estrangulación y con un commit por ciclo, como las fases anteriores:
 
+0. *Experimento, sin sentencias.* Los cinco efectos que hoy conservan el sentido y no necesitan sentencias (abrir
+   visibilidad, subir una dependencia, importar, ampliar un override y declarar el constructor) se reemplazan por
+   reglas de acceso, alcance y construcción, junto con el motor que deduce las acciones de lo que se rompe. El
+   criterio: los mismos tests de aceptación pasan con planes deducidos y sin efectos escritos. Si no sale ahí, donde
+   el problema es más fácil, no va a salir con sentencias.
 1. *Locales.* `LOCAL` y sus usos en el grafo, con obligación del contrato. Lo que gana: rename de locales verificado
    (y el rename en el lugar de la UI), Inline Variable.
 2. *Sentencias.* `STATEMENT` de primer nivel, ordenadas, como sitio de sus referencias. `Create`, `Delete` y `Move` de
    sentencias, y `Extract` por lista de sentencias. Lo que gana: el fragmento de extract-method deja de ser opaco.
 3. *Sentencias dichas.* `BODY` por sentencia. Se van `said`, `value-given`, `said-without` y `...`.
-4. *Conocimiento compuesto.* `initializes` como hecho; `pass-to-superclass` e `initialize-in-constructors` reescritos
-   como composición de efectos chicos; `keeps meaning` deducido donde se pueda.
+4. *Conocimiento como reglas.* Los efectos de `knowledge.ref` se reemplazan, de a uno, por reglas del lenguaje
+   (finales, construcción, llamadas, estáticos, abstractos); los scripts del catálogo pasan a ser intenciones.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**
 
-- La fase 4 baja la cantidad de funciones de `ScriptFunctions` y el tamaño de las reglas específicas.
-- El ejemplo del `super(limit)` sale de componer efectos de no más de cinco líneas cada uno.
+- `knowledge.ref` no tiene efectos, y el catálogo no tiene pasos: cada refactoring es una intención.
+- El `super(limit)` sale de las reglas de final, alcance y construcción, sin nada escrito para ese caso.
+- La fase 4 baja la cantidad de funciones de `ScriptFunctions`.
 - Las fases 4 y 5 no tocan ningún archivo de los drivers.
 - Ahora sí se aceptan `this.limit = limit * 2` y cualquier otra sentencia que no se pueda decir: se mueve entera,
   opaca, en vez de rechazarse.
@@ -1102,6 +1109,305 @@ que esto no escala solo:
    que un refactoring los pida (propuesto)?
 4. Las expresiones siguen opacas (propuesto). Extract Variable desde una expresión usa la selección de la persona,
    que el driver convierte en un local y una sentencia.
+5. Qué motor evalúa las reglas: uno propio con la semántica de Datalog detrás de un contrato, o uno maduro. En
+   discusión.
+
+#### Apéndice de la etapa 3: cómo quedaría el conocimiento
+
+Acá va solo lo que cambia con el tiempo: el conocimiento, que es lo que se agrega y se ajusta para que el sistema
+haga más refactorings y quick fixes. En ningún archivo hay un quick fix escrito ni un paso de un refactoring; hoy, en
+cambio, son 25 efectos escritos a mano. La sintaxis es un boceto: semántica de Datalog con la forma de los `.ref`.
+
+Lo fijo, que no se muestra porque no cambia:
+- el grafo, con los hechos que el driver lee;
+- los primitivos y qué hechos cambia cada uno;
+- tres invariantes de sentido, sin lenguaje: cada uso liga lo mismo, lo que corría corre donde corría, y un valor
+  llega a otro método por un parámetro;
+- el planificador;
+- el verificador, con el compilador como juez.
+
+**`java/language.rules`: cómo es Java.**
+
+```
+# How every Java program is. Nothing here is about a refactoring or a quick fix.
+# Read from the graph: in(s) the method or constructor of a statement, owner(x) what declares x, top,
+# package, uses/reads/writes/calls(s, x), first(k), callee(s), arguments(s, c), params(c),
+# constructors(t), superclass(t), inherited(t), overrides(m, n), subclass(a, b), and the facts.
+
+# ---- names
+rule own-names "a parameter or a local is used only inside its own method or constructor"
+  for s, x where uses(s, x) and (param(x) or local(x))
+  must in(s) = owner(x)
+end
+
+# ---- access
+order visibility: private < package < protected < public
+def accessible(s, m) when visibility(m) = public
+def accessible(s, m) when visibility(m) = package   and package(s) = package(m)
+def accessible(s, m) when visibility(m) = protected and (package(s) = package(m) or subclass(top(s), owner(m)))
+def accessible(s, m) when visibility(m) = private   and top(s) = top(m)
+
+rule access "a member is used only where it is accessible"
+  for s, m where uses(s, m)
+  must accessible(s, m)
+end
+
+# ---- static
+rule no-object "a static method uses an instance member of its type only through an object"
+  for s, m where uses-own(s, m) and not static(m)          # uses-own: written as m or this.m
+  must not static(in(s))
+end
+
+# ---- construction
+# A class that declares no constructor has one, with no parameters.
+def constructors(t) = [implicit constructor] when class(t) and declared-constructors(t) = []
+# A constructor starts with super(...) or this(...); when neither is written, with super(), unwritten.
+def starts-with-this(k) when callee(first(k)) in constructors(owner(k))
+def implicit-super(k)   when constructor(k) and not constructor(callee(first(k)))
+
+rule construction "an unwritten super() needs a constructor without parameters in the superclass"
+  for k where implicit-super(k)
+  must some c in constructors(superclass(owner(k))): params(c) = [] and accessible(k, c)
+end
+
+# ---- final fields
+rule final-once "a final field gets its value in its declaration, or in each constructor of its type"
+  for f where final(f) and not initialized(f)
+  must every k in constructors(owner(f)) where not starts-with-this(k): assigns(k, f)
+end
+
+rule final-where "only a constructor of its own type assigns a final field"
+  for s, f where writes(s, f) and final(f)
+  must in(s) in constructors(owner(f))
+end
+
+# ---- calls
+rule arity "a call gives one argument to each parameter"
+  for s, c where calls(s, c)
+  must count(arguments(s, c)) = count(params(c))
+end
+
+rule one-result "a method gives back one value at most"
+  for m where method(m)
+  must count(results(m)) <= 1
+end
+
+# ---- abstract methods and overriding
+rule complete "a class that is not abstract has a body for each method it inherits without one"
+  for t, m where class(t) and not abstract(t) and m in inherited(t) and abstract(m)
+  must some n in members(t) + inherited(t): overrides(n, m) and not abstract(n)
+end
+
+rule override-access "an override is at least as accessible as what it overrides"
+  for m, n where overrides(m, n)
+  must visibility(m) >= visibility(n)
+end
+```
+
+**Promesas, valores y lo que dice el compilador.**
+
+```
+# java/promises.rules: what a declaration promises. Changing it may leave everything compiling and
+# still change what the code means for somebody: only people choose that, no repair does it alone.
+promise final of fields     "the value never changes once the object is made"
+promise static of fields    "one value for all objects, or one for each"
+promise signature of public "code outside the workspace may call it"
+
+# java/values.rules: how Java writes the value a type starts with.
+value start(t) = "0"     when t in byte, short, int, long, float, double
+value start(t) = "false" when t = boolean
+value start(t) = "null"  otherwise
+
+# java/compiler.rules: what Eclipse's compiler says, as the rule that does not hold there.
+problem ecj.UninitializedBlankFinalField       is final-once   for the field it names
+problem ecj.FinalFieldAssignment               is final-where  for the statement it marks
+problem ecj.StaticMethodRequested              is no-object    for the statement it marks
+problem ecj.NonStaticFieldFromStaticInvocation is no-object    for the statement it marks
+problem ecj.NotVisibleField                    is access       for the statement it marks
+problem ecj.AbstractMethodMustBeImplemented    is complete     for the class it marks
+problem ecj.MethodReducesVisibility            is override-access for the method it marks
+problem ecj.UndefinedConstructorInImplicitConstructorCall is construction for the constructor it marks
+```
+
+**`preferences.rules`: el orden de las propuestas.**
+
+```
+# Among the ways that work, which comes first. It changes the order, never what is correct.
+cost every change 1
+cost a change that touches a public member +3
+cost each step a visibility widens +1
+prefer what is created as hidden as it can be
+```
+
+**`refactorings.rules`: lo que la gente pide.**
+
+```
+# What people ask for: what has to be true afterwards. How to get there, and what else has to change
+# for the code to still be Java and still do the same, is deduced.
+
+refactoring pull-up-field "Moves a field to the superclass of its type"
+  param field : FIELD
+  want owner(field) = superclass(owner(field))
+end
+
+refactoring extract-superclass "A class between a type and its superclass, with the fields given"
+  param type   : CLASS
+  param name   : text default "Abstract${name(type)}"
+  param fields : FIELD* of type
+  new CLASS base named name in package(type)
+  want superclass(base) = superclass(type)
+  want superclass(type) = base
+  want owner(f) = base for each f in fields
+end
+
+refactoring extract-method "Statements become a method, called where they were"
+  param statements : STATEMENT* in a row
+  param name       : text default "extracted"
+  new METHOD m named name in owner(in(first(statements)))
+  want in(s) = m for each s in statements
+end
+
+refactoring make-static "A method that needs no object"
+  param method : METHOD
+  want static(method)
+end
+
+refactoring inline-method "Each call does what the method does, and the method goes"
+  param method : METHOD
+  want gone(method)
+end
+
+refactoring safe-delete "Deletes what nothing uses"
+  param element : any
+  want gone(element) alone          # alone: nothing else may change to get there
+end
+```
+
+Inline Method y Safe Delete difieren en una palabra: cuánta libertad tiene el planificador para lograr lo pedido.
+
+**Lo que el sistema deduce con eso.** Extract Superclass sobre una clase cuyo constructor inicializa un `final`:
+
+```
+extract-superclass Unset → AbstractUnset, [limit]
+  AbstractUnset is created, Unset extends it, limit moves to it                     asked
+  ✗ access       twice() reads limit, private in another class
+                 → limit package                                                  narrowest that works
+  ✗ final-where  "this.limit = limit" assigns limit in Unset(int)
+    a. move that statement into a constructor of AbstractUnset
+       · AbstractUnset has only the implicit one → write it: AbstractUnset()       same meaning
+       ✗ own-names     the statement reads limit, a parameter of Unset(int)
+                       → AbstractUnset() takes a parameter limit; the statement reads that one
+       ✗ construction  Unset(int) starts with an unwritten super(); none without parameters is left
+                       → Unset(int) starts with super(v); v is what the statement read there: limit
+       ✓ keeps meaning, touches no promise                                         applied
+    b. limit not final               ✓ compiles  ✗ promise "final"                 offered, not applied
+    c. limit = … in its declaration  the value exists only inside Unset(int)        discarded
+    d. limit back to Unset           undoes what was asked                          discarded
+```
+
+Las mismas reglas, sin refactoring de por medio, frente a `ecj.UninitializedBlankFinalField` en una clase sin
+constructores, dan los tres fixes que hoy están escritos a mano:
+- un valor en la declaración: pregunta cuál y propone `start(int)`;
+- un constructor que recibe el valor: los `new Q()` necesitan un argumento, así que pregunta y propone `0`;
+- sacar el `final`: rompe una promesa, así que solo si la persona lo elige.
+
+Extract Method, con los parámetros y el resultado deducidos:
+
+```java
+int average(List<Item> items) {
+    int sum = 0;                                   // s1
+    for (Item i : items) sum += i.price();         // s2
+    int count = items.size();                      // s3
+    return sum / count;                            // s4
+}
+```
+
+```
+extract-method [s2] addPrices
+  addPrices is created; s2 moves into it                                           asked
+  s2 still has to run where it ran     → a call to addPrices where s2 was          what runs, runs
+  ✗ own-names  s2 reads items and sum, which belong to average
+     items: only read                  → parameter items; the call passes items
+     sum:   read, written, read after  → parameter sum, and it comes back: sum = addPrices(items, sum);
+  → private int addPrices(List<Item> items, int sum) { for (Item i : items) sum += i.price(); return sum; }
+
+extract-method [s2, s3] addPrices
+  sum and count are written, and s4 reads both after: two values would come back
+  ✗ one-result  no way gives back two → refused: "sum and count would both come back"
+```
+
+Ese rechazo es el mensaje de IntelliJ ("multiple output values"), y nadie lo programó: sale de que en Java un método
+devuelve un solo valor.
+
+Un quick fix de estáticos, con una cadena que se corta:
+
+```java
+class Prices {
+    double rate = 0.21;
+    double gross(double net) { return net * factor(); }
+    double factor()          { return 1 + rate; }
+    static double check(double net) { return gross(net); }    // ecj.StaticMethodRequested
+}
+```
+
+```
+✗ no-object  check() is static and calls gross() without an object
+  a. gross() static
+     ✗ no-object  gross() calls factor() without an object → factor() static
+        ✗ no-object  factor() reads rate without an object → rate static
+           ✗ promise "static of fields": one rate for all Prices                  this way stops
+  b. check() not static                  1 change; nothing static calls it          first
+  c. check() calls gross() on an object  a parameter Prices p; its callers
+                                         have to pass one                           asks which
+```
+
+Si `factor()` no leyera `rate`, el camino (a) llegaría hasta el final: "make gross() and factor() static". El
+`make-static` escrito hoy hace uno solo y deja el error en el siguiente.
+
+**Cómo crece: un archivo nuevo.** Un día se agrega esto, y nada más:
+
+```
+# java/exceptions.rules
+def checked(e) when subclass(e, java.lang.Exception) and not subclass(e, java.lang.RuntimeException)
+
+rule handled "a checked exception a call may throw is caught around it or declared by its method"
+  for s, c, e where calls(s, c) and e in throws(c) and checked(e)
+  must caught(s, e) or some d in throws(in(s)): subclass(e, d)
+end
+
+rule override-throws "an override throws no checked exception that what it overrides does not"
+  for m, n, e where overrides(m, n) and e in throws(m) and checked(e)
+  must some d in throws(n): subclass(e, d)
+end
+
+problem ecj.UnhandledException                  is handled         for the statement it marks
+problem ecj.IncompatibleExceptionInThrowsClause is override-throws for the method it marks
+```
+
+Sin tocar ningún refactoring ni otra regla, aparece:
+- un quick fix nuevo: sobre `Files.readString(path)` en `load()`, "add throws IOException to load()"; si `start()`
+  llama a `load()`, eso rompe `handled` ahí, y el planificador sigue la cadena: "…and to start()";
+- Extract Method con excepciones: el método nuevo declara `throws IOException` cuando lo que se extrae lo tira;
+- Extract Interface y Pull Up Method con excepciones: la declaración de arriba también lo declara, por
+  `override-throws`.
+
+La regla necesita un hecho que hoy el grafo no tiene: qué declara tirar cada método del workspace (de los métodos de
+biblioteca lo dice el compilador). Es el único caso en que cambia código fijo: el driver aprende a leer un hecho
+nuevo. "Rodear con try/catch" recién aparece cuando los bloques estén en el grafo, porque `caught` habla de ellos.
+
+**Lo que se iría modificando.**
+
+| Archivo | Qué contiene | Qué se gana cuando crece |
+|---|---|---|
+| `java/language.rules` y otros `java/*.rules` | una regla por cada cosa que Java exige | más problemas detectados, más fixes, y refactorings que ya existían andando en más casos |
+| `java/compiler.rules` | qué regla rota es cada error de ECJ (hay cientos) | más errores del compilador con fixes |
+| `java/promises.rules`, `java/values.rules` | qué cambia el sentido; cómo se escriben los valores | qué se aplica solo y qué se pregunta |
+| `preferences.rules` | costos | el orden de las propuestas |
+| `refactorings.rules` | intenciones, unas líneas de `want` cada una | refactorings nuevos, que sirven para cualquier lenguaje |
+| hechos del driver (rara vez) | el vocabulario del grafo | lo que las reglas pueden decir |
+
+`refactorings.rules` no tiene nada de Java: para otro lenguaje harían falta sus propios `*.rules` y un driver, y las
+intenciones se reusan.
 
 ## 10. Glosario
 
