@@ -95,6 +95,12 @@ final class Form {
                 ? new Field(f.param(), f.options(), String.valueOf(suggested.get(f.param().name()))) : f).toList());
     }
 
+    /** A capability's form as a record is filled in: each field starting with its value, if it has one. */
+    static Form filled(String title, Capability capability, Map<String, ?> values) {
+        return new Form(title, capability.params().stream().map(param -> new Field(param,
+                param.type().equals("choice") ? param.kinds() : List.of(), values.get(param.name()))).toList());
+    }
+
     /** The questions a quick fix asks ({@code name}, {@code question}, {@code default}), each answered as text. */
     static Form questions(String title, List<Map<String, Object>> asks) {
         return new Form(title, asks.stream().map(ask -> new Field(new Param(String.valueOf(ask.get("name")), "text", List.of(),

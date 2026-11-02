@@ -42,6 +42,7 @@ final class RunConsole extends JPanel {
     private Process process;
     private List<String> command = List.of();
     private Path directory;
+    private java.util.Map<String, String> environment = java.util.Map.of();
     private String title = "";
     private Integer exit;
 
@@ -73,16 +74,24 @@ final class RunConsole extends JPanel {
 
     /** Runs a command in a folder, stopping what ran before; what it writes is shown as it writes it. */
     void start(String title, List<String> command, Path directory) {
+        start(title, command, directory, java.util.Map.of());
+    }
+
+    /** Runs a command in a folder, with these variables added to its environment. */
+    void start(String title, List<String> command, Path directory, java.util.Map<String, String> environment) {
         stop();
         this.title = title;
         this.command = List.copyOf(command);
         this.directory = directory;
+        this.environment = java.util.Map.copyOf(environment);
         text.setText("");
         errors.setLength(0);
         exit = null;
         append(String.join(" ", command) + "\n", said);
         try {
-            process = new ProcessBuilder(command).directory(directory.toFile()).start();
+            var builder = new ProcessBuilder(command).directory(directory.toFile());
+            builder.environment().putAll(environment);
+            process = builder.start();
         } catch (IOException e) {
             append("Cannot run: " + e.getMessage() + "\n", err);
             return;
@@ -113,7 +122,7 @@ final class RunConsole extends JPanel {
 
     /** Runs again what ran last. */
     void rerun() {
-        if (!command.isEmpty()) start(title, command, directory);
+        if (!command.isEmpty()) start(title, command, directory, environment);
     }
 
     /** Ends the program, and what it started, at once. */

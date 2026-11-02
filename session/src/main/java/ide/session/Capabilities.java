@@ -184,6 +184,11 @@ final class Capabilities {
                         Param.of("environment", "text").optional()), args -> workspace.runConfig(new RunConfigs.Config(text(args, "name").strip(),
                         text(args, "type"), optional(args, "args").orElse(""), optional(args, "vm").orElse(""),
                         optional(args, "directory").orElse(""), optional(args, "environment").orElse(""))).shown()))
+                .register(Capability.of("run-config-choose", "Chooses the run configuration that runs when none is said",
+                        List.of(Param.of("name", "text")), args -> {
+                    workspace.runs().choose(text(args, "name"));
+                    return workspace.runs().shown();
+                }))
                 .register(Capability.of("run-config-remove", "Removes a run configuration", List.of(Param.of("name", "text")), args -> {
                     workspace.runs().remove(text(args, "name"));
                     return workspace.runs().shown();

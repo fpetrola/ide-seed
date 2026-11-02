@@ -82,6 +82,9 @@ class RunConfigsTest {
         assertThat(tool).containsEntry("config", "Tool");
         assertThat(call(ws, "run-configs", Map.of()).get("configs").toString()).contains("name=Tool", "type=a.Tool");
         assertThat(call(ws, "run-command", Map.of())).containsEntry("config", "Tool"); // the one chosen last
+
+        call(ws, "run-config-choose", Map.of("name", "App with data"));
+        assertThat(call(ws, "run-command", Map.of())).containsEntry("config", "App with data");
     }
 
     @Test

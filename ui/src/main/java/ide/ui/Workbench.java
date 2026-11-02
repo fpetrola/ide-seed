@@ -181,6 +181,7 @@ final class Workbench extends JPanel {
         main.setDividerLocation(260);
         main.setBorder(BorderFactory.createEmptyBorder());
         add(main, BorderLayout.CENTER);
+        add(runBar(), BorderLayout.PAGE_START);
         var bar = new JPanel(new BorderLayout(16, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 10));
         bar.add(status, BorderLayout.CENTER);
@@ -300,6 +301,11 @@ final class Workbench extends JPanel {
                     }
                 }
                 case "stop-run" -> console.stop();
+                case "run-chosen" -> {
+                    if (configs.getSelectedItem() instanceof String chosen && !chosen.equals(EDIT)) runConfig(chosen);
+                    else act("run");
+                }
+                case "edit-configs" -> editConfigs();
                 case "claude" -> claude(true);
                 case "claude-new" -> claude(false);
                 case "zoom-in" -> zoom(1);
@@ -653,11 +659,132 @@ final class Workbench extends JPanel {
             say("nothing to run in " + path + ": no class of it has a main method");
             return;
         }
+        start(Map.of("type", String.valueOf(main.getFirst().get("type"))));
+    }
+
+    /** Runs a run configuration, saved first, in the console below. */
+    void runConfig(String name) {
+        start(Map.of("config", name));
+    }
+
+    private void start(Map<String, String> what) {
+        if (ide.folder().isEmpty()) {
+            say("nothing runs here: the IDE was not opened on a folder");
+            return;
+        }
         saved();
-        @SuppressWarnings("unchecked") var run = (Map<String, Object>) ide.call("run-command", Map.of("type", String.valueOf(main.getFirst().get("type"))));
+        @SuppressWarnings("unchecked") var run = (Map<String, Object>) ide.call("run-command", what);
+        @SuppressWarnings("unchecked") var environment = (Map<String, Object>) run.get("environment");
+        var variables = new LinkedHashMap<String, String>();
+        environment.forEach((name, value) -> variables.put(name, String.valueOf(value)));
         console.start(String.valueOf(run.get("title")), ((List<?>) run.get("command")).stream().map(String::valueOf).toList(),
-                Path.of(String.valueOf(run.get("directory"))));
+                Path.of(String.valueOf(run.get("directory"))), variables);
         views.setSelectedComponent(console);
+        configsShown();
+    }
+
+    // ---- run configurations, as IntelliJ's toolbar has them
+
+    private static final String EDIT = "Edit Configurations\u2026";
+    private final javax.swing.JComboBox<String> configs = new javax.swing.JComboBox<>();
+    private boolean listing;
+
+    private JPanel runBar() {
+        var bar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2));
+        configs.setPrototypeDisplayValue("A run configuration's name");
+        configs.setRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean selected,
+                                                                   boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                setIcon(EDIT.equals(value) || value == null ? null : Icons.of("RUN"));
+                if (value == null) setText("Add Configuration\u2026");
+                return this;
+            }
+        });
+        configs.addActionListener(event -> {
+            if (listing) return;
+            if (EDIT.equals(configs.getSelectedItem())) {
+                configsShown();
+                editConfigs();
+            } else if (configs.getSelectedItem() instanceof String chosen) {
+                ide.call("run-config-choose", Map.of("name", chosen));
+            }
+        });
+        var run = new javax.swing.JButton(Icons.of("RUN"));
+        run.setToolTipText("Run (" + Keymap.of("run-chosen").stroke().toString().replace("pressed ", "") + ")");
+        run.addActionListener(event -> act("run-chosen"));
+        var stop = new javax.swing.JButton(Icons.of("STOP"));
+        stop.setToolTipText("Stop (" + Keymap.of("stop-run").stroke().toString().replace("pressed ", "") + ")");
+        stop.addActionListener(event -> act("stop-run"));
+        for (var button : List.of(run, stop)) button.putClientProperty("JButton.buttonType", "toolBarButton");
+        bar.add(configs);
+        bar.add(run);
+        bar.add(stop);
+        configsShown();
+        return bar;
+    }
+
+    /** The run configurations in the toolbar's list, the chosen one selected, and editing them last. */
+    @SuppressWarnings("unchecked")
+    private void configsShown() {
+        if (ide.folder().isEmpty()) return;
+        var shown = ide.record("run-configs", Map.of());
+        listing = true;
+        configs.removeAllItems();
+        ((List<Map<String, Object>>) shown.get("configs")).forEach(config -> configs.addItem(String.valueOf(config.get("name"))));
+        configs.addItem(EDIT);
+        var chosen = String.valueOf(shown.get("chosen"));
+        configs.setSelectedItem(chosen.isEmpty() ? null : chosen);
+        listing = false;
+    }
+
+    /** The configurations the toolbar lists, editing them last. */
+    List<String> configsListed() {
+        var listed = new java.util.ArrayList<String>();
+        for (var i = 0; i < configs.getItemCount(); i++) listed.add(configs.getItemAt(i));
+        return listed;
+    }
+
+    /** IntelliJ's Run/Debug Configurations, a step at a time: which one, then its fields; a new one; removing one. */
+    @SuppressWarnings("unchecked")
+    private void editConfigs() {
+        if (ide.folder().isEmpty()) return;
+        var kept = (List<Map<String, Object>>) ide.record("run-configs", Map.of()).get("configs");
+        var options = new java.util.ArrayList<Dialogs.Option>();
+        kept.forEach(config -> options.add(new Dialogs.Option(String.valueOf(config.get("name")), "RUN", String.valueOf(config.get("type")))));
+        options.add(Dialogs.Option.of("+ New configuration", "QUESTION"));
+        if (!kept.isEmpty()) options.add(Dialogs.Option.of("\u2212 Remove a configuration", "STOP"));
+        var chosen = dialogs.choose("Run Configurations", options, editors.caretOnScreen());
+        if (chosen.isEmpty()) return;
+        try {
+            if (chosen.get().startsWith("\u2212")) {
+                dialogs.choose("Remove", kept.stream().map(c -> new Dialogs.Option(String.valueOf(c.get("name")), "STOP", "")).toList(),
+                        editors.caretOnScreen()).ifPresent(name -> {
+                    ide.call("run-config-remove", Map.of("name", name));
+                    say("run configuration removed: " + name);
+                });
+                configsShown();
+                return;
+            }
+            var was = kept.stream().filter(c -> chosen.get().equals(c.get("name"))).findFirst();
+            var start = was.<Map<String, Object>>map(LinkedHashMap::new).orElseGet(() -> {
+                var fresh = new LinkedHashMap<String, Object>();
+                editors.current().flatMap(path -> ide.records("mains", Map.of("path", path)).stream().findFirst())
+                        .ifPresent(main -> fresh.put("type", main.get("type")));
+                return fresh;
+            });
+            var filled = dialogs.fill(was.isPresent() ? "Run configuration " + chosen.get() : "New run configuration",
+                    Form.filled("Run configuration", ide.capability("run-config-set"), start), values -> "");
+            if (filled.isEmpty()) return;
+            ide.call("run-config-set", filled.get());
+            var name = String.valueOf(filled.get().get("name")).strip();
+            if (was.isPresent() && !name.equals(chosen.get())) ide.call("run-config-remove", Map.of("name", chosen.get())); // renamed
+            say("run configuration kept: " + name);
+        } catch (RuntimeException refused) {
+            dialogs.tell("Could not keep the run configuration", List.of(String.valueOf(refused.getMessage())), editors.caretOnScreen());
+        }
+        configsShown();
     }
 
     /** Everything shown again as the program is now: files, problems, editors, changes not saved. */
@@ -686,6 +813,7 @@ final class Workbench extends JPanel {
         }
         editors.problems(problems);
         arrows(ide.records("mains", Map.of()));
+        configsShown();
         views.problems(problems);
         plans.refresh();
         views.changes(ide.text("diff", Map.of()));
@@ -755,7 +883,7 @@ final class Workbench extends JPanel {
         refactor.add(more);
         bar.add(refactor);
         menu(bar, "Build", "apply-edit");
-        menu(bar, "Run", "run", "rerun", "stop-run");
+        menu(bar, "Run", "run-chosen", "run", "rerun", "stop-run", null, "edit-configs");
         menu(bar, "Help", "find-action", "keys");
         return bar;
     }

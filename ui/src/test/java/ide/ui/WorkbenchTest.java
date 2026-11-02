@@ -693,6 +693,65 @@ class WorkbenchTest {
         assertThat(console.running()).isFalse();
     }
 
+    private void awaitFinished(Workbench workbench) throws Exception {
+        workbench.console().await(java.time.Duration.ofSeconds(30));
+    }
+
+    /** A run configuration is made and edited as IntelliJ's are, and runs with its arguments, options, folder and environment. */
+    @Test
+    void aRunConfigurationRunsWithWhatItSays() throws Exception {
+        Files.createDirectories(root.resolve("a"));
+        Files.createDirectories(root.resolve("data"));
+        Files.writeString(root.resolve("a/Echo.java"), """
+                package a;
+
+                public class Echo {
+                    public static void main(String[] args) {
+                        System.out.println(String.join("|", args) + " " + System.getProperty("mode") + " " + System.getenv("GREETING")
+                                + " " + new java.io.File("").getAbsoluteFile().getName());
+                    }
+                }
+                """);
+        var workbench = new Workbench(new Ide(Workspace.open(root)), dialogs);
+        workbench.open("a/Echo.java", 1, 1);
+        assertThat(workbench.configsListed()).containsExactly("Edit Configurations\u2026");
+
+        dialogs.choose("+ New configuration").fill(Map.of("name", "Echo twice", "args", "one \"two words\"", "vm", "-Dmode=slow",
+                "directory", "data", "environment", "GREETING=hola"));
+        workbench.act("edit-configs");
+
+        assertThat(dialogs.filled.getLast().fields()).anySatisfy(field -> {
+            assertThat(field.param().name()).isEqualTo("type");
+            assertThat(field.value()).isEqualTo("a.Echo"); // the class of the file open, to begin with
+            assertThat(field.options()).containsExactly("a.Echo");
+        });
+        assertThat(workbench.configsListed()).containsExactly("Echo twice", "Edit Configurations\u2026");
+
+        workbench.act("run-chosen");
+        awaitFinished(workbench);
+
+        assertThat(workbench.console().text()).contains("one|two words slow hola data");
+        assertThat(workbench.console().title()).isEqualTo("Echo twice");
+    }
+
+    /** Running a class from its arrow uses its configuration, or makes one named after it, chosen from then on. */
+    @Test
+    void aClassRunFromItsArrowGetsAConfigurationAndOneIsRemoved() throws Exception {
+        var workbench = runnable();
+        workbench.open("a/App.java", 1, 1);
+
+        workbench.editors().clickRun("a/App.java", 3);
+        javax.swing.SwingUtilities.invokeAndWait(() -> workbench.act("stop-run"));
+        awaitFinished(workbench);
+
+        assertThat(workbench.configsListed()).containsExactly("App", "Edit Configurations\u2026");
+
+        dialogs.choose("\u2212 Remove a configuration").choose("App");
+        workbench.act("edit-configs");
+
+        assertThat(workbench.configsListed()).containsExactly("Edit Configurations\u2026");
+    }
+
     /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */
     @Test
     void whatChangesOnDiskTheWindowShows() throws Exception {

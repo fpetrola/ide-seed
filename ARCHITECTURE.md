@@ -848,6 +848,12 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     antes. La ventana corre el proceso (`RunConsole`), igual que la terminal: muestra stdout, stderr en rojo, le pasa
     entrada y lo detiene. Límites: los recursos (`src/main/resources`) no están en el classpath, y la clase tiene que
     ser la primera de su archivo.
+  - **Decisión: las configuraciones de ejecución son de session, y la flecha usa la de su clase.** `RunConfigs` guarda
+    por nombre la clase, los argumentos y las opciones de la VM (partidos como un shell, con comillas), la carpeta
+    (relativa a la del proyecto) y el entorno (`NOMBRE=valor;...`), en `.ide/runs.json`, con una elegida. Como en
+    IntelliJ, ejecutar una clase usa la primera configuración que la ejecuta o crea una con su nombre, y queda
+    elegida. La ventana no guarda nada: el selector de la barra y el formulario (armado con el esquema de
+    `run-config-set`) solo llaman capacidades.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un
