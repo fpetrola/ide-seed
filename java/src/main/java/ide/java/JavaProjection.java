@@ -146,6 +146,41 @@ public final class JavaProjection implements Projection {
         return sources.texts();
     }
 
+    /** A class a program can be run from: its name, its file, the line it is declared at and its main method's. */
+    public record Main(String type, String path, int line, int methodLine) {
+    }
+
+    /**
+     * The classes a program can be run from, by file: the first top-level class of a file (the one Java launches from a
+     * source file) with a main method Java runs: {@code static void main(String[])}, or, as Java 25 runs them, an
+     * instance {@code main} or one with no arguments, not private.
+     */
+    public List<Main> mains() {
+        var found = new ArrayList<Main>();
+        for (var path : sources.paths().stream().sorted().toList()) {
+            var unit = sources.unit(path).tree();
+            unit.getTypes().stream().findFirst()
+                    .filter(type -> type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declared && !declared.isInterface()
+                            || type instanceof com.github.javaparser.ast.body.RecordDeclaration || type instanceof com.github.javaparser.ast.body.EnumDeclaration)
+                    .ifPresent(type -> type.getMethodsByName("main").stream()
+                            .filter(method -> method.getType().isVoidType() && !method.isPrivate() && runsWith(method))
+                            .findFirst()
+                            .ifPresent(method -> found.add(new Main(unit.getPackageDeclaration().map(p -> p.getNameAsString() + ".").orElse("")
+                                    + type.getNameAsString(), path, type.getName().getBegin().map(b -> b.line).orElse(1),
+                                    method.getName().getBegin().map(b -> b.line).orElse(1)))));
+        }
+        return found;
+    }
+
+    private static boolean runsWith(com.github.javaparser.ast.body.MethodDeclaration method) {
+        if (method.getParameters().isEmpty()) return true;
+        if (method.getParameters().size() != 1) return false;
+        var parameter = method.getParameter(0);
+        var type = parameter.getType().asString();
+        return type.equals("String[]") || type.equals("java.lang.String[]")
+                || parameter.isVarArgs() && (type.equals("String") || type.equals("java.lang.String"));
+    }
+
     /** A stretch of a file, from the first character to the last, each as line and column from 1. */
     public record Span(int line, int column, int endLine, int endColumn) {
     }

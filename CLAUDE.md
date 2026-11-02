@@ -80,7 +80,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   nothing reads is deleted with its lines; a deleted parameter takes its argument from every call, whose uses go on
   purpose (one with effects is refused). The top-level statements of each body are elements; the primitives that
   change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
-  `inside` answers the innermost element, a statement or a local too. An edit by hand reconciles identity (types, members,
+  `inside` answers the innermost element, a statement or a local too. `mains` are the classes a program runs from: the first
+  top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
@@ -146,7 +147,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with its tools (`activity`, an event as Claude Code's hooks give it) is a step of the task it started last and still
   does, said in a few words (Activity); the plan shows each task's last step. Conversation: the agent's conversation on the
   project (the session id its hooks tell), and whether it was open when the IDE closed, in `.ide/conversation.json`;
-  capabilities conversation, conversation-open, conversation-in (and where it is written). Transcript reads the
+  `mains`, `run-command`: how to run a
+  class's program as saved (the IDE's own Java launches it from its sources, with Maven's classpath, in the project's
+  folder). capabilities conversation, conversation-open, conversation-in (and where it is written). Transcript reads the
   conversation as Claude Code writes it (JSONL), only what was added since and only the lines that can matter: what the
   person said, what the agent answered, the tools it used; `task-talk` is what of it was said while a task was being
   done (Plans.doing: of the tasks being done then, the one started last). Attention: where attention is, both ways, between a person and an agent on the same

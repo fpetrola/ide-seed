@@ -205,6 +205,36 @@ public final class Workspace {
         return new Plans.Link(file, line, Math.max(line, end), "", "");
     }
 
+    /** The classes a program can be run from, of a file if one is said. */
+    List<JavaProjection.Main> mains(Optional<String> path) {
+        return project.mains().stream().filter(main -> path.isEmpty() || main.path().equals(path.get())).toList();
+    }
+
+    /**
+     * How to run the program of a class with a main, as it is on disk: the Java the IDE runs on, which runs a program
+     * from its sources (the class's file, and the others of the project as it uses them), with the project's libraries,
+     * in the project's folder (Maven's, if it has one).
+     */
+    Map<String, Object> runCommand(String type) {
+        var main = project.mains().stream().filter(m -> m.type().equals(type)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("no main to run in " + type + ": it is not a class with a main method"));
+        var folder = root().orElseThrow(() -> new IllegalStateException("this workspace was not opened from a folder: nothing to run"));
+        var launcher = ProcessHandle.current().info().command().filter(c -> Path.of(c).getFileName().toString().startsWith("java"))
+                .orElse("java");
+        var command = new java.util.ArrayList<String>(List.of(launcher));
+        if (!classpath.entries().isEmpty()) {
+            command.add("-cp");
+            command.add(String.join(java.io.File.pathSeparator, classpath.entries().stream().map(Path::toString).toList()));
+        }
+        command.add(folder.resolve(main.path()).toString());
+        var shown = new java.util.LinkedHashMap<String, Object>();
+        shown.put("title", type.substring(type.lastIndexOf('.') + 1));
+        shown.put("type", type);
+        shown.put("command", command);
+        shown.put("directory", ide.maven.Maven.project(folder).map(ide.maven.Maven::folder).orElse(folder).toString());
+        return shown;
+    }
+
     private Transcript transcript;
 
     /** What was said while a task was being done, read from the agent's conversation, if it is known. */
