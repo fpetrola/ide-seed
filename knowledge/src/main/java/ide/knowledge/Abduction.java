@@ -58,9 +58,10 @@ final class Abduction {
     /**
      * Relations made to hold by several primitives at once: {@code takes-arguments(m, use)}, a parameter for each
      * argument; {@code stores(p, k, f)}, a statement of k giving f the value of its parameter p; {@code passes(p, s, f)},
-     * s calling p's constructor first with what it gave f, which it gives no more.
+     * s calling p's constructor first with what it gave f, which it gives no more; {@code same-parameters(n, m)}, a
+     * parameter of the method n the plan creates for each of m's.
      */
-    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores", "passes");
+    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores", "passes", "same-parameters");
     /** What a created element is called until it is: {@code new:<relation>:<n>}. */
     static final String NEW = "new:";
     private static final java.util.concurrent.atomic.AtomicInteger CREATIONS = new java.util.concurrent.atomic.AtomicInteger();
@@ -79,6 +80,10 @@ final class Abduction {
         Change breaking(String promise) {
             return new Change(relation, added, removed, forWhat, promise);
         }
+    }
+
+    /** What a change of a relation on an element of a kind promises; one kept by a rule is kept while the rule holds. */
+    record Promise(String why, String keptBy) {
     }
 
     /** Whether a change may be made: {@code promise} is what it breaks, made on purpose; {@code why} why it may not. */
@@ -108,7 +113,7 @@ final class Abduction {
     private final Rules rules;
     private final Set<Literal> conditions;
     private final Evaluation base;
-    private final Map<String, String> promises;
+    private final Map<String, Promise> promises;
     private final Map<String, Integer> violations = new HashMap<>();
     private final Shown shown;
 
@@ -119,7 +124,7 @@ final class Abduction {
         String of(String constant);
     }
 
-    Abduction(Rules rules, Set<Literal> conditions, Evaluation base, Map<String, String> promises, Shown shown) {
+    Abduction(Rules rules, Set<Literal> conditions, Evaluation base, Map<String, Promise> promises, Shown shown) {
         this.rules = rules;
         this.conditions = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         this.conditions.addAll(conditions);
@@ -191,7 +196,8 @@ final class Abduction {
                         explore(forWhat, body, extended, changes, needs, state, found, stuck);
                     }
                     if (!tried) stuck(stuck, new Literal.Positive(atom));
-                } else if (known && COMPOSED.contains(atom.relation())) {
+                } else if (known && COMPOSED.contains(atom.relation())
+                        && (!atom.relation().equals("same-parameters") || values(atom).getFirst().startsWith(NEW))) { // only a new one takes them
                     var change = new Change(atom.relation(), values(atom), null, forWhat);
                     explore(forWhat, rest, binding, plus(changes, change), needs, suppose(state, change), found, stuck);
                 } else if (known && rules.defines(atom.relation())) {
@@ -449,9 +455,10 @@ final class Abduction {
         }
         if (change.element().startsWith(NEW)) return new Verdict(true, null, null); // what is new promises nothing yet
         for (var kind : base.answers(Atom.of("kind", Term.constant(change.element()), Term.variable("K")))) {
-            var why = promises.get(change.relation() + " of " + kind.get("K"));
-            if (why == null) continue;
-            var promise = "promise " + change.relation() + " of " + shown.of(change.element()) + ": " + why;
+            var promised = promises.get(change.relation() + " of " + kind.get("K"));
+            if (promised == null) continue;
+            if (promised.keptBy() != null) continue; // kept while its rule holds, which every way is checked against
+            var promise = "promise " + change.relation() + " of " + shown.of(change.element()) + ": " + promised.why();
             return done.isEmpty() ? new Verdict(true, promise, null) : new Verdict(false, null, promise);
         }
         return new Verdict(true, null, null);

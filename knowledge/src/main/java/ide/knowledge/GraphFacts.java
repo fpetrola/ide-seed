@@ -43,6 +43,7 @@ import java.util.stream.Stream;
  * stores(p, k, f)   (a statement k makes to give f the value of its parameter p: only made, never read)
  * passes(p, s, f)   (s calling p's constructor first with what it gave f, and giving it no more: only made)
  * assigns(s, f)     (a statement of s gives f a value it says in no language)
+ * superclass(t, u)  (u is the class t extends, of the workspace)     same-parameters(n, m)   (in order, of the same types)
  * </pre>
  */
 final class GraphFacts implements Facts {
@@ -123,6 +124,10 @@ final class GraphFacts implements Facts {
                     m.kind().name().toLowerCase(Locale.ROOT)));
             case "exists" -> elements(first).filter(e -> !e.inLibrary()).map(e -> List.of(id(e)));
             case "stores", "passes" -> Stream.empty();
+            case "superclass" -> types(first).flatMap(t -> program.superclass(t.id()).stream().map(u -> List.of(id(t), id(u))));
+            case "same-parameters" -> elements(first).filter(n -> n.kind() == Kind.METHOD || n.kind() == Kind.CONSTRUCTOR)
+                    .flatMap(n -> elements(pattern.size() > 1 ? pattern.get(1) : null).filter(m -> m.kind() == Kind.METHOD)
+                            .filter(m -> parameterTypes(n).equals(parameterTypes(m))).map(m -> List.of(id(n), id(m))));
             case "assigns" -> first == null ? Stream.empty() : elements(first).flatMap(s -> program.children(s.id()).stream())
                     .filter(e -> e.kind() == Kind.STATEMENT).flatMap(st -> assigned(st).stream()).map(f -> List.of(first, f));
             case "declared" -> elements(first).filter(e -> e.kind() == Kind.FIELD || e.kind() == Kind.METHOD)
@@ -166,6 +171,11 @@ final class GraphFacts implements Facts {
             }
         }
         return d[a.length()][b.length()];
+    }
+
+    /** The types of a callable's parameters, in order. */
+    private List<String> parameterTypes(Element callable) {
+        return program.children(callable.id()).stream().filter(e -> e.kind() == Kind.PARAM).map(p -> String.valueOf(p.fact(Fact.TYPE))).toList();
     }
 
     /** The field a statement gives a value, when all it does can be said in no language. */

@@ -100,13 +100,13 @@ public final class Knowledge implements Remedy, QuickFix {
     private final Rules rules;
     private final java.util.Set<Literal> conditions;
     private final Map<String, String> says;
-    private final Map<String, String> promises;
+    private final Map<String, Abduction.Promise> promises;
     private final Map<String, List<String>> questions;
     private final Library library;
     private final Engine engine = Engine.standard();
 
     Knowledge(List<Goal> goals, List<Fact> facts, List<Effect> effects, Rules rules, java.util.Set<Literal> conditions,
-              Map<String, String> says, Map<String, String> promises, Map<String, List<String>> questions, Library library) {
+              Map<String, String> says, Map<String, Abduction.Promise> promises, Map<String, List<String>> questions, Library library) {
         this.goals = List.copyOf(goals);
         this.facts = List.copyOf(facts);
         this.effects = List.copyOf(effects);
@@ -478,6 +478,13 @@ public final class Knowledge implements Remedy, QuickFix {
                     sets.add((target, answers, id, done) -> List.of(new Primitive.Create(Kind.STATEMENT, resolved(callable, done), "",
                             Map.of(ide.program.Fact.BODY, ide.program.Body.name(resolved(field, done)) + " = " + ide.program.Body.name(id)), null)));
                 }
+                case "same-parameters" -> { // a parameter for each of the method it is like, of the same name and type
+                    var like = change.added().get(1);
+                    sets.add((target, answers, id, done) -> target.program().children(resolved(like, done)).stream()
+                            .filter(e -> e.kind() == Kind.PARAM)
+                            .<Primitive>map(p -> new Primitive.Create(Kind.PARAM, id, p.name(), Map.of(ide.program.Fact.TYPE, p.fact(ide.program.Fact.TYPE)), null))
+                            .toList());
+                }
                 case "passes" -> { // the caller hands the parameter's constructor what it gave the field, first, and gives it no more
                     var caller = change.added().get(1);
                     var field = change.added().get(2);
@@ -616,9 +623,13 @@ public final class Knowledge implements Remedy, QuickFix {
         });
     }
 
-    /** A method made answers what its type starts with until it is written; one that answers nothing says nothing. */
+    /**
+     * A method made answers what its type starts with until it is written; one that answers nothing, or an abstract
+     * one, which has no body, says nothing.
+     */
     private static void answeringItsDefault(Projection target, ElementId method) {
-        if ("void".equals(target.program().element(method).fact(ide.program.Fact.TYPE))) return;
+        var made = target.program().element(method);
+        if ("void".equals(made.fact(ide.program.Fact.TYPE)) || "true".equals(made.fact(ide.program.Fact.ABSTRACT))) return;
         target.apply(new Primitive.Create(Kind.STATEMENT, method, "", Map.of(ide.program.Fact.BODY, "return default"), null));
     }
 

@@ -29,6 +29,7 @@ import java.util.List;
  * end
  * problem &lt;code&gt; is name(expr, expr)    (the code is the rule broken there: the plans make it hold)
  * promise relation of kind "why"         (a change of relation on an element of that kind is made only on purpose)
+ * promise relation of kind "why" kept by rule   (kept while the rule holds: a change that leaves it holding keeps it)
  * ask name "question" for relation of new kind   (what is set of an element created is asked, the deduced proposed)
  * ask name "question" for relation of kind default p   (a change of an element there: asked, p(element, v) proposed)
  * fact p(x, y) when expr
@@ -57,7 +58,7 @@ final class KnowledgeParser {
         var effects = new ArrayList<Knowledge.Effect>();
         var clauses = new ArrayList<Clause>();
         var says = new HashMap<String, String>();
-        var promises = new HashMap<String, String>();
+        var promises = new HashMap<String, Abduction.Promise>();
         var questions = new HashMap<String, List<String>>();
         var conditions = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Literal, Boolean>());
         for (var i = 0; i < lines.size(); i++) {
@@ -82,9 +83,9 @@ final class KnowledgeParser {
                 if (!said.matches()) throw new IllegalArgumentException("knowledge: expected say [not] <relation> for <predicate> \"title\": " + line);
                 says.put((said.group(1) == null ? "" : "not ") + said.group(2) + " for " + said.group(3), said.group(4));
             } else if (line.startsWith("promise ")) {
-                var promised = java.util.regex.Pattern.compile("promise (\\S+) of (\\S+) \"(.*)\"").matcher(line);
+                var promised = java.util.regex.Pattern.compile("promise (\\S+) of (\\S+) \"(.*)\"(?: kept by (\\S+))?").matcher(line);
                 if (!promised.matches()) throw new IllegalArgumentException("knowledge: expected promise <relation> of <kind> \"why\": " + line);
-                promises.put(promised.group(1) + " of " + promised.group(2), promised.group(3));
+                promises.put(promised.group(1) + " of " + promised.group(2), new Abduction.Promise(promised.group(3), promised.group(4)));
             } else if (line.startsWith("ask ")) {
                 var created = java.util.regex.Pattern.compile("ask (\\S+) \"(.*)\" for (\\S+) of new (\\S+)").matcher(line);
                 var existing = java.util.regex.Pattern.compile("ask (\\S+) \"(.*)\" for (\\S+) of (\\S+) default (\\S+)").matcher(line);

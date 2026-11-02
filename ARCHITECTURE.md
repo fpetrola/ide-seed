@@ -1423,6 +1423,20 @@ que esto no escala solo:
      definiciones el lugar del campo quedó como condición (`given`).
    - Un caso nuevo en `FinalFieldQuickFixTest` lo muestra a mano. Sus arreglos son "make limit not final" y "create
      constructor Base(), then pass limit to the constructor of Base", y el segundo deja `super(limit)`.
+
+   **Ciclo 5 hecho el 2026-11-01**: un método que dice sobrescribir se declara en su superclase, deducido.
+   `declare-in-superclass` se fue, y `knowledge.ref` ya no tiene efectos: solo metas.
+   - `java.rules` dice que la clase que se extiende declara un método como el que dice sobrescribir: de su tipo,
+     igual de visible, con los mismos parámetros (`same-parameters`, que solo toma un método que el plan crea),
+     abstracto. Una regla nueva dice que una clase que declara un método abstracto es abstracta (JLS 8.1.1.1).
+   - La promesa "abstract of class" ahora se mantiene mientras valga `no-new-abstract` (`promise ... kept by
+     no-new-abstract`). Si nada crea objetos de la clase, volverla abstracta no cambia nada, y puede pasar como
+     consecuencia de otro cambio. Si algo los crea, la regla se rompe y el camino muere, como ya pasaba.
+   - Por eso el título dice todo lo que hace: "declare size() in Base, then make Base abstract".
+   - Un predicado definido no puede llamarse como una relación del grafo: el motor los conoce por nombre, y
+     `overrides(símbolo)` tapó a `overrides(m, n)` (la regla de visibilidad de un override se quedó sin caminos).
+     Ahora es `overrides-one`.
+   - Un método creado abstracto no responde nada: no tiene cuerpo.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

@@ -113,8 +113,16 @@ rule no-new-abstract "nothing makes an object of an abstract class"
   must not abstract(t)
 end
 
-# Whether objects of a class can be made.
-promise abstract of class "whether objects of it can be made"
+# Whether objects of a class can be made: what nothing makes objects of may be abstract or not, nothing changes.
+promise abstract of class "whether objects of it can be made" kept by no-new-abstract
+
+# A class that declares an abstract method is abstract (JLS 8.1.1.1).
+rule abstract-holder "a class that declares an abstract method is abstract"
+  for t, m where kind(t, "class") and parent(m, t) and abstract(m)
+  must abstract(t)
+end
+
+say abstract for abstract-holder "make ${called} abstract"
 
 problem ecj.AbstractMethodMustBeImplemented is complete(type-in(path, symbol))
 
@@ -208,6 +216,14 @@ say target for called-as "change to ${name(value)}(..)"
 def used-or-gone(symbol) when known("path", path) and declared(e, path, symbol) and visibility(e, "private") and not exists(e)
 
 say not exists for used-or-gone "remove ${name(element)}"
+
+# A method that says it overrides overrides one its superclass declares (JLS 9.6.4.4): the class it extends declares
+# one like it, of its type, as visible, taking the same parameters, abstract.
+def overrides-one(symbol) when known("path", path) and declared(m, path, symbol) and kind(m, "method") and parent(m, t)
+  and superclass(t, u) and not library(u) and type(m, ty) and visibility(m, vis) and member(n, u, symbol, "method")
+  and type(n, ty) and visibility(n, vis) and same-parameters(n, m) and abstract(n)
+
+say member for overrides-one "declare ${named}() in ${name(owner)}"
 
 # What only the person knows of what is created: asked, with what the rules deduce proposed.
 ask type "type of the new field" for type of new field

@@ -1,10 +1,8 @@
-# What must hold for each violation or diagnostic to go away, when a predicate holds, and what makes it hold.
-# No remedy is written in Java: repairs and quick fixes are deduced from here, and the verifier judges them.
-# What an effect needs holds already or is made first, deduced backward the same way.
-# How Java is lives in java.rules: what its definitions ask for (something opened, moved where it is used, imported,
-# declared as the language would) is deduced, and keeps meaning. An effect here is a quick fix people choose; only one
-# that "keeps meaning" may also repair a refactoring by itself: a name changed to a similar one, a value made up, a
-# final dropped are never done behind anybody's back.
+# What must hold for each violation or diagnostic to go away: a goal names the predicate, and java.rules says how Java
+# is, and so what makes it hold. Nothing here is a fix: repairs and quick fixes are deduced, and the verifier judges
+# them. Whether a way keeps meaning is deduced too: one that breaks a promise of the language (a final, a field's
+# static, a type) or makes up a value (a parameter its calls pass what its type starts with) is a quick fix people
+# choose; only one that does neither may also repair a refactoring by itself.
 
 goal access.insufficient needs accessible(site, target)
 goal binding.unresolved needs in-scope(site, target)
@@ -32,7 +30,6 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 # constructor takes it instead, which keeps meaning, so it also repairs a refactoring (a field pulled up).
 goal ecj.FinalFieldAssignment needs given-by-its-type(element-at(path, line, column), inside(path, line, column))
 
-
 # A class that does not implement what its supertypes leave abstract: it implements each, or it is abstract too
 # (java.rules says both, and when it may be abstract).
 
@@ -50,16 +47,8 @@ goal ecj.NotVisibleType needs accessible(top-in(path), element-at(path, line, co
 
 # A value of another type than its place takes: java.rules says the place takes the value's type.
 
-# A method that says it overrides and overrides nothing: its superclass declares it, abstract.
-goal ecj.MethodMustOverrideOrImplement needs overrides(symbol)
-
-effect declare-in-superclass "declare ${name(m)}() in ${name(superclass(owner(m)))}"
-  makes overrides(symbol)
-  for m in methods-in(path, symbol)
-  do
-    declare-abstract-in-superclass ${m}
-  end
-end
+# A method that says it overrides and overrides nothing: java.rules says its superclass declares it.
+goal ecj.MethodMustOverrideOrImplement needs overrides-one(symbol)
 
 # A new object no constructor makes: the class gets one that takes what the new passes (java.rules says how).
 goal ecj.UndefinedConstructor needs constructs(symbol)

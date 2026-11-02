@@ -191,7 +191,7 @@ class IdeQuickFixesTest {
                 }
                 """));
 
-        ws.fix("a/Sub.java", 5, "declare size() in Base");
+        ws.fix("a/Sub.java", 5, "declare size() in Base, then make Base abstract");
 
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/Base.java")).contains("abstract class Base {", "abstract int size();");
