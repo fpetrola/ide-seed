@@ -27,6 +27,7 @@ public interface Projection {
     /**
      * Replaces the text of a source file (a manual edit): elements keep their identity while their address stays,
      * new ones are born, missing ones are gone. Refuses text that does not parse ({@code projection.unparsable}).
+     * A null text is the file gone, and what it declared with it.
      */
     void edit(String path, String text);
 

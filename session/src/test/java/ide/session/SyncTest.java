@@ -90,12 +90,28 @@ class SyncTest {
     }
 
     @Test
-    void aFileDeletedOnDiskIsSaidNotFollowed() throws Exception {
+    void aFileDeletedOnDiskIsTakenOutAsAnEditByHand() throws Exception {
         var ws = open();
+        Files.writeString(root.resolve("a/Q.java"), "package a;\n\nclass Q {\n}\n");
+        sync(ws);
+        Files.delete(root.resolve("a/Q.java"));
+
+        assertThat(sync(ws)).containsEntry("deleted", java.util.List.of("a/Q.java"));
+        assertThat(ws.files()).containsExactly("a/P.java");
+        assertThat(sync(ws)).containsEntry("deleted", java.util.List.of());
+        assertThat(Files.exists(root.resolve("a/Q.java"))).isFalse();
+    }
+
+    @Test
+    void aFileDeletedOnDiskThatTheIdeChangedIsAConflictLeftAlone() throws Exception {
+        var ws = open();
+        ws.capabilities().invoke("rename", Map.of("element", "a.P#x", "name", "y"));
         Files.delete(root.resolve("a/P.java"));
 
-        assertThat(sync(ws)).containsEntry("deleted", java.util.List.of("a/P.java"));
-        assertThat(ws.files()).containsExactly("a/P.java");
+        var synced = sync(ws);
+
+        assertThat(synced).containsEntry("conflicts", java.util.List.of("a/P.java")).containsEntry("deleted", java.util.List.of());
+        assertThat(ws.source("a/P.java")).contains("public int y;");
     }
 
     @Test

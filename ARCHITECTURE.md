@@ -796,8 +796,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     (`sync` de session: cada archivo es una edición a mano, que reconcilia la identidad como cualquier otra), y
     después de cada llamada guarda. Un `Watcher` hace lo mismo cuando la carpeta cambia por cualquier otro motivo.
     Si un archivo cambió en disco y también en el IDE, es un conflicto: se dice y no se toca. Un archivo borrado en
-    disco se informa pero no se sigue. Guardar después de una llamada de un agente guarda también lo que la persona
-    tenía sin guardar.
+    disco también es una edición a mano: sale del programa con lo que declaraba, y lo que lo usaba queda con errores,
+    como si se lo hubiera borrado en el editor; si el IDE lo había cambiado, es un conflicto y se queda. *Cambiado el
+    2026-11-02, a pedido de Fernando:* antes un borrado se informaba pero no se seguía, y un agente que borraba con
+    `rm` quedaba con un IDE que seguía teniendo esos tipos y que, al guardar, los volvía a escribir. Guardar después
+    de una llamada de un agente guarda también lo que la persona tenía sin guardar.
   - **Decisión: los planes que se siguen son dominio de session, no del agente.** `Plans` (para no confundirlo con
     el `Plan` de reparación del engine) guarda varios planes; uno solo está activo y los demás quedan en pausa,
     terminados o abandonados. Cada plan es un árbol de tareas: las de arriba son líneas de acción y las de abajo, sus

@@ -456,7 +456,10 @@ final class Workbench extends JPanel {
             say("changed on disk and here, left as here: " + String.join(", ", sync.get("conflicts")) + " (saving writes them)");
         }
         if (!sync.get("refused").isEmpty()) say("the program did not take, from disk: " + String.join(", ", sync.get("refused")));
-        if (!sync.get("deleted").isEmpty()) say("deleted on disk, still here: " + String.join(", ", sync.get("deleted")));
+        if (!sync.get("deleted").isEmpty()) {
+            say("deleted on disk, and here: " + String.join(", ", sync.get("deleted")));
+            refresh();
+        }
     }
 
     /** Stops serving agents and ends the terminal's program: the window is going away. */

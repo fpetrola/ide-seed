@@ -48,7 +48,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   line: return, assign a field, new, a call, the type's default, a constructor called first, over elements named
   `#{id}`; a parameter or local it names is a read of it; a created statement expects the uses it names Added; a body is its
   statements: there is no Set of a whole body).
-- `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
+- `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit` (a null text: the file gone),
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
   is declared and what the name at a line and column means, `needs`: what a use that binds nothing needs, asked for
   one use, `said`: a statement, or a whole body, in no language when all of it can be said so), LanguageRules (access, visibilities, how
@@ -147,7 +147,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `Workspace.open(folder)` reads a project (skipping target, build, out and hidden folders), gives the Java driver
   the classpath Maven says it has (cached in `.ide/classpath.txt`), logs to `.ide/events.jsonl` there and saves there;
   `sync` takes what changed there on disk since it was read or saved, each file as an edit by hand (a file the IDE
-  changed too is a conflict left alone; a deleted one is said, not followed). Plans (not the engine's repair Plan): the plans a
+  changed too is a conflict left alone; one deleted there is an edit by hand that takes it and what it declared out,
+  unless the IDE changed it: a conflict). Plans (not the engine's repair Plan): the plans a
   person and an agent follow, several, one active; each a tree of tasks (lines of action and subtasks, depth first)
   with stable ids (`p1`, `t7`), a description, what each waits for, links into the code and a timeline of who said or
   did what; in `.ide/plans.json`, each change an event; capabilities plans, plan, plan-new, plan-switch, plan-state,

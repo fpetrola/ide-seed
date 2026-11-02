@@ -226,7 +226,8 @@ public final class JavaProjection implements Projection {
     public void edit(String path, String text) {
         var before = program();
         var said = said(path);
-        sources.put(Map.of(path, text));
+        if (text == null) sources.change(Map.of(), List.of(path));
+        else sources.put(Map.of(path, text));
         reconcile(before);
         restate(before, said);
     }

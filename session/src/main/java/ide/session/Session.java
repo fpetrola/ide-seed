@@ -201,8 +201,8 @@ public final class Session {
     /**
      * What the folder's files say that is not what was last read or saved there.
      * {@code taken}: changed or new on disk only, now edits by hand; {@code conflicts}: changed on disk and in the IDE
-     * too, left as they are; {@code refused}: an edit the program did not take; {@code deleted}: gone from disk, which
-     * is not followed (the IDE still has them, and saving writes them back).
+     * too, left as they are (also when gone from disk: saving writes them back); {@code refused}: an edit the program did
+     * not take; {@code deleted}: gone from disk, and so from the program, as an edit by hand.
      */
     public record Sync(List<String> taken, List<String> conflicts, List<String> refused, List<String> deleted) {
     }
@@ -234,13 +234,26 @@ public final class Session {
                 refused.add(path);
             }
         }
-        var deleted = known.keySet().stream().filter(path -> !disk.containsKey(path)).toList();
+        var deleted = new java.util.ArrayList<String>();
+        for (var path : List.copyOf(known.keySet())) {
+            if (disk.containsKey(path)) continue;
+            if (!current.containsKey(path)) { // gone here too
+                known.remove(path);
+            } else if (!current.get(path).equals(known.get(path))) {
+                conflicts.add(path);
+            } else if (edit(path, null).applied()) {
+                known.remove(path);
+                deleted.add(path);
+            } else {
+                refused.add(path);
+            }
+        }
         saved = known;
         if (!taken.isEmpty() || !conflicts.isEmpty() || !refused.isEmpty() || !deleted.isEmpty()) {
             log.append(Map.of("event", "sync", "root", root.toString(), "taken", taken, "conflicts", conflicts,
                     "refused", refused, "deleted", deleted));
         }
-        return new Sync(List.copyOf(taken), List.copyOf(conflicts), List.copyOf(refused), deleted);
+        return new Sync(List.copyOf(taken), List.copyOf(conflicts), List.copyOf(refused), List.copyOf(deleted));
     }
 
     /** That the project in {@code root} was opened, with how many libraries and what went wrong getting them. */
