@@ -320,12 +320,16 @@ public final class Resolution {
         };
     }
 
-    /** The facts a declaration's modifiers state. */
+    /** The facts a declaration's modifiers and annotations state. */
     public static Map<Fact, String> attributes(NodeWithModifiers<?> node) {
         var visibility = node.getAccessSpecifier().asString();
-        return Map.of(Fact.VISIBILITY, visibility.isEmpty() ? "package" : visibility,
+        var facts = new java.util.HashMap<>(Map.of(Fact.VISIBILITY, visibility.isEmpty() ? "package" : visibility,
                 Fact.STATIC, String.valueOf(node.hasModifier(Modifier.Keyword.STATIC)),
                 Fact.ABSTRACT, String.valueOf(node.hasModifier(Modifier.Keyword.ABSTRACT)),
-                Fact.FINAL, String.valueOf(node.hasModifier(Modifier.Keyword.FINAL)));
+                Fact.FINAL, String.valueOf(node.hasModifier(Modifier.Keyword.FINAL))));
+        if (node instanceof com.github.javaparser.ast.nodeTypes.NodeWithAnnotations<?> annotated && annotated.getAnnotations().isNonEmpty()) {
+            facts.put(Fact.ANNOTATIONS, String.join(" ", annotated.getAnnotations().stream().map(Node::toString).toList()));
+        }
+        return Map.copyOf(facts);
     }
 }

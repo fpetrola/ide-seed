@@ -27,7 +27,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   statements of a body, in order, and those of the blocks a statement holds, its own, in order: `m()[2][1]`;
   a lambda's or a class's are theirs), Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy; INITIALIZED a field given its
-  value where it is declared; THROWS what a callable declares it throws, as written), Unresolved (a use that binds
+  value where it is declared; THROWS what a callable declares it throws, as written; ANNOTATIONS what a declaration is annotated with, as
+  written, which `set` replaces), Unresolved (a use that binds
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
   Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
   no doubt), Reference (id `site@ordinal`; site is the member that makes the use, `statement` the innermost

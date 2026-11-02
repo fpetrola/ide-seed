@@ -118,6 +118,7 @@ final class SetAttribute {
             case "type" -> type(c, id, value);
             case "throws" -> thrown(c, id, value);
             case "initializer" -> initializer(c, id, value);
+            case "annotations" -> annotations(c, id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
     }
@@ -231,6 +232,60 @@ final class SetAttribute {
     }
 
     /** The initial value of a field: as Java writes it, or said in no language ({@code #{method:4}()}). */
+    /**
+     * What a declaration is annotated with, as written, replacing what it was: each on a line of its own above a type or
+     * a member, before a parameter on its line; a qualified name imported. Empty: none.
+     */
+    private static void annotations(Context c, ElementId id, String value) {
+        var declaration = c.declaration(c.program().element(id));
+        var unit = declaration.unit();
+        if (!(declaration.node() instanceof com.github.javaparser.ast.nodeTypes.NodeWithAnnotations<?> annotated)) {
+            throw new ide.projection.PrimitiveRejected("set.annotations", c.program().element(id).qualified() + " cannot be annotated here");
+        }
+        var edits = new EditSet();
+        var written = new java.util.ArrayList<String>();
+        for (var one : annotationsIn(value)) {
+            var name = one.substring(1).split("\\(", 2)[0].strip();
+            written.add(name.contains(".") ? "@" + Imports.nameable(edits, unit, name) + one.substring(1 + name.length()) : one);
+        }
+        var node = declaration.node();
+        var separator = node instanceof Parameter ? " " : "\n" + unit.indentation(node.getBegin().orElseThrow().line);
+        var text = String.join(separator, written);
+        var old = annotated.getAnnotations();
+        if (old.isEmpty()) {
+            if (!written.isEmpty()) edits.insertAt(unit, node.getBegin().orElseThrow(), text + separator);
+        } else {
+            for (var i = 0; i < old.size(); i++) {
+                var one = old.get(i);
+                if (i == 0 && !written.isEmpty()) edits.replace(unit, one, text);
+                else if (unit.line(one.getBegin().orElseThrow().line).strip().equals(unit.textOf(one))) edits.removeLines(unit, one.getBegin().orElseThrow().line, one.getEnd().orElseThrow().line);
+                else edits.removeWithSpaceAfter(unit, one);
+            }
+        }
+        c.sources().apply(edits);
+    }
+
+    /** Annotations as written one after another: each starts with an {@code @} outside quotes and parentheses. */
+    private static List<String> annotationsIn(String value) {
+        var found = new java.util.ArrayList<String>();
+        var depth = 0;
+        var quoted = false;
+        var start = -1;
+        for (var i = 0; i < value.length(); i++) {
+            var ch = value.charAt(i);
+            if (ch == '"' && (i == 0 || value.charAt(i - 1) != '\\')) quoted = !quoted;
+            if (quoted) continue;
+            if (ch == '(') depth++;
+            if (ch == ')') depth--;
+            if (ch == '@' && depth == 0) {
+                if (start >= 0) found.add(value.substring(start, i).strip());
+                start = i;
+            }
+        }
+        if (start >= 0) found.add(value.substring(start).strip());
+        return found;
+    }
+
     private static void initializer(Context c, ElementId id, String value) {
         var element = c.program().element(id);
         var declaration = c.declaration(element);
