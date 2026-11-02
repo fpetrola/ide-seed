@@ -1773,6 +1773,15 @@ que esto no escala solo:
    o movido iba a la carpeta del paquete contada desde la raíz del proyecto. Ahora va al source root que tiene archivos
    de su paquete, y si ninguno tiene, al que tiene más archivos. El source root de un archivo es su carpeta sin las
    carpetas de su paquete.
+   *Y dos más de test1:* inline-method renombra un local que choca con uno del llamador (`name2`), como IntelliJ, en vez
+   de rechazar. Además, extract (y con él introduce-variable) acepta un tramo de operandos contiguos de una
+   concatenación de Strings, aunque empiece o termine dentro de un literal: el driver parte el literal y agrupa
+   (`",'address of " + name` → `",'" + ("address of " + name)`), solo si el valor no cambia, es decir, si lo anterior ya es
+   String y el grupo concatena desde su primer operando. No es un primitivo nuevo: es lo que el driver entiende por
+   un tramo, como el Split String de IntelliJ. Lo que test1 pidió también y queda para decidir: tomar `List.get` sobre
+   un local que no cambia como lectura pura, para que inline-variable pueda reordenar. Hoy cualquier llamada cuenta
+   como efecto; hacerlo es saber qué métodos de la biblioteca no hacen nada, un conocimiento que el principio 5 manda
+   declarar y no suponer.
 
 **Cómo se sabe si funcionó.**
 

@@ -124,4 +124,50 @@ class IntroduceVariableTest {
         assertThat(result.toString()).contains("retarget.evaluation");
         assertThat(ws.source("a/Rows.java")).isEqualTo(source);
     }
+
+    /**
+     * Operands of a concatenation next to each other, from inside a literal: the literal is split there and they are
+     * grouped, as IntelliJ's, so they are an expression of their own.
+     */
+    @Test
+    void operandsOfAConcatenationFromInsideALiteral() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                class Rows {
+                    String insert(int id, String name, String street) {
+                        return "VALUES (" + id + ",'address of " + name + "', '" + street + "')";
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#insert(int,String,String)", "lines", "5:37-5:55", "name", "description"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                        String description = "address of " + name;
+                        return "VALUES (" + id + ",'" + description + "', '" + street + "')";
+                """);
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /** Grouping numbers that were added to a String would add them first: refused. */
+    @Test
+    void operandsThatWouldBeAddedAsNumbersAreRefused() {
+        var source = """
+                package a;
+
+                class Rows {
+                    String insert(int id, int n) {
+                        return "VALUES " + id + n;
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Rows.java", source));
+
+        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#insert(int,int)", "lines", "5:28-5:33", "name", "sum"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(ws.source("a/Rows.java")).isEqualTo(source);
+    }
 }

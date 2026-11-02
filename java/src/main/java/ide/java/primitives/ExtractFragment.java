@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 
 /**
  * Moves the statements of a method on lines {@code first-last}, or the expression that is exactly the stretch
- * {@code line:column-line:column}, into a new private method that the method calls:
+ * {@code line:column-line:column} (or operands of a String concatenation, {@link Concatenation}), into a new private method that the method calls:
  * inputs become parameters, at most one value used afterwards becomes the result. A fragment that ends the method with
  * its last return answers what the method answers, and the method returns what it answers. Refuses fragments that
  * are not whole statements of one block, that jump out otherwise, or that have more than one output. The change also says which uses
@@ -48,9 +48,20 @@ final class ExtractFragment {
         var name = extract.name();
         var begin = new com.github.javaparser.Position(Integer.parseInt(stretch.group(1)), Integer.parseInt(stretch.group(2)));
         var end = new com.github.javaparser.Position(Integer.parseInt(stretch.group(3)), Integer.parseInt(stretch.group(4)));
-        var expression = method.findAll(com.github.javaparser.ast.expr.Expression.class,
+        var exact = method.findAll(com.github.javaparser.ast.expr.Expression.class,
                         e -> e.getBegin().filter(begin::equals).isPresent() && e.getEnd().filter(end::equals).isPresent())
-                .stream().findFirst().orElseThrow(() -> new PrimitiveRejected("extract.fragment", extract.fragment() + " is not an expression"));
+                .stream().findFirst();
+        com.github.javaparser.ast.expr.Expression replaced; // what the call takes the place of
+        if (exact.isPresent()) {
+            replaced = exact.get();
+        } else { // operands of a concatenation: grouped first
+            var grouped = Concatenation.regroup(c, declaration.unit(), method, begin, end);
+            if (grouped == null) throw new PrimitiveRejected("extract.fragment", extract.fragment() + " is not an expression");
+            declaration = c.declaration(source);
+            method = declaration.as(MethodDeclaration.class);
+            replaced = Concatenation.enclosedAt(method, grouped);
+        }
+        var expression = replaced instanceof com.github.javaparser.ast.expr.EnclosedExpr enclosed && exact.isEmpty() ? enclosed.getInner() : replaced;
         var writes = !expression.findAll(com.github.javaparser.ast.expr.AssignExpr.class).isEmpty()
                 || !expression.findAll(com.github.javaparser.ast.expr.UnaryExpr.class, u -> u.getOperator().name().endsWith("CREMENT")).isEmpty();
         if (writes) throw new PrimitiveRejected("extract.writes", "'" + expression + "' changes a variable");
@@ -72,7 +83,7 @@ final class ExtractFragment {
         var modifiers = method.isStatic() ? "private static " : "private ";
         var body = indent + "    " + (type.equals("void") ? "" : "return ") + unit.textOf(expression) + ";\n";
         var edits = new EditSet();
-        edits.replace(unit, expression, name + "(" + String.join(", ", inputs.keySet()) + ")");
+        edits.replace(unit, replaced, name + "(" + String.join(", ", inputs.keySet()) + ")");
         Members.append(edits, unit, typeDeclaration, modifiers + type + " " + name + "(" + params + ") {\n" + body + indent + "}");
         c.sources().apply(edits);
         return created(extract, c, before, source, owner, unit, name, locals, null);

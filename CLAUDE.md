@@ -72,7 +72,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   arguments) is asked of the projection (semantics.UseNeeds). The locals of a method or constructor (not of a lambda or
   a class inside it) are its elements and their uses references from it, and so are the uses of its parameters (on
   nothing, in their statement); JavaRules reaches a local only from inside
-  its method. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the
+  its method. An expression extracted may be operands of a String concatenation next
+  to each other, from inside a literal: it is split and they are grouped, when the value stays the same. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the
   others are gone (they are the new method's parameters, or its own local). A renamed local may take the name of one
   in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline
   replaces a read of a local by its value (InlineLocal) and refuses what would change behavior without changing a
