@@ -45,6 +45,7 @@ import java.util.stream.Stream;
  * assigns(s, f)     (a statement of s gives f a value it says in no language)
  * superclass(t, u)  (u is the class t extends, of the workspace)     same-parameters(n, m)   (in order, of the same types)
  * uses(s, m)        (any reference from s to m: a use, a call, a new, a link)
+ * throws(m, e)      (a type a method or constructor declares it throws, as written)
  * </pre>
  * A state supposed ({@link #with}) is the graph as it would be: what is derived from where an element is (its type,
  * its top-level type, its package, its file, the elements before it) follows where it is supposed to be. An element
@@ -134,6 +135,8 @@ final class GraphFacts implements Facts {
             case "abstract" -> elements(first).filter(e -> "true".equals(e.fact(Fact.ABSTRACT))).map(e -> List.of(id(e)));
             case "initialized" -> elements(first).filter(e -> "true".equals(e.fact(Fact.INITIALIZED))).map(e -> List.of(id(e)));
             case "type" -> elements(first).filter(e -> e.fact(Fact.TYPE) != null).map(e -> List.of(id(e), e.fact(Fact.TYPE)));
+            case "throws" -> elements(first).filter(e -> e.fact(Fact.THROWS) != null)
+                    .flatMap(e -> java.util.Arrays.stream(e.fact(Fact.THROWS).split(",")).map(String::strip).map(t -> List.of(id(e), t)));
             case "writes" -> references(first).filter(r -> r.mode() == Mode.WRITE || r.mode() == Mode.UPDATE)
                     .map(r -> List.of(r.site().value(), r.target().value()));
             case "new-use" -> references(first).filter(r -> r.mode() == Mode.NEW).map(r -> List.of(r.site().value(), r.target().value()));

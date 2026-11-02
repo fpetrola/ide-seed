@@ -490,6 +490,24 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
                 steps.add(initializing(key, change.forWhat(), projection, asked));
                 continue;
             }
+            if (change.relation().equals("throws")) { // one more, or one less, of what it declares, as it is when it runs
+                var variables = new LinkedHashMap<String, Value>();
+                variables.put("element", value(key, projection));
+                variables.put("called", new Value.Text(called(key, projection)));
+                variables.put("value", new Value.Text(on ? value : change.removed().get(1)));
+                var type = on ? value : change.removed().get(1);
+                steps.add(new Step(title((on ? "" : "not ") + "throws", change.forWhat(), variables, projection, wanted), List.of(), 1, true,
+                        (target, answers, made) -> {
+                            var callable = resolved(key, made);
+                            var thrown = new ArrayList<String>();
+                            var now = target.program().element(callable).fact(ide.program.Fact.THROWS);
+                            if (now != null) for (var one : now.split(",")) thrown.add(one.strip());
+                            if (on) thrown.add(type);
+                            else thrown.removeIf(one -> one.equals(type) || type.endsWith("." + one));
+                            target.apply(new Primitive.Set(callable, "throws", String.join(", ", thrown)));
+                        }));
+                continue;
+            }
             var placed = changes.stream().filter(c -> c.relation().equals("before") && c.element().equals(key))
                     .map(c -> c.added().get(1)).findFirst().orElse(null);
             // made when it runs: what it names may be what the plan created before it

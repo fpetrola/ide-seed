@@ -8,10 +8,10 @@ package ide.program;
  * language: {@link Body}); FILE the source file of a top-level type (a fact of the projection that navigation needs);
  * LIBRARY {@code true} for an element declared outside the workspace, in a library: the program names it, and nothing
  * changes it; INITIALIZED {@code true} for a field given its value where it is declared (what a final field's rule
- * needs to know).
+ * needs to know); THROWS what a method or constructor declares it throws, as written, separated by commas.
  */
 public enum Fact {
-    VISIBILITY, STATIC, ABSTRACT, FINAL, TYPE, SUPERCLASS, BODY, FILE, LIBRARY, INITIALIZED;
+    VISIBILITY, STATIC, ABSTRACT, FINAL, TYPE, SUPERCLASS, BODY, FILE, LIBRARY, INITIALIZED, THROWS;
 
     /** The lowercase name scripts and the {@code set} primitive use. */
     public String label() {

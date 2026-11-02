@@ -29,6 +29,10 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 # A constructor may not give a final field of its superclass its value: java.rules says how the superclass's
 # constructor takes it instead (final-where), which keeps meaning, so a refactoring that pulls a field up plans it.
 
+# A checked exception neither caught nor declared: java.rules says the callable it is thrown in declares it, which
+# keeps meaning, so it also repairs a refactoring (statements extracted into a method).
+goal ecj.UnhandledException needs declares-thrown(inside(path, line, column), first(arguments))
+
 # A class that does not implement what its supertypes leave abstract: it implements each, or it is abstract too
 # (java.rules says both, and when it may be abstract).
 

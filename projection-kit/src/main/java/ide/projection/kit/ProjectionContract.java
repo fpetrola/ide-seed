@@ -89,6 +89,7 @@ public abstract class ProjectionContract {
                 new Scenario("rename a local", p -> new Primitive.Rename(id(p, "a.A#total()/sum"), "s")),
                 new Scenario("move a method", p -> new Primitive.Move(id(p, "a.A#k(int)"), id(p, "a.B"), null)),
                 new Scenario("set a visibility", p -> new Primitive.Set(id(p, "a.A#k(int)"), "visibility", "public")),
+                new Scenario("declare what a method throws", p -> new Primitive.Set(id(p, "a.A#k(int)"), "throws", "java.io.IOException")),
                 new Scenario("link a declared type", p -> new Primitive.Link(id(p, "b.C#a"), Mode.DECLARED, id(p, "a.B"))),
                 new Scenario("retarget a call", p -> new Primitive.Retarget(reference(p, "a.B#n()", "a.A#m(int)"), id(p, "a.A#k(int)"))),
                 new Scenario("retarget a parameter's type", p -> new Primitive.Retarget(reference(p, "b.C#use(A)/other", "a.A"), id(p, "a.B"))),
@@ -339,6 +340,22 @@ public abstract class ProjectionContract {
         assertThat(p.element(weigh.scope()).qualified()).isEqualTo("a.A");
         assertThat(projection.needs(weigh.id())).contains(new Needs("int", List.of(new Needs.Argument("string", "String"))));
         assertThat(projection.needs(reference(p, "a.B#n()", "a.A#m(int)"))).isEmpty();
+    }
+
+    /**
+     * Obligation 15: a method or constructor says what it declares it throws, as written ({@code THROWS}, nothing if it
+     * declares nothing); setting it declares those types, each written as its file can name it, in that order.
+     */
+    @Test
+    void aCallableSaysWhatItDeclaresItThrowsAndSettingItDeclaresThem() {
+        var projection = fixture();
+        var k = id(projection.program(), "a.A#k(int)");
+        assertThat(projection.program().element(k).fact(Fact.THROWS)).isNull();
+
+        projection.apply(new Primitive.Set(k, "throws", "java.io.IOException, IllegalStateException"));
+
+        assertThat(projection.program().element(k).fact(Fact.THROWS)).matches("(java\\.io\\.)?IOException, IllegalStateException");
+        assertThat(projection.program().element(k).qualified()).isEqualTo("a.A#k(int)");
     }
 
     /**

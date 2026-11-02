@@ -10,6 +10,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import ide.java.syntax.Imports;
+import ide.java.syntax.Lists;
 import ide.java.syntax.Modifiers;
 import ide.java.text.EditSet;
 import ide.java.text.Unit;
@@ -22,7 +23,8 @@ import ide.program.Program;
 
 /**
  * Sets an attribute of an element, as text: its access or another modifier, an abstract method or class, the
- * superclass or the declared type as written, a body said in no language ({@link WriteBody}), or an initial value.
+ * superclass or the declared type as written, what a callable declares it throws, a body said in no language
+ * ({@link WriteBody}), or an initial value.
  * {@link LinkType} writes extends clauses, interfaces and declared types with the same means.
  */
 final class SetAttribute {
@@ -43,6 +45,7 @@ final class SetAttribute {
             case "abstract" -> setAbstract(c, id, Boolean.parseBoolean(value));
             case "superclass" -> superclass(c, id, value);
             case "type" -> type(c, id, value);
+            case "throws" -> thrown(c, id, value);
             case "initializer" -> initializer(c, id, value);
             default -> throw new IllegalArgumentException("unsupported attribute: " + attribute);
         }
@@ -125,6 +128,27 @@ final class SetAttribute {
         }
         c.sources().apply(edits);
         if (method != null) Shared.resign(c, method, unit.path(), names);
+    }
+
+    /**
+     * What a method or constructor declares it throws: the types given, in order, each written as the file can name it
+     * (a qualified one imported); none takes the clause away.
+     */
+    private static void thrown(Context c, ElementId id, String value) {
+        var declaration = c.declaration(c.program().element(id));
+        CallableDeclaration<?> callable = declaration.as(CallableDeclaration.class);
+        var unit = declaration.unit();
+        var edits = new EditSet();
+        var types = java.util.Arrays.stream(value.split(",")).map(String::strip).filter(type -> !type.isEmpty())
+                .map(type -> type.contains(".") ? Imports.nameable(edits, unit, type) : type).toList();
+        var thrown = callable.getThrownExceptions();
+        var parameters = callable.getParameters();
+        var close = unit.next(')', parameters.isNonEmpty() ? parameters.getLast().orElseThrow().getEnd().orElseThrow()
+                : unit.next('(', callable.getName().getEnd().orElseThrow()));
+        if (thrown.isNonEmpty() && !types.isEmpty()) Lists.rewrite(edits, unit, thrown, types);
+        else if (thrown.isNonEmpty()) edits.replace(unit, Unit.after(close), thrown.getLast().orElseThrow().getEnd().orElseThrow(), "");
+        else if (!types.isEmpty()) edits.insertAt(unit, Unit.after(close), " throws " + String.join(", ", types));
+        c.sources().apply(edits);
     }
 
     /** The initial value of a field: as Java writes it, or said in no language ({@code #{method:4}()}). */

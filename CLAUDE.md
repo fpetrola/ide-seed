@@ -26,7 +26,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `program` (core) — the graph: Element/ElementId/Kind (what a body is made of, `inBody`: LOCAL and STATEMENT, the
   top-level statements of a body, in order; nested blocks are part of theirs), Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy; INITIALIZED a field given its
-  value where it is declared), Unresolved (a use that binds
+  value where it is declared; THROWS what a callable declares it throws, as written), Unresolved (a use that binds
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
   Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
   no doubt), Reference (id `site@ordinal`; site is the member that makes the use, `statement` the statement of the

@@ -221,7 +221,7 @@ final class MemoryPrimitives {
             return;
         }
         var fact = switch (attribute) {
-            case "visibility", "static", "abstract", "final", "type", "superclass" -> Fact.of(attribute);
+            case "visibility", "static", "abstract", "final", "type", "superclass", "throws" -> Fact.of(attribute);
             default -> throw new PrimitiveRejected("projection.unsupported", "a memory projection has no " + attribute);
         };
         var node = graph.nodes.get(element);

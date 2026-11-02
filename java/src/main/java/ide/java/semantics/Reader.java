@@ -267,14 +267,14 @@ public final class Reader {
             }
             for (var constructor : type.getConstructors()) {
                 var id = add(elements, new Address.Callable(typeId, "new", keys.of(constructor)), Kind.CONSTRUCTOR,
-                        type.getNameAsString(), typeId, attributes(constructor));
+                        type.getNameAsString(), typeId, thrown(constructor, new HashMap<>(attributes(constructor))));
                 declarations.put(id, new Decl(unit, constructor));
                 addParams(elements, declarations, unit, constructor, id);
                 addLocals(elements, declarations, unit, constructor, id);
                 addStatements(elements, declarations, unit, constructor, id);
             }
             for (var method : type.getMethods()) {
-                var facts = new HashMap<>(attributes(method));
+                var facts = thrown(method, new HashMap<>(attributes(method)));
                 facts.put(Fact.TYPE, method.getType().asString());
                 method.getBody().ifPresent(b -> facts.put(Fact.BODY, b.toString().replaceAll("\\s+", " ")));
                 if (kindOf(type) == Kind.INTERFACE && method.getAccessSpecifier().asString().isEmpty()) {
@@ -292,6 +292,14 @@ public final class Reader {
             }
         }
         return new Declared(Shape.of(unit), elements, declarations);
+    }
+
+    /** The facts of a callable, with what it declares it throws, as written. */
+    private static HashMap<Fact, String> thrown(com.github.javaparser.ast.body.CallableDeclaration<?> callable, HashMap<Fact, String> facts) {
+        if (callable.getThrownExceptions().isNonEmpty()) {
+            facts.put(Fact.THROWS, String.join(", ", callable.getThrownExceptions().stream().map(t -> t.asString()).toList()));
+        }
+        return facts;
     }
 
     /** What the uses of one file bind; a use's id is its site and its place among the site's uses. */

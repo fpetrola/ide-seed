@@ -248,6 +248,14 @@ def overrides-one(symbol) when known("path", path) and declared(m, path, symbol)
 
 say member for overrides-one "declare ${named}() in ${in}"
 
+# A checked exception a method or constructor may throw is caught where it is thrown, or the callable declares it
+# (JLS 11.2): the compiler says which one is neither, and declaring it changes nothing of what runs. What calls the
+# callable, and what it overrides, the compiler judges.
+def declares-thrown(m, e) when kind(m, "method") and throws(m, e)
+def declares-thrown(k, e) when kind(k, "constructor") and throws(k, e)
+
+say throws for declares-thrown "add throws ${value} to ${called}"
+
 # What only the person knows of what is created: asked, with what the rules deduce proposed.
 ask type "type of the new field" for type of new field
 

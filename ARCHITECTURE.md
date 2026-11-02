@@ -329,6 +329,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   suyas, que siguen siendo quienes eran, y uno que lo reemplaza trae sentencias nuevas. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
+  La obligación 15 (2026-11-02): un método o constructor dice qué declara tirar, como está escrito (`THROWS`), y un
+  `Set throws` declara los tipos dados, cada uno escrito como su archivo puede nombrarlo (Java importa el calificado).
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
   hasta que estorbe.
 
@@ -652,6 +654,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   definición y se hace valer igual, y lo que rompe se repara en el mismo plan sin que lo pedido cuente para el tope.
   Se toma el plan más barato que conserva el sentido; si las reglas no reparan nada, se hace el `want` solo y el
   reparador sigue después.
+  Una excepción chequeada que no se atrapa ni se declara (`ecj.UnhandledException`) la declara el método donde se
+  tira (`declares-thrown`, con `throws(m, e)` como relación que se prende): no cambia lo que corre, así que también
+  repara. extract-method deja así los `throws` que necesita el método nuevo, una excepción por ronda.
 - **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
   misma. La propuesta de la etapa 3 (decisión 32) las reemplaza por reglas generales del lenguaje, de las que se
   deducen las transformaciones, y deja los refactorings como intenciones; necesita las sentencias en el grafo. Un predicado que ningún `fact` define siempre se hace, aunque

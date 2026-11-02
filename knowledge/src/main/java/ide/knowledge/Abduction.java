@@ -47,10 +47,11 @@ final class Abduction {
      */
     static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before", "type", "superclass");
     /**
-     * Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)}; and
-     * {@code initialized(f)}, which a value given where the field is declared turns on.
+     * Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)};
+     * {@code initialized(f)}, which a value given where the field is declared turns on; and {@code throws(m, e)}, a type
+     * one more (or one less) of those a callable declares it throws.
      */
-    static final Set<String> TOGGLED = Set.of("static", "final", "abstract", "initialized");
+    static final Set<String> TOGGLED = Set.of("static", "final", "abstract", "initialized", "throws");
     /** Relations a tuple of which goes away when something is created: {@code unimplemented(t, m)}, by implementing m in t. */
     static final Set<String> UNDONE_BY_CREATING = Set.of("unimplemented");
     /** Relations a primitive takes away and never sets: {@code exists(e)}, which deleting e takes away. */

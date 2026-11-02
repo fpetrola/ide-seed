@@ -28,6 +28,38 @@ class ExtractMethodTest {
             }
             """;
 
+    /**
+     * What the statements extracted may throw and do not catch, the new method declares, as Eclipse and IntelliJ leave
+     * it: the compiler says it is not handled, and declaring it changes nothing of what runs, so it is a repair.
+     */
+    @Test
+    void theNewMethodDeclaresTheCheckedExceptionsItsStatementsThrow() {
+        var ws = Workspace.of(Map.of("a/Loader.java", """
+                package a;
+
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+
+                class Loader {
+                    String text;
+
+                    void load(Path path) throws Exception {
+                        Class.forName("a.Loader");
+                        text = Files.readString(path);
+                        System.out.println(text);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("extract-method", Map.of("method", "a.Loader#load(Path)", "lines", "10-11", "name", "read"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(result.repairs()).containsExactly("add throws ClassNotFoundException to read()", "add throws java.io.IOException to read()");
+        assertThat(ws.source("a/Loader.java")).contains("import java.io.IOException;",
+                "    private void read(Path path) throws ClassNotFoundException, IOException {");
+        assertThat(ws.errors()).isEmpty();
+    }
+
     @Test
     void extractsStatementsWithTheirInputsAsParametersAndTheirOutputAsResult() {
         var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));
