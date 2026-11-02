@@ -1002,7 +1002,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 34 | Intenciones              | un refactoring del catálogo puede ser una intención: dice lo que tiene que valer al final (`want`, en el lenguaje de `knowledge`: hechos del grafo y `given` para las condiciones), nada de cómo. `refactoring` la guarda como texto y se la pasa al planificador de la biblioteca (`Planner`), que es el conocimiento: deduce los cambios y lo que rompen en un solo plan, sin que lo pedido cuente para el tope, y toma el más barato que conserva el sentido. El reparador queda para lo que las reglas no previeron y sigue juzgando todo plan | tomada, 2026-11-02 |
 | 35 | Usos de parámetros       | un uso de un parámetro de un método o constructor (no de una lambda) es una referencia desde el método, sin receptor, en su sentencia, como el de un local; un cuerpo dicho sin lenguaje que nombra un parámetro lo lee. Hace que introduce-parameter-object y convert-to-instance-method se compongan de primitivos | tomada, 2026-11-02 |
 | 36 | Sentencias anidadas     | una sentencia de un bloque que otra tiene (sus ramas, el cuerpo de su bucle, sus catch, las entradas de su switch; no las de una lambda ni las de una clase) es un elemento de esa sentencia, en orden (`m()[2][1]`); un uso está en la más interna, y `referencesIn` de una sentencia trae también los de las que tiene adentro. Mover una sentencia antes de otra de un bloque anidado es el mismo `move`, con la que la tiene como padre. Reemplaza en parte la 32 (solo las de primer nivel). Hace que introduce-variable declare el local en el bloque de su sentencia | tomada, 2026-11-02 |
-| 37 | El grafo como estado de trabajo | los primitivos cambian el grafo; los nombres se resuelven sobre él dentro del alcance que las reglas calculan; el texto se escribe al confirmar y ECJ compila los archivos tocados como red final; el grafo se guarda en `.ide` y los AST son transitorios (etapa 4) | propuesta, 2026-11-02 |
+| 37 | El grafo como estado de trabajo | los primitivos cambian el grafo; cada referencia guarda su pregunta y los nombres se resuelven con reglas sobre el grafo, dentro del alcance que las reglas calculan; el texto se escribe al confirmar y ECJ compila los archivos tocados como red final; el grafo se guarda en `.ide` y los AST son transitorios (etapa 4) | propuesta, 2026-11-02 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -2165,7 +2165,8 @@ intenciones se reusan.
 ### Etapa 4 (propuesta): el grafo como estado de trabajo
 
 Propuesta del 2026-11-02, para discutir antes de escribir código (decisión 37, propuesta). Toca `java`, `program`,
-`engine` y `knowledge`.
+`engine` y `knowledge`. El cómo y el porqué, con extract superclass hecho de punta a punta, están en
+[docs/design/graph-as-working-state.md](docs/design/graph-as-working-state.md).
 
 **El diagnóstico.** Medido el 2026-11-02 con heap de 2 GB, que es lo que da la JVM por defecto en una máquina de 7 GB:
 
@@ -2200,7 +2201,10 @@ el proyecto. `PerformanceProbe` no muestra nada de esto: mide un sample sintéti
   (de 90 a 160 veces el tamaño de las fuentes), no se sueltan nunca.
 
 **La dirección: el grafo como estado de trabajo, el texto al final.** La pieza que falta es una sola: **resolver
-nombres sobre el grafo**, sin pasar por el texto. Con ella:
+nombres sobre el grafo**, sin pasar por el texto. Para eso cada referencia guarda **su pregunta** (el nombre, qué
+búsqueda es, desde dónde, sobre qué), no solo su respuesta (`target`). Las cadenas se guardan encadenadas:
+`getShop().total` es "`total`, buscado en el tipo que devuelve r6". Así leer es puramente sintáctico, y la resolución
+y el tipado son reglas que recorren las preguntas. Con eso:
 
 1. Los primitivos cambian solo el grafo, como ya hace `MemoryProjection`.
 2. Las reglas calculan el alcance de un cambio: las referencias que podrían cambiar de binding. Es un conjunto
@@ -2237,10 +2241,11 @@ mejor donde el grafo realmente ayuda.
 
 **Lo abierto.**
 
-- *Dónde vive la resolución sobre el grafo.* Puede ser Datalog en `java.rules`, coherente con el principio 7 pero
-  quizás lento y largo de completar (sobrecargas, genéricos, inferencia), o código del driver sobre índices del grafo.
-  La recomendación es que sea del driver, con las reglas para calcular el alcance. Las dos opciones respetan el
-  principio 1.
+- *Dónde vive la resolución sobre el grafo.* Como reglas, igual que el acceso, los constructores y las excepciones en
+  `java.rules` (principios 1 y 7). Así lo propio de un lenguaje en código queda en leer (sintáctico), escribir
+  (sintaxis) y la red final (compilador y build), y la semántica es datos. Un lenguaje nuevo sería un lector, un
+  escritor y sus reglas. El trabajo grande es escribir la resolución de Java como reglas: lo común es razonable, la
+  inferencia de genéricos (JLS 18) no.
 - *Qué tan completa empieza.* Lo que la resolución sobre el grafo todavía no sabe decidir se resuelve con el
   resolvedor del texto, pero solo dentro del alcance. Cada caso que pasa por ese camino queda contado.
 - *Qué falta en el grafo para escribir al final.* Las expresiones son opacas (decisión 32): escribir un `Extract` o un
@@ -2264,8 +2269,10 @@ refactoring compuesto (extract-superclass), apertura en frío y apertura con el 
    miembros por nombre). La lectura, perfilada: caché del solver y lectura en paralelo.
 2. *Alcance.* La invalidación por id y por nombre en todos los casos, incluido el cambio de un tipo: se re-resuelven
    las referencias del alcance, no los archivos de todo el proyecto.
-3. *Resolución sobre el grafo.* Primero lo que necesitan las vistas del verificador: nombres simples, miembros por
-   tipo y herencia, tipos. Lo demás, con el resolvedor del texto dentro del alcance.
+3. *Preguntas y resolución en reglas.* El lector guarda preguntas encadenadas. La resolución arranca por lo que
+   necesitan las vistas del verificador: nombres simples, miembros por tipo y herencia, tipos, imports, `super`. Lo
+   demás, con el resolvedor del texto dentro del alcance, contado. Extract superclass es el primer caso de punta a
+   punta.
 4. *El texto al final.* Los primitivos cambian solo el grafo, el driver escribe al confirmar, y ECJ compila una vez
    los archivos tocados. La búsqueda de reparaciones trabaja sobre estados del grafo.
 5. *Grafo persistente.* El grafo en `.ide`, con relectura solo de lo que cambió, y AST transitorios.
