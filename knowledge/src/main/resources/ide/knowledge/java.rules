@@ -41,6 +41,16 @@ def clash(m, u) when parent(x, u) and alike(x, m) and x != m
 
 say parent for in-scope "pull-up-dependency ${qualified(element)} -> ${qualified(value)}"
 
+# A use binds what it names (JLS 6.5): one made without saying whose, only where what it names is in scope.
+def binds(s, m) when uses(s, m) and not self-use(s, m)
+def binds(s, m) when self-use(s, m) and in-scope(s, m)
+
+# What a use binds can be used where the use is (JLS 6.6). One that binds nothing is out of scope, not out of reach.
+rule access "a member is used only where it can be"
+  for s, m where binds(s, m) and visibility(m, _)
+  must accessible(s, m)
+end
+
 # An override is at least as visible as what it overrides (JLS 8.4.8.3).
 def visible-as-overridden(m) when overrides(m, n) and visibility(n, vn)
   and visibility-at-least(v, vn) and may-be(m, v) and visibility(m, v)

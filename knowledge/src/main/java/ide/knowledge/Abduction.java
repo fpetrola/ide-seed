@@ -125,6 +125,8 @@ final class Abduction {
     private final Evaluation base;
     private final Map<String, Promise> promises;
     private final Map<String, Integer> violations = new java.util.LinkedHashMap<>();
+    /** The violations that held before any change, by relation: asked once. */
+    private final Map<String, java.util.Set<Map<String, String>>> held = new HashMap<>();
     private final Shown shown;
 
     /** How an atom is shown in a reason: elements by their address. */
@@ -420,7 +422,7 @@ final class Abduction {
             var terms = new ArrayList<Term>();
             for (var i = 0; i < relation.getValue(); i++) terms.add(Term.variable("V" + i));
             var query = new Atom(relation.getKey(), terms);
-            var before = new java.util.HashSet<>(base.answers(query));
+            var before = held.computeIfAbsent(relation.getKey(), r -> new java.util.HashSet<>(base.answers(query)));
             for (var answer : state.answers(query)) {
                 if (!before.contains(answer)) broken.add(bound(query, answer));
             }

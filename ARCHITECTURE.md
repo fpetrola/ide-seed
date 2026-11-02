@@ -1579,6 +1579,19 @@ que esto no escala solo:
    - A igual costo decide el orden en que están escritas las definiciones (abrir a `package` va antes que a
      `protected`), como en los quick fixes. Preguntarle a la persona queda para dos caminos que las reglas no
      ordenen, y en estas intenciones no aparece ninguno.
+
+   **Ciclo 2 hecho el 2026-11-02**: quién puede usar qué es una regla, y subir un campo privado lo abre en el mismo
+   plan. El reparador ya no interviene: el rastro muestra `set a.A#x visibility = package` dentro de pull-up-field.
+   - `rule access`: lo que un uso liga se puede usar desde donde está el uso (JLS 6.6). Un uso hecho sin decir de quién
+     liga solo si lo que nombra está en el alcance (`binds`, con `in-scope`); si no, es un problema de alcance y no de
+     acceso, y abrir no lo arregla. La meta de `access.insufficient` sigue igual: dice qué hace desaparecer la
+     violación que ve el verificador, y la regla dice qué tiene que valer en cualquier estado supuesto.
+   - Un estado supuesto es el grafo como quedaría. Antes, lo que `GraphFacts` deriva de dónde está un elemento (su
+     tipo, su tipo de primer nivel, su paquete, su archivo, los elementos antes que él, el dueño de un miembro) seguía
+     el programa real, y un campo supuesto en otra clase seguía siendo privado de la vieja para las reglas. Ahora lo
+     derivado sigue al padre supuesto (`GraphFacts.with`), y lo que entra a un padre va último, como hace `Move`.
+   - Un hecho nuevo del grafo: `uses(s, m)`, cualquier referencia de s a m.
+   - Las violaciones de antes de un cambio se preguntan una vez por búsqueda, no en cada estado supuesto.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

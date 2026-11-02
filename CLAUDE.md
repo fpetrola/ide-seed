@@ -113,8 +113,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   projection; no remedy or quick fix is written in Java. How Java is lives in `java.rules`: definitions (`def`, Datalog
   evaluated by `rules`; `order` gives ordered values, `say` how a change is said). A predicate that definitions say is
   made true by abduction (`Abduction`): the body read left to right, the graph (`GraphFacts`, a view of Program in no
-  language) binding variables, and a fact with known arguments that does not hold changed by the primitive that
-  changes it (visibility, parent, place, what a use binds, a constructor nobody has). Every effect is a quick fix; only one that says `keeps meaning`
+  language; a state supposed is the graph as it would be: what is derived from where an element is follows where it
+  is supposed to be) binding variables, and a fact with known arguments that does not hold changed by the primitive
+  that changes it (visibility, parent, place, what a use binds, a constructor nobody has). Every effect is a quick fix; only one that says `keeps meaning`
   may also repair a refactoring by itself (a Plan that `changesMeaning` is never taken by the Repairer). It is also
   the library's Planner (`Knowledge.standard` registers it): a want is read as a definition's body and made to hold
   the same way, what that breaks mended in the same plan (rule by rule, as written) without what the want asks for

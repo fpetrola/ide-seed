@@ -54,7 +54,7 @@ class ExtractSuperclassTest {
                 "fields", List.of("a.B#x", "a.B#name")));
 
         assertThat(result.violations()).isEmpty();
-        assertThat(result.repairs()).containsExactly("open-visibility a.Base#x private -> package");
+        assertThat(result.repairs()).isEmpty();
         assertThat(ws.source("a/Base.java")).isEqualTo("""
                 package a;
 

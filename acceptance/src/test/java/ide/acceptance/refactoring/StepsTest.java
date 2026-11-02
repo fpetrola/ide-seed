@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StepsTest {
 
     @Test
-    void resultShowsCallsPrimitivesAndRepairsAsATree() {
+    void resultShowsCallsAndThePrimitivesTheyMadeAsATree() {
         var ws = Workspace.of(Map.of("a/B.java", """
                 package a;
 
@@ -33,6 +33,6 @@ class StepsTest {
                 "  ' link a.B extends a.Base",
                 "  . pull-up-field",
                 "    ' move a.B#x -> a.Base",
-                "! open-visibility a.Base#x private -> package");
+                "    ' set a.Base#x visibility = package");
     }
 }

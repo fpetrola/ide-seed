@@ -102,7 +102,11 @@ class PullUpFieldTest {
         var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
 
         assertThat(result.violations()).isEmpty();
-        assertThat(result.repairs()).containsExactly("open-visibility a.A#x private -> package");
+        assertThat(result.repairs()).isEmpty(); // the rules saw what the move breaks: the plan mends it
+        assertThat(result.steps()).containsExactly(
+                ". pull-up-field",
+                "  ' move a.B#x -> a.A",
+                "  ' set a.A#x visibility = package");
         assertThat(ws.source("a/A.java")).isEqualTo("""
                 package a;
 

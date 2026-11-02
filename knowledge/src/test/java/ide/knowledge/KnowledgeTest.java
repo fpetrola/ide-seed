@@ -485,6 +485,29 @@ class KnowledgeTest {
         assertThat(projection.program().element(x).qualified()).isEqualTo("a.A#x");
     }
 
+    /**
+     * What the want's changes break is mended in the same plan: a private field that goes up is no longer one its
+     * type's methods can use, and the narrowest visibility that lets them is part of the plan. The state supposed is
+     * the graph as it would be: where the field's type and package are follows where it is supposed to be.
+     */
+    @Test
+    void whatAWantBreaksIsMendedInTheSamePlan() {
+        var library = Library.standard();
+        Knowledge.standard(library);
+        var projection = MemoryProjection.builder()
+                .type("a.A").type("a.B").extend("a.B", "a.A")
+                .field("a.B", "x", "int").fact("a.B#x", Fact.VISIBILITY, "private")
+                .method("a.B", "get", "int").use("a.B#get()", "a.B#x", Mode.READ)
+                .build();
+        var x = id(projection.program(), "a.B#x");
+
+        Run.on(projection, library).call("pull-up-field", Map.of("field", "a.B#x"));
+
+        var field = projection.program().element(x);
+        assertThat(field.qualified()).isEqualTo("a.A#x");
+        assertThat(field.fact(Fact.VISIBILITY)).isEqualTo("package");
+    }
+
     /** One whose conditions do not hold has no way, and is refused with the first it could not get past. */
     @Test
     void anIntentWhoseConditionsDoNotHoldIsRefusedWithWhatItNeeds() {

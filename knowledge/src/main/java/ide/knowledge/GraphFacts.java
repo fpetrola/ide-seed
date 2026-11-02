@@ -44,30 +44,86 @@ import java.util.stream.Stream;
  * passes(p, s, f)   (s calling p's constructor first with what it gave f, and giving it no more: only made)
  * assigns(s, f)     (a statement of s gives f a value it says in no language)
  * superclass(t, u)  (u is the class t extends, of the workspace)     same-parameters(n, m)   (in order, of the same types)
+ * uses(s, m)        (any reference from s to m: a use, a call, a new, a link)
  * </pre>
+ * A state supposed ({@link #with}) is the graph as it would be: what is derived from where an element is (its type,
+ * its top-level type, its package, its file, the elements before it) follows where it is supposed to be. An element
+ * that goes into another goes last in it.
  */
 final class GraphFacts implements Facts {
 
     private final Projection projection;
     private final Program program;
     private final Map<String, Value> known;
+    /** What is supposed: tuples added and removed, by relation. */
+    private final Map<String, java.util.Set<List<String>>> added;
+    private final Map<String, java.util.Set<List<String>>> removed;
+    /** Where an element is supposed to be, and what one created is, when a change says so. */
+    private final Map<String, String> parents = new java.util.HashMap<>();
+    private final Map<String, String> kinds = new java.util.HashMap<>();
+    /** The elements supposed to go into a parent, in the order they went. */
+    private final Map<String, List<String>> arrived = new java.util.HashMap<>();
 
     GraphFacts(Projection projection, Map<String, Value> known) {
+        this(projection, known, Map.of(), Map.of());
+    }
+
+    private GraphFacts(Projection projection, Map<String, Value> known, Map<String, java.util.Set<List<String>>> added,
+                       Map<String, java.util.Set<List<String>>> removed) {
         this.projection = projection;
         this.program = projection.program();
         this.known = known;
+        this.added = added;
+        this.removed = removed;
+        for (var tuple : added.getOrDefault("parent", java.util.Set.of())) {
+            parents.put(tuple.get(0), tuple.get(1));
+            arrived.computeIfAbsent(tuple.get(1), p -> new java.util.ArrayList<>()).add(tuple.get(0));
+        }
+        for (var tuple : added.getOrDefault("kind", java.util.Set.of())) kinds.put(tuple.get(0), tuple.get(1));
+    }
+
+    /** These facts with {@code more} and without {@code less}, after what they already suppose. */
+    @Override
+    public Facts with(java.util.Collection<ide.rules.Tuple> more, java.util.Collection<ide.rules.Tuple> less) {
+        var nowAdded = copy(added);
+        var nowRemoved = copy(removed);
+        for (var tuple : less) {
+            nowAdded.getOrDefault(tuple.relation(), new java.util.LinkedHashSet<>()).remove(tuple.values());
+            nowRemoved.computeIfAbsent(tuple.relation(), r -> new java.util.LinkedHashSet<>()).add(tuple.values());
+        }
+        for (var tuple : more) {
+            nowRemoved.getOrDefault(tuple.relation(), new java.util.LinkedHashSet<>()).remove(tuple.values());
+            nowAdded.computeIfAbsent(tuple.relation(), r -> new java.util.LinkedHashSet<>()).add(tuple.values());
+        }
+        return new GraphFacts(projection, known, nowAdded, nowRemoved);
+    }
+
+    private static Map<String, java.util.Set<List<String>>> copy(Map<String, java.util.Set<List<String>>> tuples) {
+        var copy = new java.util.LinkedHashMap<String, java.util.Set<List<String>>>();
+        tuples.forEach((relation, values) -> copy.put(relation, new java.util.LinkedHashSet<>(values)));
+        return copy;
     }
 
     @Override
     public Stream<List<String>> match(String relation, List<String> pattern) {
+        var tuples = derived(relation, pattern);
+        var gone = removed.get(relation);
+        if (gone != null && !gone.isEmpty()) tuples = tuples.filter(tuple -> !gone.contains(tuple));
+        var more = added.get(relation);
+        if (more != null && !more.isEmpty()) tuples = Stream.concat(tuples, more.stream()).distinct();
+        return tuples.filter(tuple -> Facts.matches(tuple, pattern));
+    }
+
+    private Stream<List<String>> derived(String relation, List<String> pattern) {
         var first = pattern.isEmpty() ? null : pattern.getFirst();
         Stream<List<String>> tuples = switch (relation) {
             case "kind" -> elements(first).map(e -> List.of(id(e), e.kind().name().toLowerCase(Locale.ROOT)));
             case "name" -> elements(first).map(e -> List.of(id(e), e.name()));
             case "parent" -> elements(first).filter(e -> e.parent() != null).map(e -> List.of(id(e), e.parent().value()));
+            case "uses" -> references(first).map(r -> List.of(r.site().value(), r.target().value()));
             case "visibility" -> elements(first).filter(e -> e.fact(Fact.VISIBILITY) != null)
                     .map(e -> List.of(id(e), e.fact(Fact.VISIBILITY)));
-            case "top-level" -> elements(first).filter(this::topLevel).map(e -> List.of(id(e)));
+            case "top-level" -> elements(first).filter(e -> topLevel(id(e))).map(e -> List.of(id(e)));
             case "static" -> elements(first).filter(e -> "true".equals(e.fact(Fact.STATIC))).map(e -> List.of(id(e)));
             case "final" -> elements(first).filter(e -> "true".equals(e.fact(Fact.FINAL))).map(e -> List.of(id(e)));
             case "abstract" -> elements(first).filter(e -> "true".equals(e.fact(Fact.ABSTRACT))).map(e -> List.of(id(e)));
@@ -87,9 +143,9 @@ final class GraphFacts implements Facts {
             case "expected" -> holes(first).flatMap(u -> projection.needs(u.id()).stream()
                     .filter(n -> n.expected() != null).map(n -> List.of(u.id(), n.expected())));
             case "start-value" -> first == null ? Stream.empty() : Stream.of(List.of(first, projection.rules().defaultValue(first)));
-            case "member" -> elements(first).filter(e -> e.parent() != null)
-                    .map(e -> List.of(id(e), e.parent().value(), e.name(), e.kind().name().toLowerCase(Locale.ROOT)));
-            case "parameter" -> elements(first).filter(e -> e.kind() == Kind.PARAM).map(p -> List.of(id(p), p.parent().value(), p.name(),
+            case "member" -> elements(first).filter(e -> parentOf(id(e)) != null)
+                    .map(e -> List.of(id(e), parentOf(id(e)), e.name(), e.kind().name().toLowerCase(Locale.ROOT)));
+            case "parameter" -> elements(first).filter(e -> e.kind() == Kind.PARAM).map(p -> List.of(id(p), parentOf(id(p)), p.name(),
                     pattern.size() > 3 && pattern.get(3) != null ? pattern.get(3) : ""));
             case "constructor-for" -> holes(pattern.size() > 2 ? pattern.get(2) : null).flatMap(u -> program.elements().stream()
                     .filter(k -> k.kind() == Kind.CONSTRUCTOR && takes(k, u)).map(k -> List.of(id(k), k.parent().value(), u.id())));
@@ -97,20 +153,20 @@ final class GraphFacts implements Facts {
                     .flatMap(m -> holes(pattern.size() > 1 ? pattern.get(1) : null).filter(u -> takes(m, u)).map(u -> List.of(id(m), u.id())));
             case "self-use" -> uses(first, Reference.Receiver.SELF);
             case "type-use" -> uses(first, Reference.Receiver.TYPE);
-            case "top" -> inTypes(first).map(e -> List.of(id(e), id(program.topLevel(e.id()))));
-            case "package" -> inTypes(first).map(e -> List.of(id(e), packageOf(program.topLevel(e.id()))));
-            case "enclosing" -> inTypes(first).map(e -> List.of(id(e), id(program.enclosingType(e.id()))));
+            case "top" -> inTypes(first).map(e -> List.of(id(e), topOf(id(e))));
+            case "package" -> inTypes(first).map(e -> List.of(id(e), packageOf(topOf(id(e)))));
+            case "enclosing" -> inTypes(first).map(e -> List.of(id(e), enclosingOf(id(e))));
             case "subclass" -> types(first).flatMap(t -> program.superclassChain(t.id()).stream().map(s -> List.of(id(t), id(s))));
             case "overrides" -> elements(first).filter(e -> e.kind() == Kind.METHOD)
                     .flatMap(m -> program.overridden(m).stream().map(n -> List.of(id(m), id(n))));
             case "alike" -> elements(first).flatMap(a -> program.elements().stream().filter(b -> alike(a, b))
                     .map(b -> List.of(id(a), id(b))));
-            case "before" -> elements(first).filter(e -> e.parent() != null).flatMap(a -> {
-                var siblings = program.children(a.parent());
-                return siblings.subList(siblings.indexOf(a) + 1, siblings.size()).stream().map(b -> List.of(id(a), id(b)));
+            case "before" -> elements(first).filter(e -> parentOf(id(e)) != null).flatMap(a -> {
+                var siblings = childrenOf(parentOf(id(a)));
+                return siblings.subList(siblings.indexOf(id(a)) + 1, siblings.size()).stream().map(b -> List.of(id(a), b));
             });
             case "constructor" -> elements(first).filter(e -> e.kind() == Kind.CONSTRUCTOR)
-                    .map(k -> List.of(id(k), k.parent().value()));
+                    .map(k -> List.of(id(k), parentOf(id(k))));
             case "named" -> program.types().stream().map(t -> List.of(id(t), t.name()));
             case "unresolved" -> program.unresolved().stream().filter(u -> first == null || first.equals(u.id()))
                     .filter(u -> program.contains(u.site()) && program.topLevel(u.site()).fact(Fact.FILE) != null)
@@ -131,14 +187,68 @@ final class GraphFacts implements Facts {
             case "assigns" -> first == null ? Stream.empty() : elements(first).flatMap(s -> program.children(s.id()).stream())
                     .filter(e -> e.kind() == Kind.STATEMENT).flatMap(st -> assigned(st).stream()).map(f -> List.of(first, f));
             case "declared" -> elements(first).filter(e -> e.kind() == Kind.FIELD || e.kind() == Kind.METHOD)
-                    .filter(e -> Objects.equals(program.topLevel(e.id()).fact(Fact.FILE), pattern.size() > 1 ? pattern.get(1) : null)
+                    .filter(e -> Objects.equals(fileOf(id(e)), pattern.size() > 1 ? pattern.get(1) : null)
                             || pattern.size() < 2 || pattern.get(1) == null)
-                    .map(e -> List.of(id(e), String.valueOf(program.topLevel(e.id()).fact(Fact.FILE)), e.name()));
+                    .map(e -> List.of(id(e), String.valueOf(fileOf(id(e))), e.name()));
             case "known" -> known.entrySet().stream().filter(e -> e.getValue() != null && !(e.getValue() instanceof Value.Items))
                     .map(e -> List.of(e.getKey(), Value.asText(e.getValue())));
             default -> Stream.empty();
         };
-        return tuples.filter(tuple -> Facts.matches(tuple, pattern));
+        return tuples;
+    }
+
+    /** Where an element is: where it is supposed to be, if it is supposed to have moved; else where it is. */
+    private String parentOf(String id) {
+        var supposed = parents.get(id);
+        if (supposed != null) return supposed;
+        var element = new ElementId(id);
+        if (!program.contains(element) || program.element(element).parent() == null) return null;
+        var parent = program.element(element).parent().value();
+        var gone = removed.get("parent");
+        return gone != null && gone.contains(List.of(id, parent)) ? null : parent;
+    }
+
+    /** What an element is, in lower case: one created is what it is supposed to be. */
+    private String kindOf(String id) {
+        var supposed = kinds.get(id);
+        if (supposed != null) return supposed;
+        var element = new ElementId(id);
+        return program.contains(element) ? program.element(element).kind().name().toLowerCase(Locale.ROOT) : null;
+    }
+
+    private boolean isType(String id) {
+        var kind = kindOf(id);
+        return kind != null && Kind.valueOf(kind.toUpperCase(Locale.ROOT)).isType();
+    }
+
+    /** What is in a parent, in order: what was there and stays, then what is supposed to go into it, last. */
+    private List<String> childrenOf(String parent) {
+        var children = new java.util.ArrayList<String>();
+        if (program.contains(new ElementId(parent))) {
+            for (var child : program.children(new ElementId(parent))) if (parent.equals(parentOf(id(child)))) children.add(id(child));
+        }
+        for (var child : arrived.getOrDefault(parent, List.of())) if (!children.contains(child) && parent.equals(parentOf(child))) children.add(child);
+        return children;
+    }
+
+    /** The type an element is in, or the element itself if it is a type. */
+    private String enclosingOf(String id) {
+        var at = id;
+        while (at != null && !isType(at)) at = parentOf(at);
+        return at;
+    }
+
+    /** The outermost type an element is in, or the element itself. */
+    private String topOf(String id) {
+        var at = id;
+        for (var parent = parentOf(at); parent != null && !"package".equals(kindOf(parent)); parent = parentOf(at)) at = parent;
+        return at;
+    }
+
+    /** The file a top-level type is written in, of the element's top-level type. */
+    private String fileOf(String id) {
+        var top = new ElementId(topOf(id));
+        return program.contains(top) ? program.element(top).fact(Fact.FILE) : null;
     }
 
     /**
@@ -229,16 +339,23 @@ final class GraphFacts implements Facts {
         return elements(id).filter(e -> e.kind().isType());
     }
 
-    private boolean topLevel(Element e) {
-        return e.kind().isType() && (e.parent() == null || program.element(e.parent()).kind() == Kind.PACKAGE);
+    private boolean topLevel(String id) {
+        if (!isType(id)) return false;
+        var parent = parentOf(id);
+        return parent == null || "package".equals(kindOf(parent));
     }
 
     private static String id(Element e) {
         return e.id().value();
     }
 
-    private static String packageOf(Element topLevel) {
-        var qualified = topLevel.qualified();
+    /** The package a top-level type is in, by its qualified name. */
+    private String packageOf(String topLevel) {
+        var parent = parentOf(topLevel);
+        if (parent != null && program.contains(new ElementId(parent))) return program.element(new ElementId(parent)).qualified();
+        var element = new ElementId(topLevel);
+        if (!program.contains(element)) return "";
+        var qualified = program.element(element).qualified();
         var dot = qualified.lastIndexOf('.');
         return dot < 0 ? "" : qualified.substring(0, dot);
     }
