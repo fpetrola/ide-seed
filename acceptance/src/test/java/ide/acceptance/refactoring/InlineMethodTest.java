@@ -255,4 +255,37 @@ class InlineMethodTest {
                 """).doesNotContain("void row(");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** A static method referenced through its own type: the type is named no more there, on purpose. */
+    @Test
+    void aStaticMethodReferenceThroughItsOwnTypeBecomesALambda() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.List;
+
+                class Rows {
+                    static void process(List<String> lines) {
+                        lines.forEach(Rows::row);
+                    }
+
+                    static void row(String line) {
+                        if (line.isEmpty()) {
+                            System.out.println("empty");
+                        } else {
+                            System.out.println(line);
+                        }
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-method", Map.of("method", "a.Rows#row(String)"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                        lines.forEach((line) -> {
+                            if (line.isEmpty()) {
+                """).doesNotContain("void row(");
+        assertThat(ws.errors()).isEmpty();
+    }
 }

@@ -39,7 +39,8 @@ final class InlineCall {
     /**
      * A method reference is first the lambda that calls the method ({@code Rows::processRow} → {@code (row) ->
      * processRow(row)}), whose call is then inlined. Only a reference through the method's type, to a static method,
-     * or through {@code this}: one through another object would have it taken once, when the reference is made.
+     * or through {@code this}: one through another object would have it taken once, when the reference is made. A
+     * type the method is in, named in the reference, is named no more.
      */
     private static Change reference(Primitive.Inline inline, Context c, Program before, ide.program.Reference ref,
                                     com.github.javaparser.ast.expr.MethodReferenceExpr reference) {
@@ -69,7 +70,8 @@ final class InlineCall {
         var lambda = c.sources().unit(unit.path()).tree().findFirst(com.github.javaparser.ast.expr.LambdaExpr.class,
                 l -> l.getBegin().filter(begin::equals).isPresent()).orElseThrow();
         var call = lambda.getBody().findFirst(MethodCallExpr.class).orElseThrow();
-        return call(inline, c, before, call, method, ref.site());
+        var change = call(inline, c, before, call, method, ref.site());
+        return scope.isTypeExpr() && own ? change.expect(new Change.Dropped(ref.site(), method.parent())) : change; // its type named no more there
     }
 
     /** A call of {@code method}, made from {@code site}, replaced by what the method does. */
