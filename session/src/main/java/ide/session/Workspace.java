@@ -37,6 +37,7 @@ public final class Workspace {
     private final Plans plans;
     private final Attention attention;
     private final Conversation conversation;
+    private final RunConfigs runs;
 
     private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root, Maven.Classpath classpath) {
         this.project = project;
@@ -49,6 +50,7 @@ public final class Workspace {
         this.completion = new Completion(project);
         this.plans = new Plans(root == null ? null : root.resolve(".ide/plans.json"), session::event, java.time.Clock.systemUTC());
         this.attention = new Attention(session::event);
+        this.runs = new RunConfigs(root == null ? null : root.resolve(".ide/runs.json"), session::event);
         this.conversation = new Conversation(root == null ? null : root.resolve(".ide/conversation.json"), session::event);
     }
 
@@ -210,28 +212,51 @@ public final class Workspace {
         return project.mains().stream().filter(main -> path.isEmpty() || main.path().equals(path.get())).toList();
     }
 
-    /**
-     * How to run the program of a class with a main, as it is on disk: the Java the IDE runs on, which runs a program
-     * from its sources (the class's file, and the others of the project as it uses them), with the project's libraries,
-     * in the project's folder (Maven's, if it has one).
-     */
-    Map<String, Object> runCommand(String type) {
-        var main = project.mains().stream().filter(m -> m.type().equals(type)).findFirst()
+    RunConfigs runs() {
+        return runs;
+    }
+
+    /** Keeps a run configuration, refused if its class has no main to run. */
+    RunConfigs.Config runConfig(RunConfigs.Config config) {
+        main(config.type());
+        return runs.set(config);
+    }
+
+    private JavaProjection.Main main(String type) {
+        return project.mains().stream().filter(m -> m.type().equals(type)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("no main to run in " + type + ": it is not a class with a main method"));
+    }
+
+    /**
+     * How to run a program, as it is on disk: by a run configuration, the one of a class (made if it has none), or the
+     * chosen one. The Java the IDE runs on runs it from its sources (the class's file, and the others of the project as
+     * it uses them), with the configuration's options, the project's libraries and the program's arguments, in its
+     * folder (the project's, Maven's if it has one, unless the configuration says another) with its environment.
+     */
+    Map<String, Object> runCommand(Optional<String> name, Optional<String> type) {
+        var config = name.map(runs::get).or(() -> type.map(runs::of)).or(runs::chosen)
+                .orElseThrow(() -> new IllegalArgumentException("say what to run: a class with a main, or a run configuration"));
+        runs.choose(config.name());
+        var main = main(config.type());
         var folder = root().orElseThrow(() -> new IllegalStateException("this workspace was not opened from a folder: nothing to run"));
         var launcher = ProcessHandle.current().info().command().filter(c -> Path.of(c).getFileName().toString().startsWith("java"))
                 .orElse("java");
         var command = new java.util.ArrayList<String>(List.of(launcher));
+        command.addAll(config.options());
         if (!classpath.entries().isEmpty()) {
             command.add("-cp");
             command.add(String.join(java.io.File.pathSeparator, classpath.entries().stream().map(Path::toString).toList()));
         }
         command.add(folder.resolve(main.path()).toString());
+        command.addAll(config.arguments());
+        var project = ide.maven.Maven.project(folder).map(ide.maven.Maven::folder).orElse(folder);
         var shown = new java.util.LinkedHashMap<String, Object>();
-        shown.put("title", type.substring(type.lastIndexOf('.') + 1));
-        shown.put("type", type);
+        shown.put("title", config.name());
+        shown.put("config", config.name());
+        shown.put("type", config.type());
         shown.put("command", command);
-        shown.put("directory", ide.maven.Maven.project(folder).map(ide.maven.Maven::folder).orElse(folder).toString());
+        shown.put("directory", config.directory().isBlank() ? project.toString() : project.resolve(config.directory()).normalize().toString());
+        shown.put("environment", config.variables());
         return shown;
     }
 

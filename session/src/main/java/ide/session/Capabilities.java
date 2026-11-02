@@ -3,6 +3,7 @@ package ide.session;
 import ide.core.Capability;
 import ide.core.CapabilityRegistry;
 import ide.core.Param;
+import ide.java.JavaProjection;
 import ide.refactoring.Refactoring;
 
 import java.util.Collection;
@@ -170,8 +171,23 @@ final class Capabilities {
                 .register(Capability.of("mains", "The classes a program can be run from (a main method Java runs), of a file if one is said",
                         List.of(Param.of("path", "text").optional()), args -> workspace.mains(optional(args, "path")).stream()
                         .map(main -> entries("type", main.type(), "path", main.path(), "line", main.line(), "methodLine", main.methodLine())).toList()))
-                .register(Capability.of("run-command", "How to run the program of a class with a main, as it is saved: the command, "
-                        + "the folder it runs in, and a title", List.of(Param.of("type", "text")), args -> workspace.runCommand(text(args, "type"))))
+                .register(Capability.of("run-command", "How to run a program, as it is saved: by a run configuration, by a class "
+                        + "with a main (its configuration, made if it has none), or the chosen configuration; the command, the folder it "
+                        + "runs in, its environment, and a title", List.of(Param.of("config", "text").optional(), Param.of("type", "text").optional()),
+                        args -> workspace.runCommand(optional(args, "config"), optional(args, "type"))))
+                .register(Capability.of("run-configs", "The run configurations, and the chosen one", List.of(), args -> workspace.runs().shown()))
+                .register(Capability.of("run-config-set", "Keeps a run configuration (in place of the one of its name): the class with "
+                        + "a main it runs, the program's arguments and the virtual machine's options as a shell writes them, the folder "
+                        + "it runs in (from the project's), its environment as NAME=value;...", List.of(Param.of("name", "text"),
+                        Param.of("type", "choice", workspace.mains(Optional.empty()).stream().map(JavaProjection.Main::type).toArray(String[]::new)),
+                        Param.of("args", "text").optional(), Param.of("vm", "text").optional(), Param.of("directory", "text").optional(),
+                        Param.of("environment", "text").optional()), args -> workspace.runConfig(new RunConfigs.Config(text(args, "name").strip(),
+                        text(args, "type"), optional(args, "args").orElse(""), optional(args, "vm").orElse(""),
+                        optional(args, "directory").orElse(""), optional(args, "environment").orElse(""))).shown()))
+                .register(Capability.of("run-config-remove", "Removes a run configuration", List.of(Param.of("name", "text")), args -> {
+                    workspace.runs().remove(text(args, "name"));
+                    return workspace.runs().shown();
+                }))
                 .register(Capability.of("library", "Refactorings by level", List.of(), args -> workspace.library()))
                 .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
                         args -> workspace.define(text(args, "text"))))
