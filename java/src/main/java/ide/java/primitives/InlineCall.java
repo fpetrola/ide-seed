@@ -29,14 +29,56 @@ final class InlineCall {
     static Change apply(Primitive.Inline inline, Context c, Program before) {
         var ref = before.reference(inline.reference());
         if (before.element(ref.target()).kind() == Kind.LOCAL) return InlineLocal.apply(inline, c, before, ref);
+        if (c.use(ref.id()) instanceof com.github.javaparser.ast.expr.MethodReferenceExpr reference) return reference(inline, c, before, ref, reference);
         if (!(c.use(ref.id()) instanceof MethodCallExpr call)) {
             throw new PrimitiveRejected("inline.not-a-call", ref.id() + " is not a call");
         }
+        return call(inline, c, before, call, before.element(ref.target()), ref.site());
+    }
+
+    /**
+     * A method reference is first the lambda that calls the method ({@code Rows::processRow} → {@code (row) ->
+     * processRow(row)}), whose call is then inlined. Only a reference through the method's type, to a static method,
+     * or through {@code this}: one through another object would have it taken once, when the reference is made.
+     */
+    private static Change reference(Primitive.Inline inline, Context c, Program before, ide.program.Reference ref,
+                                    com.github.javaparser.ast.expr.MethodReferenceExpr reference) {
         var method = before.element(ref.target());
+        var declaration = c.declaration(method).as(MethodDeclaration.class);
+        var scope = reference.getScope();
+        var statik = declaration.isStatic();
+        if (!(scope.isThisExpr() && !statik || scope.isTypeExpr() && statik)) {
+            throw new PrimitiveRejected("inline.reference", reference + " is made through an object of its own, or needs one");
+        }
+        var caller = reference.findAncestor(com.github.javaparser.ast.body.CallableDeclaration.class).orElseThrow();
+        var there = new java.util.HashSet<String>();
+        Bodies.locals(caller).forEach(v -> there.add(v.getNameAsString()));
+        ((com.github.javaparser.ast.body.CallableDeclaration<?>) caller).getParameters().forEach(p -> there.add(p.getNameAsString()));
+        var names = new java.util.ArrayList<String>();
+        for (var param : declaration.getParameters()) { // a lambda's parameter may not hide a local of where it is
+            var name = param.getNameAsString();
+            for (var n = 2; there.contains(name) || names.contains(name); n++) name = param.getNameAsString() + n;
+            names.add(name);
+        }
+        var own = caller.findAncestor(com.github.javaparser.ast.body.TypeDeclaration.class).orElseThrow() == declaration.findAncestor(com.github.javaparser.ast.body.TypeDeclaration.class).orElseThrow();
+        var unit = c.sources().unitOf(reference);
+        var through = scope.isTypeExpr() && !own ? unit.textOf(scope) + "." : "";
+        var arguments = String.join(", ", names);
+        var begin = reference.getBegin().orElseThrow();
+        c.sources().apply(Shared.edits(e -> e.replace(unit, reference, "(" + arguments + ") -> " + through + method.name() + "(" + arguments + ")")));
+        var lambda = c.sources().unit(unit.path()).tree().findFirst(com.github.javaparser.ast.expr.LambdaExpr.class,
+                l -> l.getBegin().filter(begin::equals).isPresent()).orElseThrow();
+        var call = lambda.getBody().findFirst(MethodCallExpr.class).orElseThrow();
+        return call(inline, c, before, call, method, ref.site());
+    }
+
+    /** A call of {@code method}, made from {@code site}, replaced by what the method does. */
+    private static Change call(Primitive.Inline inline, Context c, Program before, MethodCallExpr call, ide.program.Element method,
+                               ide.program.ElementId site) {
         var declaration = c.declaration(method).as(MethodDeclaration.class);
         var statements = declaration.getBody().map(b -> b.getStatements()).orElseThrow();
         if (statements.size() != 1 || !statements.get(0).isReturnStmt() || statements.get(0).asReturnStmt().getExpression().isEmpty()) {
-            return statements(inline, c, before, call, method, declaration, ref.site());
+            return statements(inline, c, before, call, method, declaration, site);
         }
         var original = statements.get(0).asReturnStmt().getExpression().get(); // attached, so names resolve
         if (original.findAll(MethodCallExpr.class).stream().anyMatch(k -> method.id().equals(c.reader().resolveMethod(k)))) {
