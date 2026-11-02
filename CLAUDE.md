@@ -134,9 +134,12 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `Workspace.open(folder)` reads a project (skipping target, build, out and hidden folders), gives the Java driver
   the classpath Maven says it has (cached in `.ide/classpath.txt`), logs to `.ide/events.jsonl` there and saves there;
   `sync` takes what changed there on disk since it was read or saved, each file as an edit by hand (a file the IDE
-  changed too is a conflict left alone; a deleted one is said, not followed). WorkPlan (not the engine's repair Plan):
-  the plan being followed, a title and tasks todo/doing/done with a note, in `.ide/plan.json`, each change an event;
-  capabilities plan, plan-set, task-add, task. Attention: where attention is, both ways, between a person and an agent on the same
+  changed too is a conflict left alone; a deleted one is said, not followed). Plans (not the engine's repair Plan): the plans a
+  person and an agent follow, several, one active; each a tree of tasks (lines of action and subtasks, depth first)
+  with stable ids (`p1`, `t7`), a description, what each waits for, links into the code and a timeline of who said or
+  did what; in `.ide/plans.json`, each change an event; capabilities plans, plan, plan-new, plan-switch, plan-state,
+  task, task-add, task-update, task-link. What the person says (`steer`: pause, resume, comment, replan, switch)
+  changes the plan at once and waits to be told to the agent once (`steering`), unless the window told it. Attention: where attention is, both ways, between a person and an agent on the same
   IDE: `point` (an element or lines, with a note; numbered, an event) and `pointed`; `look` (the window says where the
   person is) and `looking` (that, with the element under the caret and what it is inside); pointing at an element marks its whole
   declaration (`JavaProjection.declared`). `guide` (resource `guide.md`): how an agent works on the IDE, what MCP says

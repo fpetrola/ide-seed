@@ -765,11 +765,19 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     Si un archivo cambió en disco y también en el IDE, es un conflicto: se dice y no se toca. Un archivo borrado en
     disco se informa pero no se sigue. Guardar después de una llamada de un agente guarda también lo que la persona
     tenía sin guardar.
-  - **Decisión: el plan que se sigue es dominio de session, no del agente.** `WorkPlan` (para no confundirlo con el
-    `Plan` de reparación del engine) es un título y sus tareas, cada una pendiente, en curso o hecha, con una nota. Se
-    guarda en `.ide/plan.json` y cada cambio es un evento del log. Lo leen y escriben las capacidades `plan`,
-    `plan-set`, `task-add` y `task`: lo mismo para una persona por la CLI que para Claude por MCP. La ventana lo
-    muestra en `PlanView`, debajo del proyecto, para verlo mientras la terminal trabaja. No sabe nada de programas.
+  - **Decisión: los planes que se siguen son dominio de session, no del agente.** `Plans` (para no confundirlo con
+    el `Plan` de reparación del engine) guarda varios planes; uno solo está activo y los demás quedan en pausa,
+    terminados o abandonados. Cada plan es un árbol de tareas: las de arriba son líneas de acción y las de abajo, sus
+    subtareas. Cada tarea tiene un id estable (`t7`), así que replanificar (agregar, mover, descartar) no cambia quién
+    es quién. Además tiene descripción, estado (pendiente, en curso, bloqueada, en pausa, hecha o descartada), las
+    tareas que espera (`after`, sin ciclos), enlaces al código y una línea de tiempo de quién dijo o hizo qué. Todo se
+    guarda en `.ide/plans.json` y cada cambio es un evento del log. Reemplaza al `WorkPlan` de una sola lista, cuyas
+    tareas se identificaban por su posición.
+  - **Decisión: lo que dice la persona cambia el plan al instante y le llega al agente una sola vez.** Con `steer`
+    puede pausar, reanudar, comentar, pedir que se replanifique o cambiar de plan. El agente no escucha mientras
+    trabaja, así que el mensaje ("The person ...") queda esperando. La ventana lo escribe en la terminal de Claude si
+    está ahí (y lo marca como dicho); si no, viaja con la próxima respuesta del servidor MCP. `steering` devuelve lo
+    que todavía no se le dijo.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un

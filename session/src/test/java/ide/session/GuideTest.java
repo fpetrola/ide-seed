@@ -18,7 +18,7 @@ class GuideTest {
 
         var named = Pattern.compile("`([a-z-]+)`").matcher(guide).results().map(m -> m.group(1)).toList();
 
-        assertThat(named).contains("plan-set", "task", "task-add", "plan", "looking", "point");
+        assertThat(named).contains("plan-new", "task-update", "task-link", "steering", "looking", "point");
         assertThat(workspace.capabilities().ids()).containsAll(named);
     }
 }

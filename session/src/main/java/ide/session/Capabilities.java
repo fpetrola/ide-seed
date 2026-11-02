@@ -52,26 +52,65 @@ final class Capabilities {
                     return entries("taken", sync.taken(), "conflicts", sync.conflicts(), "refused", sync.refused(),
                             "deleted", sync.deleted());
                 }))
-                .register(Capability.of("plan", "The plan being followed: its title, its tasks numbered from 1 with their "
-                        + "state (todo, doing, done) and note, and how many are done of how many", List.of(),
-                        args -> workspace.plan().shown()))
-                .register(Capability.of("plan-set", "Sets the plan to follow: a title and its tasks, one per line, every one to do",
-                        List.of(Param.of("title", "text"), Param.of("tasks", "text")), args -> {
-                    workspace.plan().set(text(args, "title"), text(args, "tasks").lines().toList());
-                    return workspace.plan().shown();
+                .register(Capability.of("plans", "Every plan, with its state (active, paused, done, dropped) and how many of "
+                        + "its tasks are finished", List.of(), args -> workspace.plans().list()))
+                .register(Capability.of("plan", "A plan (the active one if none is said) with its tasks, depth first: id, title, "
+                        + "state, parent, depth, how many subtasks are finished, and what each still waits for",
+                        List.of(Param.of("plan", "text").optional()), args -> workspace.plans().plan(optional(args, "plan"))))
+                .register(Capability.of("plan-new", "Makes a plan the active one (the one that was waits, paused): a title, what "
+                        + "it is for, and its tasks one per line, each indented under the line of action it is part of",
+                        List.of(Param.of("title", "text"), Param.of("description", "text").optional(), Param.of("tasks", "text")),
+                        args -> workspace.plans().create(text(args, "title"), optional(args, "description").orElse(""), text(args, "tasks"))))
+                .register(Capability.of("plan-switch", "Goes on with another plan; the active one waits, paused",
+                        List.of(Param.of("plan", "text")), args -> {
+                    workspace.plans().activate(text(args, "plan"));
+                    return workspace.plans().plan(Optional.empty());
                 }))
-                .register(Capability.of("task-add", "Adds a task, to do, at the end of the plan", List.of(Param.of("text", "text")),
+                .register(Capability.of("plan-state", "Says how a plan is: active, paused, done or dropped",
+                        List.of(Param.of("plan", "text"), Param.of("state", "choice", "active", "paused", "done", "dropped")), args -> {
+                    workspace.plans().state(text(args, "plan"), Plans.PlanState.valueOf(text(args, "state").toUpperCase(java.util.Locale.ROOT)));
+                    return workspace.plans().plan(Optional.of(text(args, "plan")));
+                }))
+                .register(Capability.of("task", "A task with everything it has: plan, title, description, state, parent, subtasks, "
+                        + "what it waits for, links into the code and its timeline", List.of(Param.of("task", "text")),
+                        args -> workspace.plans().task(optional(args, "task"))))
+                .register(Capability.of("task-add", "Adds a task to do: at the end of a line of action (parent), or of a plan (the "
+                        + "active one if none is said); after: tasks it waits for, comma-separated",
+                        List.of(Param.of("title", "text"), Param.of("description", "text").optional(), Param.of("parent", "text").optional(),
+                                Param.of("plan", "text").optional(), Param.of("after", "text").optional(), by()),
+                        args -> workspace.plans().add(optional(args, "plan"), text(args, "title"), optional(args, "description").orElse(""),
+                                optional(args, "parent"), optional(args, "after").map(a -> List.of(a.split("\\s*,\\s*"))).orElse(List.of()),
+                                who(args))))
+                .register(Capability.of("task-update", "Changes a task: its state (todo, doing, blocked, paused, done, dropped), a "
+                        + "note for its timeline, title, description, parent (none: a line of action) or what it waits for (after, "
+                        + "comma-separated; none: nothing)", List.of(Param.of("task", "text"),
+                        Param.of("state", "choice", "todo", "doing", "blocked", "paused", "done", "dropped").optional(),
+                        Param.of("note", "text").optional(), Param.of("title", "text").optional(), Param.of("description", "text").optional(),
+                        Param.of("parent", "text").optional(), Param.of("after", "text").optional(), by()), args -> {
+                    var changes = new java.util.LinkedHashMap<String, Optional<String>>();
+                    for (var name : List.of("state", "note", "title", "description", "parent", "after")) changes.put(name, optional(args, name));
+                    return workspace.plans().update(text(args, "task"), changes, who(args));
+                }))
+                .register(Capability.of("task-link", "Links a place of the code to a task: an element (its whole declaration) or "
+                        + "lines of a file, line to end, with a note", List.of(Param.of("task", "text"), Param.of("element", "element").optional(),
+                        Param.of("path", "text").optional(), Param.of("line", "text").optional(), Param.of("end", "text").optional(),
+                        Param.of("note", "text").optional()), args -> {
+                    var from = args.containsKey("line") ? number(args, "line") : 0;
+                    return workspace.link(text(args, "task"), optional(args, "element"), optional(args, "path"), from,
+                            args.containsKey("end") ? number(args, "end") : from, optional(args, "note").orElse(""));
+                }))
+                .register(Capability.of("steer", "What the person says about a plan or a task (pause, resume, comment, replan, "
+                        + "switch to a plan): it changes at once, and waits to be told to the agent unless told is true",
+                        List.of(Param.of("kind", "choice", "pause", "resume", "comment", "replan", "switch"), Param.of("plan", "text").optional(),
+                                Param.of("task", "text").optional(), Param.of("text", "text").optional(), Param.of("told", "text").optional()),
                         args -> {
-                            workspace.plan().add(text(args, "text"));
-                            return workspace.plan().shown();
+                            var steer = workspace.plans().steer(text(args, "kind"), optional(args, "plan"), optional(args, "task"),
+                                    optional(args, "text").orElse(""), optional(args, "told").map(Boolean::parseBoolean).orElse(false));
+                            return entries("n", steer.n(), "message", steer.message());
                         }))
-                .register(Capability.of("task", "Says how far a task of the plan got: todo, doing or done, with a note",
-                        List.of(Param.of("n", "text"), Param.of("state", "choice", "todo", "doing", "done"),
-                                Param.of("note", "text").optional()), args -> {
-                    workspace.plan().task(number(args, "n"), WorkPlan.State.of(text(args, "state")),
-                            args.get("note") == null ? null : String.valueOf(args.get("note")));
-                    return workspace.plan().shown();
-                }))
+                .register(Capability.of("steering", "What the person said about the plans that the agent was not told yet; once "
+                        + "answered, it is told", List.of(), args -> workspace.plans().take().stream()
+                        .map(steer -> entries("n", steer.n(), "message", steer.message())).toList()))
                 .register(Capability.of("point", "Shows the person a place in the IDE's window, with a note: an element (where it "
                         + "is declared), or lines of a file, line to end", List.of(Param.of("element", "element").optional(),
                         Param.of("path", "text").optional(), Param.of("line", "text").optional(), Param.of("end", "text").optional(),
@@ -185,6 +224,16 @@ final class Capabilities {
         var value = args.get(name);
         if (value == null) throw new IllegalArgumentException("missing argument: " + name);
         return String.valueOf(value);
+    }
+
+    /** Who does it: the window says the person; an agent need not say. */
+    private static Param by() {
+        return Param.of("by", "choice", "agent", "person").optional();
+    }
+
+    /** Who does it: the person when the window says so, else the agent. */
+    private static String who(Map<String, ?> args) {
+        return "person".equals(args.get("by")) ? "person" : "agent";
     }
 
     private static Optional<String> optional(Map<String, ?> args, String name) {

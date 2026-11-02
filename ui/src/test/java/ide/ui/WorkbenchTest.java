@@ -381,13 +381,13 @@ class WorkbenchTest {
 
         assertThat(workbench.plan().lines()).containsExactly("No plan");
 
-        workspace.capabilities().invoke("plan-set", Map.of("title", "Encapsulate A", "tasks", "Find its public fields\nEncapsulate x"));
-        workspace.capabilities().invoke("task", Map.of("n", "1", "state", "done", "note", "only x"));
-        workspace.capabilities().invoke("task", Map.of("n", "2", "state", "doing"));
+        workspace.capabilities().invoke("plan-new", Map.of("title", "Encapsulate A", "tasks", "Find its public fields\nEncapsulate x\n  Its uses"));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t1", "state", "done", "note", "only x"));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t2", "state", "doing"));
         workbench.refresh();
 
-        assertThat(workbench.plan().lines()).containsExactly("Encapsulate A (1 of 2 done)",
-                "1. [done] Find its public fields - only x", "2. [doing] Encapsulate x");
+        assertThat(workbench.plan().lines()).containsExactly("Encapsulate A (1 of 3 done)",
+                "t1 [done] Find its public fields", "t2 [doing] Encapsulate x", "  t3 [todo] Its uses");
     }
 
     /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */

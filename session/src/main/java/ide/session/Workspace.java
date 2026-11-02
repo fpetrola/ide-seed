@@ -34,7 +34,7 @@ public final class Workspace {
     private final Completion completion;
     private final Path root;
     private final Maven.Classpath classpath;
-    private final WorkPlan plan;
+    private final Plans plans;
     private final Attention attention;
 
     private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root, Maven.Classpath classpath) {
@@ -46,7 +46,7 @@ public final class Workspace {
         this.fixes = new Fixes(project, knowledge);
         this.navigation = new Navigation(project);
         this.completion = new Completion(project);
-        this.plan = new WorkPlan(root == null ? null : root.resolve(".ide/plan.json"), session::event);
+        this.plans = new Plans(root == null ? null : root.resolve(".ide/plans.json"), session::event, java.time.Clock.systemUTC());
         this.attention = new Attention(session::event);
     }
 
@@ -166,9 +166,9 @@ public final class Workspace {
         session.save(root);
     }
 
-    /** The plan being followed, kept with the project. */
-    WorkPlan plan() {
-        return plan;
+    /** The plans being followed, kept with the project. */
+    Plans plans() {
+        return plans;
     }
 
     /**
@@ -176,19 +176,31 @@ public final class Workspace {
      * refused if there is no such element, file or line.
      */
     Attention.Pointed point(Optional<String> element, Optional<String> path, int line, int end, String note) {
+        var place = place(element, path, line, end);
+        return attention.point(place.path(), place.line(), place.endLine(), place.element(), note);
+    }
+
+    /** Links a place of the code to a task: an element (its whole declaration) or lines of a file, with a note. */
+    Map<String, Object> link(String task, Optional<String> element, Optional<String> path, int line, int end, String note) {
+        var place = place(element, path, line, end);
+        return plans.link(task, new Plans.Link(place.path(), place.line(), place.endLine(), place.element(), note));
+    }
+
+    /** A place of the code: an element's whole declaration, or lines of a file; refused if there is no such thing. */
+    private Plans.Link place(Optional<String> element, Optional<String> path, int line, int end) {
         if (element.isPresent()) {
             var at = where(element.get()).orElseThrow(() -> new IllegalArgumentException("no element " + element.get() + " is declared in a file"));
             var whole = project.declared(project.program().find(element.get()).orElseThrow().id());
-            return attention.point(at.path(), whole.map(JavaProjection.Span::line).orElse(at.line()),
-                    whole.map(JavaProjection.Span::endLine).orElse(at.line()), element.get(), note);
+            return new Plans.Link(at.path(), whole.map(JavaProjection.Span::line).orElse(at.line()),
+                    whole.map(JavaProjection.Span::endLine).orElse(at.line()), element.get(), "");
         }
-        var file = path.orElseThrow(() -> new IllegalArgumentException("point at an element, or at a path and a line"));
+        var file = path.orElseThrow(() -> new IllegalArgumentException("say an element, or a path and a line"));
         if (!files().contains(file)) throw new IllegalArgumentException("no file " + file);
         var lines = source(file).lines().count();
         if (line < 1 || line > lines || end > lines) {
             throw new IllegalArgumentException("no line " + (line < 1 || line > lines ? line : end) + " in " + file + ": it has " + lines);
         }
-        return attention.point(file, line, end, "", note);
+        return new Plans.Link(file, line, Math.max(line, end), "", "");
     }
 
     /** Where attention is, both ways. */

@@ -21,19 +21,19 @@ import java.util.Map;
  */
 final class PlanView extends JPanel {
 
-    /** A task as the list shows it. */
-    record Task(int n, String text, String state, String note) {
+    /** A task as the list shows it: under its line of action, as deep as it is. */
+    record Task(String id, String title, String state, int depth) {
 
         @SuppressWarnings("unchecked")
         static Task of(Object listed) {
             var task = (Map<String, Object>) listed;
-            return new Task(((Number) task.get("n")).intValue(), String.valueOf(task.get("text")),
-                    String.valueOf(task.get("state")), String.valueOf(task.get("note")));
+            return new Task(String.valueOf(task.get("id")), String.valueOf(task.get("title")), String.valueOf(task.get("state")),
+                    ((Number) task.get("depth")).intValue());
         }
 
         @Override
         public String toString() {
-            return n + ". [" + state + "] " + text + (note.isEmpty() ? "" : " - " + note);
+            return "  ".repeat(depth) + id + " [" + state + "] " + title;
         }
     }
 
@@ -73,7 +73,7 @@ final class PlanView extends JPanel {
         progress.setString(done + " of " + of + " done");
     }
 
-    /** The title, how far it got, and each task as {@code n. [state] text - note}. */
+    /** The title, how far it got, and each task as {@code id [state] title}, indented under its line. */
     List<String> lines() {
         var lines = new java.util.ArrayList<String>();
         lines.add(title.getText() + (progress.isVisible() ? " (" + progress.getString() + ")" : ""));
@@ -85,12 +85,12 @@ final class PlanView extends JPanel {
         @Override
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
             var task = (Task) value;
-            var note = task.note().isEmpty() ? "" : "<br><font color='#808080'>" + escape(task.note()) + "</font>";
-            var text = task.state().equals("done") ? "<font color='#808080'>" + escape(task.text()) + "</font>" : escape(task.text());
+            var finished = task.state().equals("done") || task.state().equals("dropped");
+            var text = finished ? "<font color='#808080'>" + escape(task.title()) + "</font>" : escape(task.title());
             super.getListCellRendererComponent(list, "<html>" + (task.state().equals("doing") ? "<b>" + text + "</b>" : text)
-                    + note + "</html>", index, selected, focus);
-            setIcon(Icons.of(task.state().toUpperCase(java.util.Locale.ROOT)));
-            setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
+                    + "</html>", index, selected, focus);
+            setIcon(Icons.of(finished ? "DONE" : task.state().equals("doing") ? "DOING" : "TODO"));
+            setBorder(BorderFactory.createEmptyBorder(3, 6 + 16 * task.depth(), 3, 6));
             if (!selected) setBackground(UIManager.getColor("List.background"));
             return this;
         }
