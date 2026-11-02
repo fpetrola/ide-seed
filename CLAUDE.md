@@ -144,7 +144,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   screen; the one adapter that uses another: the window serves its own IDE over mcp's Http, each call on Swing's
   thread, after a sync, and saved right after, so an agent's own file tools and the IDE never disagree; Watcher syncs
   when the folder changes; Ctrl+Esc runs Claude Code in the terminal with that server; PlanView shows the plan
-  beside the project, so it is seen with the terminal), `mcp` (Server: JSON-RPC 2.0, each capability
+  beside the project, so it is seen with the terminal; before each call it says where the person looks, after it
+  opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
   a tool with a JSON Schema, list_changed after a call that changes the tools; `handle` is the protocol, `run` serves it
   on stdio and Http on Streamable HTTP, 127.0.0.1 only, with a bearer token).
 

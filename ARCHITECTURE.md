@@ -761,6 +761,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     guarda en `.ide/plan.json` y cada cambio es un evento del log. Lo leen y escriben las capacidades `plan`,
     `plan-set`, `task-add` y `task`: lo mismo para una persona por la CLI que para Claude por MCP. La ventana lo
     muestra en `PlanView`, debajo del proyecto, para verlo mientras la terminal trabaja. No sabe nada de programas.
+  - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
+    capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
+    cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un
+    elemento (se busca dónde está declarado) o unas líneas de un archivo, con una nota. Va numerado, para que quien lo
+    muestra sepa que es nuevo, y es un evento del log. La segunda es dónde mira la persona: la ventana lo dice con
+    `look` antes de cada llamada de un agente, y no es un evento porque cambia con cada paso del cursor. `looking` lo
+    devuelve junto con el elemento bajo el cursor y aquello en lo que está. Así Claude entiende "esto" y la ventana
+    solo muestra: abre las líneas seleccionadas y dice la nota en Output.
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 

@@ -317,6 +317,7 @@ final class Workbench extends JPanel {
         served = ide.serve(token, work -> {
             Runnable inTurn = () -> {
                 synced(); // what an agent wrote to disk with its own tools, before what it asks of the IDE
+                looked(); // where the person is, as the agent may ask
                 work.run();
             };
             try {
@@ -331,6 +332,7 @@ final class Workbench extends JPanel {
             say("agent: " + tool);
             if (!ide.text("diff", Map.of()).isEmpty()) ide.call("save", Map.of()); // what an agent changes reaches disk at once
             refresh();
+            pointed();
         });
         java.nio.file.Files.createDirectories(folder);
         servedConfig = folder.resolve("ideseed-" + java.net.URI.create(served.url()).getPort() + ".json");
@@ -347,6 +349,32 @@ final class Workbench extends JPanel {
         var seed = new byte[bytes];
         new java.security.SecureRandom().nextBytes(seed);
         return seed;
+    }
+
+    /** The last place an agent pointed at that the window showed. */
+    private long shownPointed;
+
+    /** Tells the IDE where the person is looking: the current editor, its caret and what is selected. */
+    void looked() {
+        var path = editors.current();
+        ide.call("look", Map.of("path", path.orElse(""), "line", String.valueOf(path.isPresent() ? editors.line() : 0),
+                "column", String.valueOf(path.isPresent() ? editors.column() : 0), "selected", editors.selectedLines().orElse("")));
+    }
+
+    /** Shows the place an agent pointed at last, if it is new: its lines open and selected, and the note said. */
+    void pointed() {
+        @SuppressWarnings("unchecked") var pointed = (Map<String, Object>) ide.call("pointed", Map.of());
+        var n = ((Number) pointed.get("n")).longValue();
+        if (n <= shownPointed) return;
+        shownPointed = n;
+        var path = String.valueOf(pointed.get("path"));
+        var line = ((Number) pointed.get("line")).intValue();
+        var end = ((Number) pointed.get("endLine")).intValue();
+        open(path, line, 1);
+        var lines = editors.text(path).split("\n", -1);
+        editors.select(line, 1, end, Math.max(1, lines[Math.min(end, lines.length) - 1].length()));
+        var note = String.valueOf(pointed.get("note"));
+        say("look at " + path + ":" + line + (end > line ? "-" + end : "") + (note.isEmpty() ? "" : ": " + note));
     }
 
     private Watcher watcher;

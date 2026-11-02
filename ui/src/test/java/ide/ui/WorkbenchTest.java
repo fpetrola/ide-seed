@@ -328,6 +328,49 @@ class WorkbenchTest {
         assertThat(served).isEmptyDirectory();
     }
 
+    /**
+     * An agent asks where the person is looking, and gets the element under the caret; it points the person at lines
+     * of another file, with a note, and the window opens them selected and says the note.
+     */
+    @Test
+    void anAgentAndThePersonShowEachOtherWhereToLook(@TempDir Path served) throws Exception {
+        var workbench = workbench();
+        workbench.open("a/A.java", 7, 16);
+        try {
+            var config = workbench.serve(served);
+
+            var looking = agent(config, "looking", Map.of());
+
+            assertThat(looking).contains("\"path\":\"a/A.java\"", "\"line\":7", "\"element\":\"a.A#x\"");
+
+            agent(config, "point", Map.of("path", "a/B.java", "line", "4", "end", "6", "note", "the only caller of m"));
+
+            assertThat(workbench.where()).startsWith("a/B.java:");
+            assertThat(workbench.editors().selectedLines()).hasValue("4-6");
+            assertThat(workbench.views().output()).contains("look at a/B.java:4-6: the only caller of m");
+        } finally {
+            workbench.closeDown();
+        }
+    }
+
+    /** The text an agent gets calling a tool of the IDE the window serves, once the window has done it. */
+    @SuppressWarnings("unchecked")
+    private static String agent(Path config, String tool, Map<String, ?> arguments) throws Exception {
+        var server = (Map<String, Object>) ((Map<String, Object>) ((Map<String, Object>)
+                ide.core.Json.read(Files.readString(config))).get("mcpServers")).get("ideseed");
+        var headers = (Map<String, Object>) server.get("headers");
+        var body = ide.core.Json.write(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call",
+                "params", Map.of("name", tool, "arguments", arguments)));
+        var call = java.net.http.HttpRequest.newBuilder(java.net.URI.create(String.valueOf(server.get("url"))))
+                .header("Authorization", String.valueOf(headers.get("Authorization")))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body)).build();
+        var answer = java.net.http.HttpClient.newHttpClient().send(call, java.net.http.HttpResponse.BodyHandlers.ofString()).body();
+        javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        assertThat(answer).contains("\"isError\":false");
+        var result = (Map<String, Object>) ((Map<String, Object>) ide.core.Json.read(answer)).get("result");
+        return String.valueOf(((Map<String, Object>) ((java.util.List<?>) result.get("content")).get(0)).get("text"));
+    }
+
     /** The plan an agent (or anyone) sets and follows is shown beside the project, with how far it got. */
     @Test
     void thePlanBeingFollowedIsShownBesideTheProject() throws IOException {
