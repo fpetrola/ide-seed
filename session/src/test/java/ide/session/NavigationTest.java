@@ -33,6 +33,8 @@ class NavigationTest {
     @Test
     void theReferencesOfAnElementAreTheSitesThatUseIt() {
         assertThat(NAVIGATION.references("a.Shape#area()")).containsExactly("a.Report#total()");
+        assertThat(NAVIGATION.uses("a.Shape#area()")).singleElement()
+                .satisfies(use -> assertThat(use).containsEntry("site", "a.Report#total()").containsEntry("mode", "call").containsKey("reference"));
         assertThat(NAVIGATION.model()).contains("INTERFACE a.Shape", "a.Main#run() -> a.Square#area() (call)");
     }
 }

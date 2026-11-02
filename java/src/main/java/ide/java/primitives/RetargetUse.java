@@ -46,6 +46,12 @@ final class RetargetUse {
             edits.replace(unit, node instanceof ClassOrInterfaceType t ? t.getName() : node, target.name());
             if (!Imports.names(unit, target.qualified())) Imports.add(edits, unit, target.qualified());
         } else if (target.kind() == before.element(ref.target()).kind()) {
+            var holder = onAVariable(before, ref, target, node);
+            if (holder != null) { // a call on the object itself, of a method of another type: made on the one variable of it there
+                var call = (com.github.javaparser.ast.expr.MethodCallExpr) node;
+                if (call.getScope().isPresent()) edits.replace(unit, call.getScope().get(), holder);
+                else edits.insertBefore(unit, call, holder + ".");
+            }
             Shared.renameUse(c, edits, node, target.name());
         } else if (ref.mode() == Mode.CALL && (target.kind() == Kind.FIELD || target.kind() == Kind.LOCAL)) { // a call of nothing but a value: the value
             var call = (com.github.javaparser.ast.expr.MethodCallExpr) node;
@@ -150,5 +156,24 @@ final class RetargetUse {
         void follow(Context c) {
             if (method != null) Shared.resign(c, method, path, parameters);
         }
+    }
+
+    /**
+     * The one parameter or local of the call's method whose type is the method's that a call made on the object itself
+     * (or on {@code this}) is retargeted to, when that is another type than the caller's; null if the call stays made as
+     * it is (none of that type there). Several: refused, it cannot be told which.
+     */
+    private static String onAVariable(Program before, ide.program.Reference ref, Element target, com.github.javaparser.ast.Node node) {
+        if (ref.mode() != Mode.CALL || target.kind() != Kind.METHOD || "true".equals(target.fact(ide.program.Fact.STATIC))) return null;
+        if (!(node instanceof com.github.javaparser.ast.expr.MethodCallExpr call) || call.getScope().filter(s -> !s.isThisExpr()).isPresent()) return null;
+        var caller = before.memberOf(ref.site());
+        if (caller.parent().equals(target.parent())) return null;
+        var type = before.element(target.parent()).name();
+        var holders = before.children(caller.id()).stream().filter(e -> (e.kind() == Kind.PARAM || e.kind() == Kind.LOCAL)
+                && type.equals(e.fact(ide.program.Fact.TYPE))).toList();
+        if (holders.isEmpty()) return null; // the object itself, as one of its supertypes: the verifier says if it is not
+        if (holders.size() > 1) throw new PrimitiveRejected("retarget.receiver", "more than one variable of " + type + " in "
+                + caller.qualified() + " to call " + target.name() + " on");
+        return holders.getFirst().name();
     }
 }

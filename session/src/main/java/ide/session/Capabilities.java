@@ -265,7 +265,9 @@ final class Capabilities {
                 .register(Capability.of("hierarchy", "Supertypes and subtypes of a type",
                         List.of(Param.of("type", "element", "CLASS", "INTERFACE", "ENUM")), args -> workspace.hierarchy(text(args, "type"))))
                 .register(Capability.of("references", "Every use of an element",
-                        List.of(Param.of("element", "element")), args -> workspace.references(text(args, "element"))));
+                        List.of(Param.of("element", "element")), args -> workspace.references(text(args, "element"))))
+                .register(Capability.of("uses", "Every use of an element, by the id a retarget or an inline takes, with the member that makes it, how, and its statement",
+                        List.of(Param.of("element", "element")), args -> workspace.uses(text(args, "element"))));
     }
 
     private static String guide() {

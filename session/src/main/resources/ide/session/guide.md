@@ -22,4 +22,4 @@ tools the IDE takes before your next call.
   with an element or with lines of a file, and a short note: the window opens it selected.
 - Change code with the refactorings and quick fixes (`library`, `fixes`, `fix`, `preview`) rather than by editing
   text: they keep every use bound and are verified. An element is named by its address, like `a.P#get()`; `elements`,
-  `where` and `at` find them.
+  `where` and `at` find them, and `uses` gives each use of one by the id that `retarget` and `inline` take.

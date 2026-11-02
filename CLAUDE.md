@@ -91,7 +91,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. A new parameter's argument may be said in no language over the method's parameters (each call passes
   what it passed them); a read of a parameter or local retargeted to a getter is made on the one variable of the
-  getter's type there; a call retargeted to a local is computed where the local is given its value: one on a branch, in a loop
+  getter's type there, and so is a call on the object itself retargeted to a method of another type; a call
+  retargeted to a local is computed where the local is given its value: one on a branch, in a loop
   or a nested block the local is declared outside of is refused. Inline of a call made as a statement (or as a lambda's body) to a method of statements
   puts them in its place, each parameter its argument (a return among them is refused; a local of theirs named as one of the caller's
   takes a free name, `name2`). A member moved to another file takes the imports of the simple names it uses, and a static one is used
@@ -149,7 +150,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   Session (each operation a transaction; undo, event log, saving; a fix must make its diagnostic disappear), Fixes
   (the quick fixes of a line; a Fix is a diagnostic and its plan), Navigation and Completion (no language: tested
   over MemoryProjection), Capabilities (each refactoring and operation with its schema, including what the adapters
-  asked for: save, edit, asks, at, where, elements; `inside` is the member a place is in, as scripts' inside is).
+  asked for: save, edit, asks, at, where, elements, uses (each use by the id a retarget takes); `inside` is the member a place is in, as scripts' inside is).
   `Workspace` builds the parts and only delegates;
   `Workspace.open(folder)` reads a project (skipping target, build, out and hidden folders), gives the Java driver
   the classpath Maven says it has (cached in `.ide/classpath.txt`), logs to `.ide/events.jsonl` there and saves there;

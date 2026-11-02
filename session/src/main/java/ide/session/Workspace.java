@@ -376,6 +376,10 @@ public final class Workspace {
         return navigation.references(element);
     }
 
+    public List<Map<String, String>> uses(String element) {
+        return navigation.uses(element);
+    }
+
     // ---- adapters
 
     /** Everything this workspace can do, as capabilities; built on each call, so it reflects the current library. */

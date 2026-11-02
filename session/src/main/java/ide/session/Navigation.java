@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 
 /**
  * What people ask of a program while they read it: who calls a method, where a type sits in its hierarchy, who uses
@@ -51,6 +52,22 @@ public final class Navigation {
         var program = projection.program();
         return program.referencesTo(element(program, element).id()).stream()
                 .map(r -> program.element(r.site()).qualified()).toList();
+    }
+
+    /**
+     * Each use of an element: its id (what a retarget or an inline takes), the member that makes it, how, and the
+     * statement it is in, if any.
+     */
+    public List<Map<String, String>> uses(String element) {
+        var program = projection.program();
+        return program.referencesTo(element(program, element).id()).stream().map(r -> {
+            var use = new java.util.LinkedHashMap<String, String>();
+            use.put("reference", r.id());
+            use.put("site", program.element(r.site()).qualified());
+            use.put("mode", r.mode().label());
+            if (r.statement() != null) use.put("statement", program.element(r.statement()).qualified());
+            return (Map<String, String>) use;
+        }).toList();
     }
 
     /** The element whose name is at a line and column of a file, declared or used there. */
