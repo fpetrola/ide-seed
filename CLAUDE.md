@@ -76,7 +76,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline
   replaces a read of a local by its value (InlineLocal) and refuses what would change behavior without changing a
   binding (another value later, effects, another type, what it reads changed between, a read in a lambda); a local
-  nothing reads is deleted with its lines. The top-level statements of each body are elements; the primitives that
+  nothing reads is deleted with its lines; a deleted parameter takes its argument from every call, whose uses go on
+  purpose (one with effects is refused). The top-level statements of each body are elements; the primitives that
   change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
   `inside` answers the innermost element, a statement or a local too. An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. Nested types are deleted like members; a member merged

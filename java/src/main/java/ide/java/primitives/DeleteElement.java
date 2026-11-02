@@ -43,7 +43,7 @@ final class DeleteElement {
         var change = delete.intent(before, null);
         if (element.kind() == Kind.LOCAL) for (var gone : deleteLocal(c, before, element)) change = change.expect(gone);
         else if (element.kind() == Kind.STATEMENT) deleteStatement(c, before, element);
-        else if (element.kind() == Kind.PARAM) deleteParam(c, element);
+        else if (element.kind() == Kind.PARAM) for (var gone : deleteParam(c, before, element)) change = change.expect(gone);
         else if (element.kind().isType()) deleteType(c, before, element);
         else deleteMember(c, before, element, delete.into() == null ? null : before.element(delete.into()));
         return change;
@@ -150,7 +150,11 @@ final class DeleteElement {
         c.ids().forget(type.id());
     }
 
-    private static void deleteParam(Context c, Element param) {
+    /**
+     * A parameter its body does not use, and its argument in every call: what an argument used is used no more there
+     * (it is gone on purpose); one that has effects is refused, since they would no longer happen.
+     */
+    private static List<Change.Dropped> deleteParam(Context c, Program before, Element param) {
         var method = c.program().element(param.parent());
         var declaration = c.declaration(method);
         CallableDeclaration<?> node = declaration.as(CallableDeclaration.class);
@@ -165,12 +169,25 @@ final class DeleteElement {
         var names = new ArrayList<>(Shared.parameterNames(node));
         var index = names.indexOf(param.name());
         var edits = new EditSet();
+        var gone = new ArrayList<Change.Dropped>();
         without(edits, declaration.unit(), node.getParameters(), index);
-        for (var call : Shared.callsTo(c, method.id())) without(edits, c.sources().unitOf(call.node()), call.arguments(), index);
+        for (var call : Shared.callsTo(c, method.id())) {
+            if (index < call.arguments().size()) {
+                var argument = call.arguments().get(index);
+                var effect = Bodies.effect(argument);
+                if (effect != null) throw new PrimitiveRejected("delete.effects", "'" + effect + "' would no longer run");
+                var range = argument.getRange().orElseThrow();
+                for (var r : before.referencesFrom(call.site())) {
+                    if (c.use(r.id()).getRange().filter(range::contains).isPresent()) gone.add(new Change.Dropped(r.site(), r.target()));
+                }
+            }
+            without(edits, c.sources().unitOf(call.node()), call.arguments(), index);
+        }
         names.remove(index);
         c.sources().apply(edits);
         c.ids().forget(param.id());
         Shared.resign(c, method, declaration.unit().path(), names);
+        return gone;
     }
 
     private static void without(EditSet edits, ide.java.text.Unit unit, com.github.javaparser.ast.NodeList<? extends com.github.javaparser.ast.Node> items, int index) {

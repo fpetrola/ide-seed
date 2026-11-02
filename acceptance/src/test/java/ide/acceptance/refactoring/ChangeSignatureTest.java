@@ -80,6 +80,66 @@ class ChangeSignatureTest {
         assertThat(ws.source("a/Calc.java")).contains("public int add(int a, int b, String label) {");
     }
 
+    /**
+     * A parameter that goes takes its argument from every call: the locals the argument read are read no more there,
+     * on purpose, and stay where they are still read.
+     */
+    @Test
+    void removingAParameterDropsTheLocalsItsCallsPassedAndKeepsThem() {
+        var ws = Workspace.of(Map.of("a/Shop.java", """
+                package a;
+
+                class Shop {
+                    void save(String id, String name, Object customer) {
+                        System.out.println(customer);
+                    }
+
+                    void run(String line) {
+                        String id = line.trim();
+                        String name = line.strip();
+                        Object customer = id + name;
+                        save(id, name, customer);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("change-signature", Map.of("method", "a.Shop#save(String,String,Object)", "parameters", "Object customer"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Shop.java")).contains("    void save(Object customer) {", "        save(customer);",
+                "        Object customer = id + name;");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /** An argument that does something would no longer do it: removing its parameter is refused. */
+    @Test
+    void removingAParameterWhoseCallsPassWhatDoesSomethingAborts() {
+        var shop = """
+                package a;
+
+                class Shop {
+                    void save(Object customer, int count) {
+                        System.out.println(customer);
+                    }
+
+                    int next() {
+                        return 1;
+                    }
+
+                    void run() {
+                        save("c", next());
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Shop.java", shop));
+
+        var result = ws.invoke("change-signature", Map.of("method", "a.Shop#save(Object,int)", "parameters", "Object customer"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("delete.effects");
+        assertThat(ws.source("a/Shop.java")).isEqualTo(shop);
+    }
+
     @Test
     void removingAParameterTheBodyUsesAborts() {
         var ws = Workspace.of(Map.of("a/Calc.java", CALC, "b/User.java", USER));

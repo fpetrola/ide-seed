@@ -411,7 +411,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   campo, la vuelta siguiente de un ciclo), y una lectura que pasa más tarde, en una lambda o una clase. Un local que
   nada lee se borra con sus líneas, si su valor no tiene efectos. Desde la fase 2 lee las sentencias del primer nivel
   de cada cuerpo; los primitivos que cambian esa lista les conservan el id, y una edición a mano también, por orden y
-  texto.
+  texto. Borrar un parámetro saca su argumento de cada llamada, y declara que los usos que ese argumento hacía se van
+  a propósito (antes el verificador los tomaba por ligaduras perdidas); un argumento con efectos se rechaza
+  (`delete.effects`), porque dejarían de pasar.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el

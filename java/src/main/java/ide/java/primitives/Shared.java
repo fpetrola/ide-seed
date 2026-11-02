@@ -50,9 +50,9 @@ final class Shared {
 
     /**
      * A call as its arguments are written: in the first parentheses after {@code from}, the end of a method's name or of
-     * the type a {@code new} makes, or the start of a {@code super(...)} or {@code this(...)}.
+     * the type a {@code new} makes, or the start of a {@code super(...)} or {@code this(...)}; made from {@code site}.
      */
-    record Call(Node node, NodeList<Expression> arguments, Position from) {
+    record Call(Node node, NodeList<Expression> arguments, Position from, ElementId site) {
     }
 
     /** The calls that resolve to a method, or the {@code new}s that resolve to a constructor, as last read. */
@@ -60,9 +60,9 @@ final class Shared {
         var calls = new ArrayList<Call>();
         for (var ref : c.program().referencesTo(callable)) {
             switch (c.use(ref.id())) {
-                case MethodCallExpr call -> calls.add(new Call(call, call.getArguments(), call.getName().getEnd().orElseThrow()));
-                case ObjectCreationExpr creation -> calls.add(new Call(creation, creation.getArguments(), creation.getType().getEnd().orElseThrow()));
-                case ExplicitConstructorInvocationStmt invocation -> calls.add(new Call(invocation, invocation.getArguments(), invocation.getBegin().orElseThrow()));
+                case MethodCallExpr call -> calls.add(new Call(call, call.getArguments(), call.getName().getEnd().orElseThrow(), ref.site()));
+                case ObjectCreationExpr creation -> calls.add(new Call(creation, creation.getArguments(), creation.getType().getEnd().orElseThrow(), ref.site()));
+                case ExplicitConstructorInvocationStmt invocation -> calls.add(new Call(invocation, invocation.getArguments(), invocation.getBegin().orElseThrow(), ref.site()));
                 default -> {
                     // a method reference passes no arguments
                 }
