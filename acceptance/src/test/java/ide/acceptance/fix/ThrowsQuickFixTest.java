@@ -36,4 +36,28 @@ class ThrowsQuickFixTest {
         assertThat(ws.source("a/Config.java")).contains("import java.io.IOException;",
                 "    String read(Path path) throws IllegalStateException, IOException {");
     }
+
+    /** What a callable declares it throws, set by hand: a type it no longer names is gone on purpose. */
+    @Test
+    void aTypeSubsumedByAnotherCanBeTakenOutOfWhatAMethodDeclares() {
+        var ws = Workspace.of(Map.of("a/Config.java", """
+                package a;
+
+                import java.io.IOException;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+
+                class Config {
+                    String read(Path path) throws IOException, Exception {
+                        return Files.readString(path);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("set", Map.of("element", "a.Config#read(Path)", "attribute", "throws", "value", "Exception"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Config.java")).contains("    String read(Path path) throws Exception {");
+        assertThat(ws.errors()).isEmpty();
+    }
 }

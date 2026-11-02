@@ -21,6 +21,8 @@ import ide.program.Kind;
 import ide.program.Primitive;
 import ide.program.Program;
 
+import java.util.List;
+
 /**
  * Sets an attribute of an element, as text: its access or another modifier, an abstract method or class, the
  * superclass or the declared type as written, what a callable declares it throws, a body said in no language
@@ -33,8 +35,27 @@ final class SetAttribute {
     }
 
     static Change apply(Primitive.Set set, Context c, Program before) {
+        var gone = set.attribute().equals("throws") ? untold(c, before, set.element(), set.value()) : List.<Change.Dropped>of();
         set(c, set.element(), set.attribute(), set.value());
-        return set.intent(before, null);
+        var change = set.intent(before, null);
+        for (var dropped : gone) change = change.expect(dropped);
+        return change;
+    }
+
+    /** The uses of the types a callable declares it throws that it will not any more: they go on purpose. */
+    private static List<Change.Dropped> untold(Context c, Program before, ElementId id, String value) {
+        CallableDeclaration<?> callable = c.declaration(before.element(id)).as(CallableDeclaration.class);
+        var kept = java.util.Arrays.stream(value.split(",")).map(String::strip).map(t -> t.substring(t.lastIndexOf('.') + 1)).toList();
+        var gone = new java.util.ArrayList<Change.Dropped>();
+        for (var thrown : callable.getThrownExceptions()) {
+            var written = thrown.asString();
+            if (kept.contains(written.substring(written.lastIndexOf('.') + 1))) continue;
+            var range = thrown.getRange().orElseThrow();
+            for (var r : before.referencesFrom(id)) {
+                if (c.use(r.id()).getRange().filter(range::contains).isPresent()) gone.add(new Change.Dropped(r.site(), r.target()));
+            }
+        }
+        return gone;
     }
 
     static void set(Context c, ElementId id, String attribute, String value) {
