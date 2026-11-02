@@ -46,6 +46,8 @@ final class Icons {
             Map.entry("PAUSED", mark(new Color(0xD6893C), "=")),
             Map.entry("DISCARDED", mark(new Color(0x8C8C8C), "\u00d7")),
             Map.entry("PLAN", letter("P", new Color(0x9876AA))),
+            Map.entry("RUN", play(new Color(0x59A869))),
+            Map.entry("STOP", square(new Color(0xDB5C5C))),
             Map.entry("PRIMITIVE", dot(new Color(0x5FB865))),
             Map.entry("QUESTION", mark(new Color(0x6A9FD8), "?")),
             Map.entry("ANSWER", mark(new Color(0x5FB865), "✓")),
@@ -163,6 +165,26 @@ final class Icons {
             g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
             var metrics = g.getFontMetrics();
             g.drawString(sign, 8 - metrics.stringWidth(sign) / 2, 12);
+        });
+    }
+
+    /** IntelliJ's run arrow: a green triangle pointing right. */
+    private static Icon play(Color color) {
+        return icon(g -> {
+            var triangle = new Path2D.Double();
+            triangle.moveTo(4, 2);
+            triangle.lineTo(14, 8);
+            triangle.lineTo(4, 14);
+            triangle.closePath();
+            g.setColor(color);
+            g.fill(triangle);
+        });
+    }
+
+    private static Icon square(Color color) {
+        return icon(g -> {
+            g.setColor(color);
+            g.fillRect(3, 3, 10, 10);
         });
     }
 

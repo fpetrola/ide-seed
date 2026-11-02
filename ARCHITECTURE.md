@@ -825,6 +825,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     porque las que guardan los pedidos a la API pesan MB. Saber leer ese formato es conocimiento de Claude Code
     dentro de session, igual que los eventos del hook en `Activity`. Si Claude Code cambia el formato, se rompe ahí y
     en ningún otro lado.
+  - **Decisión: ejecutar un `main` es lanzar Java sobre el código fuente, no compilar aparte.** El driver dice qué
+    clases tienen un `main` que Java ejecuta (`mains`: la primera clase de nivel superior de su archivo, con el
+    `main` clásico o el de instancia de Java 25). Session da la línea de comando (`run-command`): el Java con que corre
+    el IDE, el classpath de Maven y el `.java` de la clase, en la carpeta del proyecto. Java 22 o posterior compila en
+    memoria ese archivo y los demás del proyecto que usa (JEP 458), así que no hay carpeta de clases que mantener ni
+    un compilador más que configurar. Antes de ejecutar se aplica lo escrito y se guarda, como IntelliJ compila
+    antes. La ventana corre el proceso (`RunConsole`), igual que la terminal: muestra stdout, stderr en rojo, le pasa
+    entrada y lo detiene. Límites: los recursos (`src/main/resources`) no están en el classpath, y la clase tiene que
+    ser la primera de su archivo.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un

@@ -65,6 +65,9 @@ final class Editors extends JTabbedPane {
         /** The light bulb in the margin was clicked: the context actions of its line. */
         void bulb();
 
+        /** A green arrow in the margin was clicked: run the program of that file. */
+        void run(String path);
+
         /** The editor's right-click menu, made when it opens: what can be done where the caret is. */
         javax.swing.JPopupMenu menu();
 
@@ -85,6 +88,9 @@ final class Editors extends JTabbedPane {
         /** The problems' icons in the margin, by line from 0; the bulb hides the one of its line, as IntelliJ's does. */
         final Map<Integer, org.fife.ui.rtextarea.GutterIconInfo> marks = new java.util.HashMap<>();
         Integer hidden;
+        /** The lines a program runs from (from 0), each with its green arrow. */
+        final Map<Integer, org.fife.ui.rtextarea.GutterIconInfo> runs = new java.util.HashMap<>();
+        Integer runHidden;
 
         Editor(String path, String text) {
             this.path = path;
@@ -230,11 +236,12 @@ final class Editors extends JTabbedPane {
             var clicks = new java.awt.event.MouseAdapter() {
                 @Override
                 public void mousePressed(java.awt.event.MouseEvent event) {
-                    if (shown.bulb == null || !javax.swing.SwingUtilities.isLeftMouseButton(event)) return;
+                    if (!javax.swing.SwingUtilities.isLeftMouseButton(event)) return;
                     try {
                         var y = javax.swing.SwingUtilities.convertPoint(event.getComponent(), event.getPoint(), area).y;
                         var line = area.getLineOfOffset(area.viewToModel2D(new Point(0, y)));
-                        if (line == area.getLineOfOffset(shown.bulb.getMarkedOffset())) help.bulb();
+                        if (shown.bulb != null && line == area.getLineOfOffset(shown.bulb.getMarkedOffset())) help.bulb();
+                        else if (shown.runs.containsKey(line)) help.run(path);
                     } catch (BadLocationException outside) {
                         // no line there
                     }
@@ -331,8 +338,18 @@ final class Editors extends JTabbedPane {
                     editor.marks.put(editor.hidden, gutter.addLineTrackingIcon(editor.hidden, mark.getIcon(), mark.getToolTip()));
                     editor.hidden = null;
                 }
+                if (editor.runHidden != null) {
+                    var arrow = editor.runs.get(editor.runHidden);
+                    editor.runs.put(editor.runHidden, gutter.addLineTrackingIcon(editor.runHidden, arrow.getIcon(), arrow.getToolTip()));
+                    editor.runHidden = null;
+                }
                 if (kind == null) return;
                 var line = editor.area.getCaretLineNumber();
+                if (editor.runs.containsKey(line)) {
+                    if (!kind.equals("FIX")) return; // the arrow, as IntelliJ keeps it; intentions are still Alt+Enter
+                    gutter.removeTrackingIcon(editor.runs.get(line));
+                    editor.runHidden = line;
+                }
                 if (editor.marks.containsKey(line)) {
                     gutter.removeTrackingIcon(editor.marks.get(line));
                     editor.hidden = line;
@@ -343,6 +360,48 @@ final class Editors extends JTabbedPane {
                 // no line there
             }
         });
+    }
+
+    /** The green arrows of a file: the lines (from 1) its program runs from, with what clicking them runs. */
+    void runs(String path, List<Integer> lines, String tip) {
+        var editor = editors.get(path);
+        if (editor == null) return;
+        var gutter = editor.scroll.getGutter();
+        editor.runs.values().forEach(gutter::removeTrackingIcon);
+        editor.runs.clear();
+        editor.runHidden = null;
+        for (var line : lines) {
+            try {
+                editor.runs.put(line - 1, gutter.addLineTrackingIcon(line - 1, Icons.of("RUN"), tip));
+            } catch (BadLocationException outside) {
+                // a line the text no longer has
+            }
+        }
+    }
+
+    /** The lines (from 1) of a file with a green arrow shown. */
+    List<Integer> runs(String path) {
+        var editor = editors.get(path);
+        return editor == null ? List.of() : editor.runs.keySet().stream().filter(line -> !line.equals(editor.runHidden))
+                .map(line -> line + 1).sorted().toList();
+    }
+
+    /** Clicks a green arrow as people do, on the margin's row of icons at its line (from 1). */
+    void clickRun(String path, int line) {
+        var editor = editor(path);
+        var gutter = editor.scroll.getGutter();
+        editor.area.setSize(editor.area.getPreferredSize());
+        gutter.setSize(gutter.getPreferredSize());
+        gutter.doLayout();
+        var icons = java.util.Arrays.stream(gutter.getComponents())
+                .filter(part -> part.getClass().getSimpleName().contains("IconRow")).findFirst().orElseThrow();
+        try {
+            var y = (int) editor.area.modelToView2D(editor.area.getLineStartOffset(line - 1)).getCenterY();
+            icons.dispatchEvent(new java.awt.event.MouseEvent(icons, java.awt.event.MouseEvent.MOUSE_PRESSED, 0, 0, 4, y, 1, false,
+                    java.awt.event.MouseEvent.BUTTON1));
+        } catch (BadLocationException outside) {
+            throw new IllegalStateException(outside);
+        }
     }
 
     /** Clicks the bulb as people do, on the margin's row of icons at its line. */

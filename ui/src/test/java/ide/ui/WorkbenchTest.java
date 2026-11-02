@@ -619,6 +619,80 @@ class WorkbenchTest {
         }
     }
 
+    private Workbench runnable() throws IOException {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/A.java"), A);
+        Files.writeString(root.resolve("a/App.java"), """
+                package a;
+
+                public class App {
+                    public static void main(String[] args) throws Exception {
+                        System.out.println("x is " + new A().x);
+                        System.err.println("careful");
+                        var line = new java.io.BufferedReader(new java.io.InputStreamReader(System.in)).readLine();
+                        System.out.println("read " + line);
+                        if ("forever".equals(line)) Thread.sleep(60_000);
+                        System.exit(2);
+                    }
+                }
+                """);
+        return new Workbench(new Ide(Workspace.open(root)), dialogs);
+    }
+
+    /** A class with a main shows IntelliJ's green arrows; clicking one runs it, and the console shows what it writes. */
+    @Test
+    void aClassWithAMainRunsFromItsGreenArrowAndTheConsoleShowsWhatItWrites() throws Exception {
+        var workbench = runnable();
+        workbench.open("a/App.java", 1, 1);
+        workbench.open("a/A.java", 1, 1);
+
+        assertThat(workbench.editors().runs("a/App.java")).containsExactly(3, 4);
+        assertThat(workbench.editors().runs("a/A.java")).isEmpty();
+
+        workbench.open("a/App.java", 1, 1);
+        workbench.editors().clickRun("a/App.java", 4);
+        var console = workbench.console();
+        var until = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos();
+        while (!console.text().contains("careful") && System.nanoTime() < until) {
+            Thread.sleep(20);
+            javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        }
+        javax.swing.SwingUtilities.invokeAndWait(() -> console.send("hello"));
+        console.await(java.time.Duration.ofSeconds(20));
+
+        assertThat(workbench.views().getTitleAt(workbench.views().getSelectedIndex())).isEqualTo("Run");
+        assertThat(console.text()).contains("x is 0", "careful", "hello", "read hello", "Process finished with exit code 2");
+        assertThat(console.errors()).isEqualTo("careful" + System.lineSeparator());
+        assertThat(console.exit()).hasValue(2);
+    }
+
+    /** A program that does not end is stopped; what has no main says so; a run runs the code as the editor says it. */
+    @Test
+    void aRunIsStoppedAndRunsWhatTheEditorSays() throws Exception {
+        var workbench = runnable();
+        workbench.open("a/A.java", 1, 1);
+        workbench.act("run");
+        assertThat(workbench.views().output()).contains("nothing to run in a/A.java");
+
+        workbench.open("a/App.java", 5, 1);
+        workbench.type("a/App.java", workbench.text("a/App.java").replace("new A().x);", "new A().x + \"!\");")); // not applied yet
+        workbench.act("run");
+        var console = workbench.console();
+        var until = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos();
+        while (!console.text().contains("careful") && System.nanoTime() < until) {
+            Thread.sleep(20);
+            javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        }
+        javax.swing.SwingUtilities.invokeAndWait(() -> console.send("forever"));
+        javax.swing.SwingUtilities.invokeAndWait(() -> workbench.act("stop-run"));
+        console.await(java.time.Duration.ofSeconds(10));
+
+        assertThat(console.text()).contains("x is 0!");
+        assertThat(Files.readString(root.resolve("a/App.java"))).contains("new A().x + \"!\"");
+        assertThat(console.exit()).isPresent().get().isNotEqualTo(0).isNotEqualTo(2);
+        assertThat(console.running()).isFalse();
+    }
+
     /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */
     @Test
     void whatChangesOnDiskTheWindowShows() throws Exception {
@@ -775,7 +849,7 @@ class WorkbenchTest {
 
         var names = new java.util.ArrayList<String>();
         for (var i = 0; i < bar.getMenuCount(); i++) names.add(bar.getMenu(i).getText());
-        assertThat(names).containsExactly("File", "Edit", "View", "Navigate", "Code", "Refactor", "Build", "Help");
+        assertThat(names).containsExactly("File", "Edit", "View", "Navigate", "Code", "Refactor", "Build", "Run", "Help");
         var refactor = bar.getMenu(5);
         var items = new java.util.ArrayList<String>();
         for (var i = 0; i < refactor.getItemCount(); i++) if (refactor.getItem(i) != null) items.add(refactor.getItem(i).getText());

@@ -174,7 +174,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   is started with a hook (`--settings`) that tells `activity` each tool it used, so each task shows its steps at no
   cost to Claude; Ctrl+Esc goes on with Claude's conversation on the project (`--resume`: the one its hooks told,
   else the latest Claude Code keeps of the folder), Ctrl+Shift+Esc starts a new one, and a project opened again goes
-  on by itself if Claude was working when the IDE closed; closing the terminal ends what runs in it, not only its shell; a task's details have a Conversation tab: what was said while it was
+  on by itself if Claude was working when the IDE closed; closing the terminal ends what runs in it, not only its shell; a class with a main shows IntelliJ's green arrows (its line and its main's): a click, Ctrl+Shift+F10,
+  runs it saved first, in the Run view (RunConsole: stdout, stderr in red, input, rerun Shift+F10, stop Ctrl+F2); a task's details have a Conversation tab: what was said while it was
   being done, tools used one after another as one line; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
   a tool with a JSON Schema, list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it

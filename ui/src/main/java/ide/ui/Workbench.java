@@ -115,6 +115,7 @@ final class Workbench extends JPanel {
                 return dialogs.line(title, "", Workbench.this.plansOnScreen());
             }
         });
+        views.addTab("Run", Icons.of("RUN"), console);
         if (terminal != null) views.addTab("Terminal", Icons.of("TERMINAL"), terminal);
         this.editors = new Editors(Keymap.strokes(), new Editors.Help() {
             @Override
@@ -148,6 +149,11 @@ final class Workbench extends JPanel {
             @Override
             public void bulb() {
                 act("context-actions");
+            }
+
+            @Override
+            public void run(String path) {
+                Workbench.this.run(path);
             }
 
             @Override
@@ -283,6 +289,17 @@ final class Workbench extends JPanel {
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
+                case "run" -> editors.current().ifPresentOrElse(this::run, () -> say("run: no file is open"));
+                case "rerun" -> {
+                    if (console.title().isEmpty()) {
+                        act("run");
+                    } else {
+                        saved();
+                        console.rerun();
+                        views.setSelectedComponent(console);
+                    }
+                }
+                case "stop-run" -> console.stop();
                 case "claude" -> claude(true);
                 case "claude-new" -> claude(false);
                 case "zoom-in" -> zoom(1);
@@ -309,6 +326,7 @@ final class Workbench extends JPanel {
         editors.zoomed();
         views.zoomed();
         if (terminal != null) terminal.zoomed();
+        console.zoomed();
         say("zoom " + Math.round(Zoom.of(100)) + "%");
     }
 
@@ -451,6 +469,7 @@ final class Workbench extends JPanel {
             }
             served = null;
         }
+        console.stop();
         if (terminal != null) terminal.close();
     }
 
@@ -593,7 +612,52 @@ final class Workbench extends JPanel {
     /** Opens a file at a line and a column, from 1. */
     void open(String path, int line, int column) {
         editors.open(path, ide.text("show", Map.of("path", path)));
+        arrows(ide.records("mains", Map.of()));
         editors.caret(line, column);
+    }
+
+    /** Where programs run in the console below. */
+    private final RunConsole console = new RunConsole();
+
+    RunConsole console() {
+        return console;
+    }
+
+    /** The green arrows of the open files: the class a program runs from, and its main. */
+    private void arrows(List<Map<String, Object>> mains) {
+        for (var path : editors.open()) {
+            var lines = new java.util.ArrayList<Integer>();
+            var tip = "";
+            for (var main : mains) {
+                if (!path.equals(main.get("path"))) continue;
+                lines.add(((Number) main.get("line")).intValue());
+                lines.add(((Number) main.get("methodLine")).intValue());
+                var type = String.valueOf(main.get("type"));
+                tip = "Run '" + type.substring(type.lastIndexOf('.') + 1) + ".main()' ("
+                        + Keymap.of("run").stroke().toString().replace("pressed ", "") + ")";
+            }
+            editors.runs(path, lines, tip);
+        }
+    }
+
+    /** What the editors say and the program does not yet is applied, and the program saved: a run runs it as it is. */
+    private void saved() {
+        if (!editors.unapplied().isEmpty()) act("apply-edit");
+        if (ide.folder().isPresent() && !ide.text("diff", Map.of()).isEmpty()) ide.call("save", Map.of());
+    }
+
+    /** Runs the program of a file's class, as IntelliJ runs it: saved first, in the console below. */
+    void run(String path) {
+        var main = ide.records("mains", Map.of("path", path));
+        if (main.isEmpty()) {
+            say("nothing to run in " + path + ": no class of it has a main method");
+            return;
+        }
+        saved();
+        @SuppressWarnings("unchecked") var run = (Map<String, Object>) ide.call("run-command", Map.of("type", String.valueOf(main.getFirst().get("type"))));
+        console.start(String.valueOf(run.get("title")), ((List<?>) run.get("command")).stream().map(String::valueOf).toList(),
+                Path.of(String.valueOf(run.get("directory"))));
+        views.setSelectedComponent(console);
     }
 
     /** Everything shown again as the program is now: files, problems, editors, changes not saved. */
@@ -621,6 +685,7 @@ final class Workbench extends JPanel {
             else editors.close(path); // the program no longer has it: undone, deleted, moved
         }
         editors.problems(problems);
+        arrows(ide.records("mains", Map.of()));
         views.problems(problems);
         plans.refresh();
         views.changes(ide.text("diff", Map.of()));
@@ -690,6 +755,7 @@ final class Workbench extends JPanel {
         refactor.add(more);
         bar.add(refactor);
         menu(bar, "Build", "apply-edit");
+        menu(bar, "Run", "run", "rerun", "stop-run");
         menu(bar, "Help", "find-action", "keys");
         return bar;
     }
