@@ -130,7 +130,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `sync` takes what changed there on disk since it was read or saved, each file as an edit by hand (a file the IDE
   changed too is a conflict left alone; a deleted one is said, not followed). WorkPlan (not the engine's repair Plan):
   the plan being followed, a title and tasks todo/doing/done with a note, in `.ide/plan.json`, each change an event;
-  capabilities plan, plan-set, task-add, task.
+  capabilities plan, plan-set, task-add, task. Attention: where attention is, both ways, between a person and an agent on the same
+  IDE: `point` (an element or lines, with a note; numbered, an event) and `pointed`; `look` (the window says where the
+  person is) and `looking` (that, with the element under the caret and what it is inside).
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,
   completion over Java text), the samples in `acceptance/src/test/resources/samples` (case tables in
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.

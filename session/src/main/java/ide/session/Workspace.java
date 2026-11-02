@@ -35,6 +35,7 @@ public final class Workspace {
     private final Path root;
     private final Maven.Classpath classpath;
     private final WorkPlan plan;
+    private final Attention attention;
 
     private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root, Maven.Classpath classpath) {
         this.project = project;
@@ -46,6 +47,7 @@ public final class Workspace {
         this.navigation = new Navigation(project);
         this.completion = new Completion(project);
         this.plan = new WorkPlan(root == null ? null : root.resolve(".ide/plan.json"), session::event);
+        this.attention = new Attention(session::event);
     }
 
     /** A workspace over these sources, with the standard library and knowledge; it has nowhere to save. */
@@ -167,6 +169,29 @@ public final class Workspace {
     /** The plan being followed, kept with the project. */
     WorkPlan plan() {
         return plan;
+    }
+
+    /**
+     * Points the person at an element, where it is declared, or at lines {@code line..end} of a file, with a note:
+     * refused if there is no such element, file or line.
+     */
+    Attention.Pointed point(Optional<String> element, Optional<String> path, int line, int end, String note) {
+        if (element.isPresent()) {
+            var at = where(element.get()).orElseThrow(() -> new IllegalArgumentException("no element " + element.get() + " is declared in a file"));
+            return attention.point(at.path(), at.line(), at.line(), element.get(), note);
+        }
+        var file = path.orElseThrow(() -> new IllegalArgumentException("point at an element, or at a path and a line"));
+        if (!files().contains(file)) throw new IllegalArgumentException("no file " + file);
+        var lines = source(file).lines().count();
+        if (line < 1 || line > lines || end > lines) {
+            throw new IllegalArgumentException("no line " + (line < 1 || line > lines ? line : end) + " in " + file + ": it has " + lines);
+        }
+        return attention.point(file, line, end, "", note);
+    }
+
+    /** Where attention is, both ways. */
+    Attention attention() {
+        return attention;
     }
 
     /** Takes what changed on disk where the workspace was opened from, as edits by hand. */

@@ -70,6 +70,33 @@ final class Capabilities {
                             args.get("note") == null ? null : String.valueOf(args.get("note")));
                     return workspace.plan().shown();
                 }))
+                .register(Capability.of("point", "Shows the person a place in the IDE's window, with a note: an element (where it "
+                        + "is declared), or lines of a file, line to end", List.of(Param.of("element", "element").optional(),
+                        Param.of("path", "text").optional(), Param.of("line", "text").optional(), Param.of("end", "text").optional(),
+                        Param.of("note", "text").optional()), args -> {
+                    var from = args.containsKey("line") ? number(args, "line") : 0;
+                    return workspace.point(optional(args, "element"), optional(args, "path"), from,
+                            args.containsKey("end") ? number(args, "end") : from, optional(args, "note").orElse("")).shown();
+                }))
+                .register(Capability.of("pointed", "The last place the person was pointed at, numbered from 1 (0: none yet)",
+                        List.of(), args -> workspace.attention().pointed().shown()))
+                .register(Capability.of("look", "Where the person is looking, as the window says it: a file, the caret, and "
+                        + "what is selected (lines first-last, or a stretch), if anything", List.of(path, line,
+                        Param.of("column", "text"), Param.of("selected", "text").optional()), args -> {
+                    workspace.attention().look(new Attention.Look(text(args, "path"), number(args, "line"), number(args, "column"),
+                            optional(args, "selected").orElse("")));
+                    return "ok";
+                }))
+                .register(Capability.of("looking", "Where the person is looking in the IDE's window: the file, the caret's line "
+                        + "and column, what is selected, the element under the caret and what it is inside", List.of(), args -> {
+                    var look = workspace.attention().looking();
+                    var element = look.path().isEmpty() ? Optional.<String>empty()
+                            : workspace.at(look.path(), look.line(), look.column()).map(e -> e.qualified());
+                    var inside = look.path().isEmpty() ? Optional.<String>empty()
+                            : workspace.inside(look.path(), look.line(), look.column()).map(e -> e.qualified());
+                    return entries("path", look.path(), "line", look.line(), "column", look.column(), "selected", look.selected(),
+                            "element", element.orElse(""), "inside", inside.orElse(""));
+                }))
                 .register(Capability.of("library", "Refactorings by level", List.of(), args -> workspace.library()))
                 .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
                         args -> workspace.define(text(args, "text"))))
@@ -148,6 +175,10 @@ final class Capabilities {
         var value = args.get(name);
         if (value == null) throw new IllegalArgumentException("missing argument: " + name);
         return String.valueOf(value);
+    }
+
+    private static Optional<String> optional(Map<String, ?> args, String name) {
+        return Optional.ofNullable(args.get(name)).map(String::valueOf).filter(value -> !value.isBlank());
     }
 
     private static int number(Map<String, ?> args, String name) {
