@@ -364,7 +364,9 @@ refactoring convert-to-instance-method "Makes a static method an instance method
   param parameter : element(PARAM) "the parameter that becomes the object" from "params(method)"
   let to = declared-type(parameter)
   require nonempty(to) "${name(parameter)} is not of a class of the workspace"
-  move ${method} ${to}
+  if ne(to, owner(method))
+    move ${method} ${to}
+  end
   set ${method} static false
   delete ${parameter} into=${to}
   return ${method}

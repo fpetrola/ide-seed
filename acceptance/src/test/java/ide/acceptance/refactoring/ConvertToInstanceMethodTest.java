@@ -48,4 +48,40 @@ class ConvertToInstanceMethodTest {
         assertThat(ws.source("a/Main.java")).contains("        r.add(2);", "        new Repo().add(1);").doesNotContain("static void add");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** A parameter of the type the method is already in: it stays there. */
+    @Test
+    void aParameterOfItsOwnTypeLeavesItWhereItIs() {
+        var ws = Workspace.of(Map.of("a/Repo.java", """
+                package a;
+
+                public class Repo {
+                    int count;
+
+                    static void init(Repo self) {
+                        self.count = 0;
+                    }
+                }
+                """, "a/Main.java", """
+                package a;
+
+                public class Main {
+                    public static void main(String[] args) {
+                        Repo repository = new Repo();
+                        Repo.init(repository);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("convert-to-instance-method", Map.of("method", "a.Repo#init(Repo)", "parameter", "a.Repo#init(Repo)/self"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Repo.java")).contains("""
+                    void init() {
+                        this.count = 0;
+                    }
+                """).doesNotContain("static void init");
+        assertThat(ws.source("a/Main.java")).contains("        repository.init();");
+        assertThat(ws.errors()).isEmpty();
+    }
 }

@@ -233,7 +233,7 @@ final class DeleteElement {
 
     /**
      * A parameter that becomes the object itself: its method's uses of it are {@code this}, and each call is made on
-     * what it passed for it (a method reference cannot be).
+     * what it passed for it (a method reference cannot be), instead of what it was made on.
      */
     private static List<Change.Dropped> thisParam(Context c, Program before, Element param, ElementId into) {
         var method = before.element(param.parent());
@@ -262,6 +262,13 @@ final class DeleteElement {
             var receiver = object.isNameExpr() || object.isFieldAccessExpr() || object.isMethodCallExpr() || object.isObjectCreationExpr() || object.isThisExpr()
                     ? unit.textOf(object) : "(" + unit.textOf(object) + ")";
             edits.replace(unit, made, receiver + "." + made.getNameAsString() + "(" + String.join(", ", others) + ")");
+            made.getScope().ifPresent(scope -> { // what it was made on is named no more there: a type, mostly
+                for (var r : before.referencesFrom(call.site())) {
+                    if (r.mode().isLink()) continue;
+                    var use = c.use(r.id());
+                    if (use == scope || scope.isAncestorOf(use)) gone.add(new Change.Dropped(r.site(), r.target()));
+                }
+            });
         }
         names.remove(index);
         c.sources().apply(edits);
