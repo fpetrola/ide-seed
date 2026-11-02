@@ -108,7 +108,13 @@ return #{field}                          answers a field's value
 return new #{constructor}(#{params(f)})  answers a new object (a list is joined with commas)
 return #{field}.#{method}(#{p})          answers what a call answers
 return default                           answers what the type starts with
+add #{value} to #{list}                  puts a value at the end of a list
+each #{local} in #{list}                 a loop over a list, empty, declaring the local (create LOCAL it first)
+list of #{type}                          a new empty list; also a local's type: facts="type=list of #{type}"
 ```
+
+A statement is created at the end of a body, or of the one block a statement holds (`create STATEMENT ${loop} ...`);
+`move` takes a statement into such a block the same way.
 
 `ide.program.Body` documents the whole language. If you need to say something it cannot, the body language grows,
 in `program`. Never write Java text in a script.
