@@ -44,6 +44,12 @@ final class Capabilities {
                     workspace.save();
                     return "ok";
                 }))
+                .register(Capability.of("sync", "Takes what changed on disk since it was read or saved, each file as an edit by hand; "
+                        + "a file the IDE changed too is a conflict left alone", List.of(), args -> {
+                    var sync = workspace.sync();
+                    return entries("taken", sync.taken(), "conflicts", sync.conflicts(), "refused", sync.refused(),
+                            "deleted", sync.deleted());
+                }))
                 .register(Capability.of("library", "Refactorings by level", List.of(), args -> workspace.library()))
                 .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
                         args -> workspace.define(text(args, "text"))))

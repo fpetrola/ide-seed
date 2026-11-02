@@ -162,6 +162,12 @@ public final class Workspace {
         session.save(root);
     }
 
+    /** Takes what changed on disk where the workspace was opened from, as edits by hand. */
+    public Session.Sync sync() {
+        if (root == null) throw new IllegalStateException("this workspace was not opened from a folder: no disk to follow");
+        return session.sync(root);
+    }
+
     /** Writes the changed files where the workspace was opened from. */
     public void save() {
         if (root == null) throw new IllegalStateException("this workspace was not opened from a folder: nowhere to save");

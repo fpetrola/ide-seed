@@ -198,6 +198,51 @@ public final class Session {
         log.append(Map.of("event", "save", "root", root.toString()));
     }
 
+    /**
+     * What the folder's files say that is not what was last read or saved there.
+     * {@code taken}: changed or new on disk only, now edits by hand; {@code conflicts}: changed on disk and in the IDE
+     * too, left as they are; {@code refused}: an edit the program did not take; {@code deleted}: gone from disk, which
+     * is not followed (the IDE still has them, and saving writes them back).
+     */
+    public record Sync(List<String> taken, List<String> conflicts, List<String> refused, List<String> deleted) {
+    }
+
+    /** Takes what changed on disk under {@code root} since it was read or saved, each file as an edit by hand. */
+    public Sync sync(Path root) {
+        var disk = sourcesIn(root);
+        var current = project.sources();
+        var taken = new java.util.ArrayList<String>();
+        var conflicts = new java.util.ArrayList<String>();
+        var refused = new java.util.ArrayList<String>();
+        var known = new TreeMap<>(saved);
+        for (var file : disk.entrySet()) {
+            var path = file.getKey();
+            var text = file.getValue();
+            if (text.equals(known.get(path))) continue; // nothing changed on disk
+            if (text.equals(current.get(path))) { // the disk caught up with the IDE
+                known.put(path, text);
+                continue;
+            }
+            if (!java.util.Objects.equals(current.get(path), known.get(path))) {
+                conflicts.add(path);
+                continue;
+            }
+            if (edit(path, text).applied()) {
+                known.put(path, text);
+                taken.add(path);
+            } else {
+                refused.add(path);
+            }
+        }
+        var deleted = known.keySet().stream().filter(path -> !disk.containsKey(path)).toList();
+        saved = known;
+        if (!taken.isEmpty() || !conflicts.isEmpty() || !refused.isEmpty() || !deleted.isEmpty()) {
+            log.append(Map.of("event", "sync", "root", root.toString(), "taken", taken, "conflicts", conflicts,
+                    "refused", refused, "deleted", deleted));
+        }
+        return new Sync(List.copyOf(taken), List.copyOf(conflicts), List.copyOf(refused), deleted);
+    }
+
     /** That the project in {@code root} was opened, with how many libraries and what went wrong getting them. */
     public void opened(Path root, int libraries, String problem) {
         var event = new LinkedHashMap<String, Object>();
