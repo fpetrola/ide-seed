@@ -114,7 +114,7 @@ class ScriptTest {
         assertThat(ws.library())
                 .contains("primitive create", "primitive move", "primitive rename", "primitive set", "primitive retarget",
                         "script encapsulate-field", "script extract-superclass", "script generate-getter",
-                        "script pull-up-field", "script rename-method-family", "script move-type");
+                        "intent pull-up-field", "script rename-method-family", "script move-type");
         assertThat(ws.invoke("extract-superclass", Map.of("type", "a.B", "name", "Mid", "fields", List.of("a.B#z")))
                 .applied()).isTrue();
     }

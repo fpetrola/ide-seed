@@ -1,5 +1,6 @@
-# The standard catalog: every refactoring here is a composition of primitives and other refactorings.
-# The coherence engine verifies and repairs the result, so scripts state intent, not care.
+# The standard catalog: every refactoring here is a composition of primitives and other refactorings, or an intent:
+# what is to hold at the end (want), in the knowledge's language, with nothing of how; the knowledge deduces the
+# changes, and what they break. The coherence engine verifies and repairs the result, so scripts state intent, not care.
 # No code of any language is written here: a body is said in the body language (#{x} names the element x), and each
 # projection writes it in its own.
 
@@ -39,11 +40,9 @@ refactoring encapsulate-field "Accessors for a field; uses outside its type go t
   return ${field}
 end
 
-refactoring pull-up-field "Moves a field to the superclass of its type"
+intent pull-up-field "Moves a field to the superclass of its type"
   param field : element(FIELD) "the field to move up"
-  require nonempty(superclass(owner(field))) "${qualified(owner(field))} has no superclass"
-  move ${field} ${superclass(owner(field))}
-  return ${field}
+  want given parent(field, t) and given superclass(t, u) and parent(field, u)
 end
 
 refactoring pull-up-method "Moves a method to the superclass of its type"

@@ -1,6 +1,7 @@
 package ide.refactoring;
 
 import ide.core.Param;
+import ide.engine.Trace;
 import ide.engine.Transaction;
 import ide.program.ElementId;
 import ide.program.Program;
@@ -84,6 +85,18 @@ public final class Run {
             projection.restore(saved);
             return false;
         }
+    }
+
+    /** Makes an intent's want hold, as the library's planner deduces; refused if the library has none. */
+    public void want(String intent, String want, Map<String, Value> variables) {
+        var planner = library.planner();
+        if (planner == null) throw new PrimitiveRejected("intent.unplanned", "nothing plans " + intent + ": an intent needs a planner");
+        planner.want(intent, want, variables, this);
+    }
+
+    /** How a planner deduced what it made: inside a transaction it goes with the result's search; else nowhere. */
+    public void searched(Trace search) {
+        if (transaction != null) transaction.searched(search);
     }
 
     /** Declares what the refactoring cannot verify; it travels with the result as an obligation. */

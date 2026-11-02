@@ -15,6 +15,10 @@ import java.util.List;
  *   try "label" ... end
  *   require expr "message"  |  oblige "assumption"  |  fail "message"  |  return arg
  * end
+ * intent &lt;id&gt; ["description"]
+ *   param ...                  (as a refactoring's)
+ *   want what is to hold       (in the planner's language; it goes on in lines that start with "and")
+ * end
  * </pre>
  */
 public final class ScriptParser {
@@ -47,8 +51,9 @@ public final class ScriptParser {
 
     private Script refactoring() {
         var header = lines.get(next++);
-        if (!header.startsWith("refactoring ")) throw error("expected 'refactoring <id>'", header);
-        var rest = header.substring("refactoring ".length()).strip();
+        var intent = header.startsWith("intent ");
+        if (!intent && !header.startsWith("refactoring ")) throw error("expected 'refactoring <id>' or 'intent <id>'", header);
+        var rest = header.substring(header.indexOf(' ') + 1).strip();
         var space = rest.indexOf(' ');
         var id = space < 0 ? rest : rest.substring(0, space);
         var description = space < 0 ? "" : unquote(rest.substring(space + 1).strip());
@@ -69,9 +74,18 @@ public final class ScriptParser {
             }
             params.add(param(line));
         }
-        var body = block("end");
+        var body = intent ? List.<Stmt>of(want()) : block("end");
         next++;
-        return new Script(id, description, params, defaults, sources, body);
+        return new Script(id, description, params, defaults, sources, body, intent ? "intent" : "script");
+    }
+
+    /** An intent's one statement: {@code want ...}, going on in the lines that start with {@code and}, then {@code end}. */
+    private Stmt want() {
+        if (!skipBlank() || !lines.get(next).startsWith("want ")) throw error("an intent says what it wants: 'want ...'", next < lines.size() ? lines.get(next) : "");
+        var want = new StringBuilder(lines.get(next++).substring("want ".length()).strip());
+        while (next < lines.size() && lines.get(next).startsWith("and ")) want.append(' ').append(lines.get(next++));
+        if (!skipBlank() || !lines.get(next).equals("end")) throw error("an intent wants one thing, then 'end'", next < lines.size() ? lines.get(next) : "");
+        return new Stmt.Want(want.toString());
     }
 
     private Param param(String line) {

@@ -15,6 +15,7 @@ import ide.projection.Needs;
 import ide.projection.PrimitiveRejected;
 import ide.projection.kit.MemoryProjection;
 import ide.refactoring.Library;
+import ide.refactoring.Run;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -464,5 +465,37 @@ class KnowledgeTest {
 
         assertThatThrownBy(() -> plans.getLast().apply(projection)).isInstanceOfSatisfying(PrimitiveRejected.class,
                 refused -> assertThat(refused.code()).isEqualTo("plan.assumes"));
+    }
+
+    /**
+     * An intent says what is to hold at the end, and the knowledge plans its intents: pull-up-field wants the field in
+     * the class its type extends, and that changes its parent. What it gives is a condition, never changed.
+     */
+    @Test
+    void theKnowledgeMakesAnIntentHoldByTheChangesItsWantAsksFor() {
+        var library = Library.standard();
+        Knowledge.standard(library);
+        var projection = MemoryProjection.builder()
+                .type("a.A").type("a.B").extend("a.B", "a.A").field("a.B", "x", "int")
+                .build();
+        var x = id(projection.program(), "a.B#x");
+
+        Run.on(projection, library).call("pull-up-field", Map.of("field", "a.B#x"));
+
+        assertThat(projection.program().element(x).qualified()).isEqualTo("a.A#x");
+    }
+
+    /** One whose conditions do not hold has no way, and is refused with the first it could not get past. */
+    @Test
+    void anIntentWhoseConditionsDoNotHoldIsRefusedWithWhatItNeeds() {
+        var library = Library.standard();
+        Knowledge.standard(library);
+        var projection = MemoryProjection.builder().type("a.B").field("a.B", "x", "int").build();
+
+        assertThatThrownBy(() -> Run.on(projection, library).call("pull-up-field", Map.of("field", "a.B#x")))
+                .isInstanceOfSatisfying(PrimitiveRejected.class, refused -> {
+                    assertThat(refused.code()).isEqualTo("intent.unreachable");
+                    assertThat(refused.getMessage()).isEqualTo("pull-up-field needs superclass(a.B, u)");
+                });
     }
 }

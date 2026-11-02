@@ -9,9 +9,11 @@ import ide.program.ElementId;
 import ide.program.Kind;
 import ide.program.Primitive;
 import ide.projection.Diagnostic;
+import ide.projection.PrimitiveRejected;
 import ide.projection.Projection;
 import ide.refactoring.Args;
 import ide.refactoring.Library;
+import ide.refactoring.Planner;
 import ide.refactoring.Run;
 import ide.refactoring.Value;
 import ide.refactoring.script.Script;
@@ -39,9 +41,10 @@ import java.util.Map;
  * changing what a definition looks at, through the primitive that changes it ({@link Abduction}); one an effect makes,
  * by the effect: its {@code for} candidates enumerated, those whose {@code when} holds kept. What a way needs either
  * holds already or is made first, the same way. A plan is at most four steps (eight levels of question and answer),
- * and a search answers the twelve cheapest.
+ * and a search answers the twelve cheapest. It also plans intents: what one wants to hold is made to hold the same way,
+ * with what that breaks mended in the same plan.
  */
-public final class Knowledge implements Remedy, QuickFix {
+public final class Knowledge implements Remedy, QuickFix, Planner {
 
     private static final int MOST_STEPS = 4;
     private static final int MOST_PLANS = 12;
@@ -122,9 +125,14 @@ public final class Knowledge implements Remedy, QuickFix {
         return KnowledgeParser.parse(text, library);
     }
 
-    /** The knowledge the IDE ships with: how Java is ({@code java.rules}) and the rest ({@code knowledge.ref}). */
+    /**
+     * The knowledge the IDE ships with: how Java is ({@code java.rules}) and the rest ({@code knowledge.ref}). It plans
+     * the library's intents.
+     */
     public static Knowledge standard(Library library) {
-        return parse(resource("java.rules") + "\n" + resource("knowledge.ref"), library);
+        var knowledge = parse(resource("java.rules") + "\n" + resource("knowledge.ref"), library);
+        library.planner(knowledge);
+        return knowledge;
     }
 
     private static String resource(String name) {
@@ -186,6 +194,51 @@ public final class Knowledge implements Remedy, QuickFix {
         }
         ways.sort(Comparator.comparingInt(way -> way.cost() * 100 + way.rank()));
         return new Search(trace, ways.stream().limit(MOST_PLANS).map(this::plan).toList());
+    }
+
+    /**
+     * Makes an intent's want hold in a run: what it asks for, and what that breaks mended, as one plan: the cheapest
+     * that keeps meaning and asks nothing. Its own changes count for nothing against the most a plan may change. When
+     * no way is mended, the want alone: what the rules did not foresee is the repairer's, which judges every plan. A
+     * want that holds already changes nothing; one that nothing makes hold is refused with the first literal it could
+     * not get past. How it was deduced goes with the run's search.
+     */
+    @Override
+    public void want(String intent, String want, Map<String, Value> variables, Run run) {
+        var projection = run.projection();
+        var wanted = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Literal, Boolean>());
+        wanted.addAll(conditions);
+        var body = KnowledgeParser.want(want, wanted);
+        var binding = new HashMap<String, String>();
+        variables.forEach((name, value) -> {
+            if (constant(value) != null) binding.put(name, constant(value));
+        });
+        var trace = new Trace();
+        trace.open(Trace.Kind.QUESTION, intent + "(" + String.join(", ", variables.values().stream().map(v -> shown(v, projection)).toList()) + ")");
+        var found = abduction(variables, projection, wanted).wanted(intent, body, binding);
+        if (found.holds()) {
+            run.searched(trace.add(Trace.Kind.NOTE, "it holds already").close());
+            return;
+        }
+        if (found.unmended().isEmpty()) {
+            run.searched(trace.close());
+            throw new PrimitiveRejected("intent.unreachable", intent + " needs " + shown(found.stuck(), projection));
+        }
+        dead(found.dead(), projection, trace);
+        var ways = new ArrayList<Way>();
+        var rank = 0;
+        for (var way : found.found()) {
+            ways.addAll(after(intent, needs(way, projection), steps(way.changes(), projection, intent), rank++, variables, projection, trace, 1));
+        }
+        ways.sort(Comparator.comparingInt(way -> way.cost() * 100 + way.rank()));
+        var plan = ways.stream().map(this::plan).filter(p -> !p.changesMeaning() && p.asks().isEmpty()).findFirst()
+                .orElse(null);
+        if (plan == null) {
+            plan = plan(new Way(steps(found.unmended().getFirst().changes(), projection, intent), 0, 0));
+            trace.add(Trace.Kind.NOTE, "no way the rules mend keeps meaning: " + plan.title() + " alone, which the repairer judges");
+        }
+        run.searched(trace.close());
+        plan.apply().accept(projection, Map.of());
     }
 
     /**
@@ -284,6 +337,10 @@ public final class Knowledge implements Remedy, QuickFix {
     }
 
     private Abduction abduction(Map<String, Value> known, Projection projection) {
+        return abduction(known, projection, conditions);
+    }
+
+    private Abduction abduction(Map<String, Value> known, Projection projection, java.util.Set<Literal> conditions) {
         return new Abduction(rules, conditions, engine.evaluate(rules, new GraphFacts(projection, known)), promises, new Abduction.Shown() {
             @Override
             public String of(Atom atom) {
@@ -375,6 +432,11 @@ public final class Knowledge implements Remedy, QuickFix {
      * is asked, with what the rules deduced as the answer proposed.
      */
     private List<Step> steps(List<Abduction.Change> changes, Projection projection) {
+        return steps(changes, projection, null);
+    }
+
+    /** As {@link #steps(List, Projection)}; a change an intent's want asks for is said as the intent, if nothing says it. */
+    private List<Step> steps(List<Abduction.Change> changes, Projection projection, String wanted) {
         var steps = new ArrayList<Step>();
         var moved = new HashMap<String, Abduction.Change>();
         for (var change : changes) if (change.relation().equals("parent")) moved.put(change.element(), change);
@@ -394,7 +456,7 @@ public final class Knowledge implements Remedy, QuickFix {
         for (var change : changes) {
             var key = change.element();
             if (groups.containsKey(key)) {
-                if (groups.get(key).getFirst() == change) steps.add(created(groups.get(key), creations, projection, asked));
+                if (groups.get(key).getFirst() == change) steps.add(created(groups.get(key), creations, projection, asked, wanted));
                 continue;
             }
             var on = change.added() != null;
@@ -430,7 +492,7 @@ public final class Knowledge implements Remedy, QuickFix {
             variables.put("called", new Value.Text(called(key, projection)));
             variables.put("value", value == null ? null : value(value, projection));
             variables.put("was", change.removed() == null || change.removed().size() < 2 ? null : value(change.removed().get(1), projection));
-            var title = title((on ? "" : "not ") + change.relation(), change.forWhat(), variables, projection);
+            var title = title((on ? "" : "not ") + change.relation(), change.forWhat(), variables, projection, wanted);
             var promised = change.promise() != null; // broken on purpose: it changes meaning, and costs more
             steps.add(new Step(title, List.of(), promised ? 2 : 1, !promised, (target, answers, made) -> target.apply(primitive)));
         }
@@ -443,7 +505,7 @@ public final class Knowledge implements Remedy, QuickFix {
      * body that answers what its type starts with.
      */
     private Step created(List<Abduction.Change> group, Map<String, Abduction.Change> creations, Projection projection,
-                         java.util.Set<String> asked) {
+                         java.util.Set<String> asked, String wanted) {
         var creation = group.getFirst();
         var values = creation.added();
         var made = values.getFirst();
@@ -511,7 +573,7 @@ public final class Knowledge implements Remedy, QuickFix {
         variables.put("owner", value(owner.value(), projection));
         variables.put("value", value(owner.value(), projection));
         variables.put("type", value(typeOf(values.get(1), creations, projection), projection));
-        var title = title(creation.relation(), creation.forWhat(), variables, projection);
+        var title = title(creation.relation(), creation.forWhat(), variables, projection, wanted);
         var method = kind.equals("method");
         var passed = group.stream().anyMatch(change -> change.relation().equals("passes"));
         var keeps = !creation.relation().equals("parameter") || passed && uncalled(values.get(1), creations, projection);
@@ -609,7 +671,7 @@ public final class Knowledge implements Remedy, QuickFix {
         var variables = new LinkedHashMap<String, Value>();
         variables.put("element", value(type, projection));
         variables.put("called", new Value.Text(called(type, projection)));
-        var title = title("not unimplemented", forWhat, variables, projection);
+        var title = title("not unimplemented", forWhat, variables, projection, null);
         return new Step(title, List.of(), 1, true, (target, answers, done) -> {
             for (var shape : shapes) {
                 var id = target.apply(new Primitive.Create(Kind.METHOD, owner, shape.name())).produced();
@@ -650,15 +712,20 @@ public final class Knowledge implements Remedy, QuickFix {
         var variables = new LinkedHashMap<String, Value>();
         variables.put("element", value(field, projection));
         variables.put("called", new Value.Text(called(field, projection)));
-        var title = title("initialized", forWhat, variables, projection);
+        var title = title("initialized", forWhat, variables, projection, null);
         var asks = List.of(new Plan.Ask(answer, question == null ? "initial value" : question.get(1), value));
         return new Step(title, asks, 1, true, (target, given, done) ->
                 target.apply(new Primitive.Set(new ElementId(field), "initializer", given.getOrDefault(answer, value))));
     }
 
-    /** A step's title, as {@code say <relation> for <what>} says it; with nothing said, the change as it is. */
-    private String title(String relation, String forWhat, Map<String, Value> variables, Projection projection) {
-        var template = says.getOrDefault(relation + " for " + forWhat, relation + " ${element} ${was} -> ${value}");
+    /**
+     * A step's title, as {@code say <relation> for <what>} says it; with nothing said, the intent whose want asked for it
+     * ({@code wanted}), or the change as it is.
+     */
+    private String title(String relation, String forWhat, Map<String, Value> variables, Projection projection, String wanted) {
+        var said = says.get(relation + " for " + forWhat);
+        if (said == null && forWhat.equals(wanted)) return wanted;
+        var template = said != null ? said : relation + " ${element} ${was} -> ${value}";
         return Script.render(template, Run.on(projection, library), variables);
     }
 

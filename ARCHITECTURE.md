@@ -525,6 +525,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   del campo), el retarget de la llamada al campo (una llamada que no pasa nada se vuelve una lectura), el inline de la
   llamada en el inicializador y el delete del método. Una expresión que usa un local o el objeto no es constante: el
   compilador lo dice y la transacción se deshace.
+  Desde la segunda parte de la fase 4 de la etapa 3 (decisión 34), un refactoring puede ser una intención (`intent`):
+  sus parámetros y un `want`, lo que tiene que valer al final, escrito en el lenguaje del planificador. El script lo
+  guarda como texto, y correrlo es pedírselo al planificador de la biblioteca (`Planner`, `Run.want`). Sin
+  planificador, se rechaza. pull-up-field es la primera.
 - **Abierto.** El rastro muestra los cuerpos con ids, no con direcciones. De la lista de la
   spec faltan annotate, use-supertype-where-possible,
   extract-interface-and-use, fold-constructors y delete-tree; y lo que trabaja sobre locales (extract variable,
@@ -643,6 +647,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   de ese nombre que el archivo puede usar (JLS 6.5.5): el efecto `import` se fue, y ligar el uso es importar; si el
   archivo no puede usarlo, abrirlo antes sale de la misma definición de acceso. Una definición que no aplica queda
   en el rastro con el literal donde se trabó (`X resolves: unresolved(u, a/P.java, total, type)`).
+  Desde la segunda parte de la fase 4 de la etapa 3 (decisión 34) es también el planificador de las intenciones del
+  catálogo (`Planner`; `Knowledge.standard` se registra en la biblioteca). Un `want` se lee como el cuerpo de una
+  definición y se hace valer igual, y lo que rompe se repara en el mismo plan sin que lo pedido cuente para el tope.
+  Se toma el plan más barato que conserva el sentido; si las reglas no reparan nada, se hace el `want` solo y el
+  reparador sigue después.
 - **Abierto.** Las reglas son recetas escritas a mano: se deduce cuándo aplicarlas y cómo encadenarlas, no la regla
   misma. La propuesta de la etapa 3 (decisión 32) las reemplaza por reglas generales del lenguaje, de las que se
   deducen las transformaciones, y deja los refactorings como intenciones; necesita las sentencias en el grafo. Un predicado que ningún `fact` define siempre se hace, aunque
@@ -900,6 +909,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 31 | Reparar sin cambiar el sentido | un efecto del conocimiento es un quick fix que la gente elige; solo uno que declara `keeps meaning` (abrir, mover adonde se usa, importar, ampliar un override, declarar el constructor que el lenguaje ya daba) puede reparar solo un refactoring. Un `Plan` dice si `changesMeaning` y el `Repairer` no lo toma. Antes cualquier fix sin preguntas podía reparar: cambiar una llamada a un método de nombre parecido, sacar un `final`, inventar un valor para los llamadores | tomada, 2026-11-01 |
 | 32 | Sentencias y locales     | las sentencias de primer nivel de un cuerpo y las variables locales son elementos del grafo (`STATEMENT`, `LOCAL`), sitio de sus usos; las expresiones siguen opacas; los nueve primitivos alcanzan; `Body` dice una sentencia. El conocimiento pasa a ser reglas generales del lenguaje, sin transformaciones escritas: el motor las deduce de lo que se rompe, y un refactoring es solo una intención. Reemplaza en parte la 7 (cuerpos fuera del grafo). Sección 9, etapa 3 y su apéndice | propuesta, 2026-11-01 |
 | 33 | Motor de reglas          | un producto propio, `rules`, que no depende de nada: Datalog con negación estratificada (seguro y estratificado al armarse), hechos como vistas pedidas por patrón y suponer un cambio como operación del contrato; el motor estándar evalúa a demanda. Uno maduro entra como otra implementación de `Engine`, con un adaptador y los mismos tests de contrato. El lenguaje de superficie (`def`, `say`) y el planificador quedan en `knowledge` | tomada, 2026-11-01 |
+| 34 | Intenciones              | un refactoring del catálogo puede ser una intención: dice lo que tiene que valer al final (`want`, en el lenguaje de `knowledge`: hechos del grafo y `given` para las condiciones), nada de cómo. `refactoring` la guarda como texto y se la pasa al planificador de la biblioteca (`Planner`), que es el conocimiento: deduce los cambios y lo que rompen en un solo plan, sin que lo pedido cuente para el tope, y toma el más barato que conserva el sentido. El reparador queda para lo que las reglas no previeron y sigue juzgando todo plan | tomada, 2026-11-02 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -1542,6 +1552,33 @@ que esto no escala solo:
       Sigue siendo el juez de todo plan.
    5. *Por dónde empezar.* Propuesta: pull-up-field y extract-superclass. Son los dos que hoy necesitan al reparador
       para quedar bien, y extract-superclass es el caso del `super(limit)`.
+
+   *Decidido el 2026-11-02*: las cinco como se propusieron, empezando por las intenciones sobre la estructura
+   (decisión 34).
+
+   **Ciclo 1 hecho el 2026-11-02**: pull-up-field es una intención.
+   - El lenguaje `.ref` tiene `intent`: el mismo encabezado y los mismos parámetros que un refactoring, y un solo
+     `want`, que sigue en las líneas que empiezan con `and`. El script lo guarda como texto: está en el lenguaje del
+     planificador, que el script no lee. Correrlo es pedirle al planificador de la biblioteca que lo haga valer
+     (`Planner`, en `refactoring`; `Run.want`); sin planificador, se rechaza (`intent.unplanned`).
+   - El planificador es el conocimiento, y `Knowledge.standard(library)` se registra en la biblioteca. Lee el `want`
+     como el cuerpo de una definición, con los parámetros ligados, y lo hace valer por abducción, como un quick fix.
+     Lo que eso rompe se repara en el mismo plan, y los cambios del `want` no cuentan para el tope de pasos. Toma el
+     plan más barato que conserva el sentido y no pregunta nada, y lo corre en el `Run`. Dentro de una transacción,
+     sus primitivos quedan bajo la llamada, y cómo lo dedujo va a la búsqueda del resultado (`Run.searched`); un
+     cambio que pidió el `want` se dice con el nombre de la intención.
+   - Si las reglas no saben reparar lo que el `want` rompe, se hace el `want` solo y el reparador sigue después. Así
+     sale hoy el `super(limit)` de `Unset` dentro de extract-superclass.
+   - Sin superclase, `given superclass(t, u)` no vale, y la intención se rechaza diciendo lo que le falta: "pull-up-field
+     needs superclass(a.B, u)" (`intent.unreachable`). El `require` se fue.
+   - Lo que rompe un plan se repara de a una regla, en el orden en que están escritas; antes el orden dependía de un
+     hash.
+   - Quién puede usar qué y el alcance de un nombre todavía son metas de violaciones que ve el verificador, no reglas.
+     Por eso, al subir un campo privado, todavía lo abre el reparador después. El ciclo 2 los pasa a reglas, para que
+     el plan salga entero.
+   - A igual costo decide el orden en que están escritas las definiciones (abrir a `package` va antes que a
+     `protected`), como en los quick fixes. Preguntarle a la persona queda para dos caminos que las reglas no
+     ordenen, y en estas intenciones no aparece ninguno.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

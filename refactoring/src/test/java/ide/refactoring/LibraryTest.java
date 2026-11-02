@@ -14,7 +14,7 @@ class LibraryTest {
         var library = Library.standard();
 
         assertThat(library.listing()).contains("primitive rename", "primitive link", "composite change-signature",
-                "script encapsulate-field", "script extract-superclass");
+                "script encapsulate-field", "script extract-superclass", "intent pull-up-field");
         assertThat(library.get("rename").params()).extracting(Param::name).containsExactly("element", "name");
     }
 
@@ -33,6 +33,43 @@ class LibraryTest {
         assertThat(library.get("make-private").level()).isEqualTo("script");
         assertThatThrownBy(() -> library.get("nonexistent")).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unknown refactoring: nonexistent");
+    }
+
+    private static final String HIDE = """
+            intent hide "Makes a member private"
+              param member : element(FIELD,METHOD) "the member"
+              want visibility(member, "private")
+                and given kind(member, k)
+            end
+            """;
+
+    /**
+     * An intent says what is to hold at the end, in the planner's language, and nothing of how: the library's planner
+     * deduces it and makes it, with the parameters as values.
+     */
+    @Test
+    void anIntentIsMadeToHoldByTheLibrarysPlanner() {
+        var library = Library.standard();
+        var asked = new java.util.ArrayList<String>();
+        library.planner((intent, want, variables, run) -> asked.add(intent + ": " + want + " with " + variables));
+        var projection = ide.projection.kit.MemoryProjection.builder().type("a.A").field("a.A", "x", "int").build();
+        var x = projection.program().find("a.A#x").orElseThrow().id();
+
+        library.define(HIDE);
+        Run.on(projection, library).call("hide", java.util.Map.of("member", "a.A#x"));
+
+        assertThat(library.get("hide").level()).isEqualTo("intent");
+        assertThat(asked).containsExactly("hide: visibility(member, \"private\") and given kind(member, k) with {member=" + new Value.Elem(x) + "}");
+    }
+
+    @Test
+    void withoutAPlannerAnIntentIsRefused() {
+        var library = new Library();
+        library.define(HIDE);
+        var projection = ide.projection.kit.MemoryProjection.builder().type("a.A").field("a.A", "x", "int").build();
+
+        assertThatThrownBy(() -> Run.on(projection, library).call("hide", java.util.Map.of("member", "a.A#x")))
+                .isInstanceOfSatisfying(ide.projection.PrimitiveRejected.class, refused -> assertThat(refused.code()).isEqualTo("intent.unplanned"));
     }
 
     @Test

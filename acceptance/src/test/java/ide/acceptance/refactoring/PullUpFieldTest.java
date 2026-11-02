@@ -37,6 +37,7 @@ class PullUpFieldTest {
 
         assertThat(result.violations()).isEmpty();
         assertThat(result.applied()).isTrue();
+        assertThat(result.search().lines()).containsExactly("? pull-up-field(a.B#x)", "  ! pull-up-field");
         assertThat(ws.source("a/A.java")).isEqualTo("""
                 package a;
 
@@ -56,6 +57,24 @@ class PullUpFieldTest {
                     }
                 }
                 """);
+    }
+
+    /** pull-up-field wants the field in the class its type extends: a type that extends nothing has none. */
+    @Test
+    void aFieldOfATypeThatExtendsNothingHasNowhereToGoUpAndTheRulesSaySo() {
+        var ws = Workspace.of(Map.of("a/B.java", """
+                package a;
+
+                public class B {
+                    protected int x;
+                }
+                """));
+
+        var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code, Violation::detail)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("intent.unreachable", "pull-up-field needs superclass(a.B, u)"));
     }
 
     @Test

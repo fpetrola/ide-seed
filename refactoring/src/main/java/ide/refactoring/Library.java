@@ -10,10 +10,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/** The refactorings that can be called by id: the primitives, the composites written in Java, and scripts. */
+/**
+ * The refactorings that can be called by id: the primitives, the composites written in Java, scripts, and intents,
+ * which its planner makes hold.
+ */
 public final class Library {
 
     private final Map<String, Refactoring> refactorings = new TreeMap<>();
+    private Planner planner;
 
     /** The primitives, change-signature, and the standard catalog. */
     public static Library standard() {
@@ -34,6 +38,17 @@ public final class Library {
         var defined = ScriptParser.parse(scripts);
         defined.forEach(this::add);
         return defined.stream().map(Refactoring::id).toList();
+    }
+
+    /** Who makes its intents hold. */
+    public Library planner(Planner planner) {
+        this.planner = planner;
+        return this;
+    }
+
+    /** Who makes its intents hold, or null if nobody does. */
+    Planner planner() {
+        return planner;
     }
 
     public Refactoring get(String id) {

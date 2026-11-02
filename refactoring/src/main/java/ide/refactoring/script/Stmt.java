@@ -31,4 +31,8 @@ sealed interface Stmt {
 
     record Return(String value) implements Stmt {
     }
+
+    /** What an intent wants to hold, in the planner's language: a script keeps it as it is written. */
+    record Want(String want) implements Stmt {
+    }
 }

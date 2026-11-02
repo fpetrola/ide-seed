@@ -106,6 +106,11 @@ public final class Transaction implements Projection {
         return outcome.violations().isEmpty() ? null : outcome.violations().getFirst();
     }
 
+    /** How a planner deduced what a refactoring made; it goes with the repairer's search into the result. */
+    public void searched(Trace planned) {
+        search.append(planned);
+    }
+
     /** Something the refactoring cannot decide and assumes; the result's guarantee becomes "assumed". */
     public void oblige(String assumption) {
         obligations.add(assumption);

@@ -28,10 +28,13 @@ import java.util.Set;
  * taken away: a fact it needs removed, or one it needs absent added; a defined one it needs absent made to hold, by
  * its own definitions.
  * <p>
+ * To make an intent's want hold, its body is read the same way: what it asks for is changed, and what that breaks is
+ * mended in the same plan; its own changes count for nothing against the most a plan may change.
+ * <p>
  * Either way, every rule is asked again around what changed: what the changes break is mended in the same plan, never
- * by undoing one of its own changes. A promise is broken only on purpose: as the first change of a plan, the one the
- * plan is about, which then changes meaning; never as a consequence. A plan is at most {@link #MOST_CHANGES} steps: an
- * element created and the changes of it are one.
+ * by undoing one of its own changes, a rule at a time in the order they are written. A promise is broken only on
+ * purpose: as the first change of a plan, the one the plan is about, which then changes meaning; never as a
+ * consequence. A plan is at most {@link #MOST_CHANGES} steps: an element created and the changes of it are one.
  */
 final class Abduction {
 
@@ -110,11 +113,18 @@ final class Abduction {
     record Attempt(Clause clause, List<Found> found, Literal stuck, List<Dead> dead) {
     }
 
+    /**
+     * A want tried: whether it holds already; the ways it holds, each mended of what it breaks, and each as it asked for
+     * it, unmended; the first literal it could not get past, if no way gets past it; and the ways given up mending.
+     */
+    record Wanted(boolean holds, List<Found> found, List<Found> unmended, Literal stuck, List<Dead> dead) {
+    }
+
     private final Rules rules;
     private final Set<Literal> conditions;
     private final Evaluation base;
     private final Map<String, Promise> promises;
-    private final Map<String, Integer> violations = new HashMap<>();
+    private final Map<String, Integer> violations = new java.util.LinkedHashMap<>();
     private final Shown shown;
 
     /** How an atom is shown in a reason: elements by their address. */
@@ -149,10 +159,25 @@ final class Abduction {
             explore(predicate, clause.body(), binding, List.of(), List.of(), base, found, stuck);
             var dead = new ArrayList<Dead>();
             var mended = new ArrayList<Found>();
-            for (var way : found) mended.addAll(mend(way, dead));
+            for (var way : found) mended.addAll(mend(way, dead, 0));
             attempts.add(new Attempt(clause, mended, found.isEmpty() ? stuck[0] : null, dead));
         }
         return attempts;
+    }
+
+    /**
+     * What it takes for an intent's want to hold, read as a definition's body is, with what is given bound: each way
+     * mended of what it breaks, its own changes counting for nothing against the most a plan may change.
+     */
+    Wanted wanted(String intent, List<Literal> want, Map<String, String> binding) {
+        if (!solutions(want, binding, base).isEmpty()) return new Wanted(true, List.of(), List.of(), null, List.of());
+        var found = new ArrayList<Found>();
+        var stuck = new Literal[1];
+        explore(intent, want, binding, List.of(), List.of(), base, found, stuck);
+        var dead = new ArrayList<Dead>();
+        var mended = new ArrayList<Found>();
+        for (var way : found) mended.addAll(mend(way, dead, steps(way.changes())));
+        return new Wanted(false, mended, List.copyOf(found), found.isEmpty() ? stuck[0] : null, dead);
     }
 
     private void explore(String forWhat, List<Literal> pending, Map<String, String> binding, List<Change> changes,
@@ -264,17 +289,18 @@ final class Abduction {
     Ways against(Atom violation) {
         var dead = new ArrayList<Dead>();
         var found = new ArrayList<Found>();
-        for (var changes : unsupport(violation, List.of(), base, dead)) {
-            found.addAll(mend(new Found(changes, List.of()), dead));
+        for (var changes : unsupport(violation, List.of(), base, dead, 0)) {
+            found.addAll(mend(new Found(changes, List.of()), dead, 0));
         }
         return new Ways(found, dead);
     }
 
     /**
      * The ways to take away every support of a ground {@code atom} (each way the changes it takes), starting from
-     * {@code done}: one support at a time, each by one of what it stands on.
+     * {@code done}: one support at a time, each by one of what it stands on; the first {@code free} steps count for
+     * nothing against the most a plan may change.
      */
-    private List<List<Change>> unsupport(Atom atom, List<Change> done, Evaluation state, List<Dead> dead) {
+    private List<List<Change>> unsupport(Atom atom, List<Change> done, Evaluation state, List<Dead> dead, int free) {
         var supports = supports(atom, state);
         if (supports.isEmpty()) return List.of(List.of());
         var forWhat = atom.relation().startsWith("violates-") ? atom.relation().substring(9) : atom.relation();
@@ -319,8 +345,8 @@ final class Abduction {
                     made.add(change);
                     applied = suppose(applied, change);
                 }
-                if (steps(all) > MOST_CHANGES) continue;
-                for (var more : unsupport(atom, all, applied, dead)) {
+                if (steps(all) - free > MOST_CHANGES) continue;
+                for (var more : unsupport(atom, all, applied, dead, free)) {
                     var way = new ArrayList<>(made);
                     way.addAll(more);
                     ways.add(way);
@@ -358,15 +384,18 @@ final class Abduction {
         return steps;
     }
 
-    /** {@code found}, and what it breaks mended in the same plan: every way that leaves no rule broken around what changed. */
-    private List<Found> mend(Found found, List<Dead> dead) {
+    /**
+     * {@code found}, and what it breaks mended in the same plan: every way that leaves no rule broken around what
+     * changed; the first {@code free} steps count for nothing against the most a plan may change.
+     */
+    private List<Found> mend(Found found, List<Dead> dead, int free) {
         var state = base;
         for (var change : found.changes()) state = suppose(state, change);
         var broken = broken(state);
         if (broken.isEmpty()) return List.of(found);
         var violation = broken.getFirst();
         var known = dead.size();
-        var ways = unsupport(violation, found.changes(), state, dead);
+        var ways = unsupport(violation, found.changes(), state, dead, free);
         if (ways.isEmpty()) {
             if (dead.size() == known) dead.add(new Dead(found.changes(), "breaks " + shown.of(rule(violation)) + ", and nothing mends it"));
             return List.of();
@@ -375,7 +404,7 @@ final class Abduction {
         for (var more : ways) {
             var changes = new ArrayList<>(found.changes());
             changes.addAll(more);
-            mended.addAll(mend(new Found(changes, found.needs()), dead));
+            mended.addAll(mend(new Found(changes, found.needs()), dead, free));
         }
         return mended;
     }

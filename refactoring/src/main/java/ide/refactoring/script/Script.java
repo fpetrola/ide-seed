@@ -17,7 +17,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/** A refactoring written in the {@code .ref} language, over typed values (see {@link Value}). */
+/**
+ * A refactoring written in the {@code .ref} language, over typed values (see {@link Value}): a script, steps over
+ * primitives and other refactorings; or an intent, what is to hold at the end, which the library's planner makes hold.
+ */
 public final class Script implements Refactoring {
 
     private static final Pattern INTERPOLATION = Pattern.compile("([$#])\\{([^}]*)}");
@@ -28,6 +31,7 @@ public final class Script implements Refactoring {
     private final Map<String, String> defaults;
     private final Map<String, String> sources;
     private final List<Stmt> body;
+    private final String level;
 
     /** An anonymous script: a block of statements run with the given variables, as knowledge effects are. */
     public static Script block(String statements, List<String> variables) {
@@ -38,22 +42,23 @@ public final class Script implements Refactoring {
 
     /** Evaluates an expression with the given variables. */
     public static Value evaluate(String expression, Run run, Map<String, Value> variables) {
-        return new Script("expression", "", List.of(), Map.of(), Map.of(), List.of()).eval(ScriptParser.expression(expression), run, variables);
+        return new Script("expression", "", List.of(), Map.of(), Map.of(), List.of(), "script").eval(ScriptParser.expression(expression), run, variables);
     }
 
     /** Interpolates {@code ${expr}} and {@code #{expr}} in a text with the given variables. */
     public static String render(String text, Run run, Map<String, Value> variables) {
-        return Value.asText(new Script("text", "", List.of(), Map.of(), Map.of(), List.of()).interpolate(text, run, variables));
+        return Value.asText(new Script("text", "", List.of(), Map.of(), Map.of(), List.of(), "script").interpolate(text, run, variables));
     }
 
     Script(String id, String description, List<Param> params, Map<String, String> defaults, Map<String, String> sources,
-           List<Stmt> body) {
+           List<Stmt> body, String level) {
         this.id = id;
         this.description = description;
         this.params = List.copyOf(params);
         this.defaults = Map.copyOf(defaults);
         this.sources = Map.copyOf(sources);
         this.body = List.copyOf(body);
+        this.level = level;
     }
 
     @Override
@@ -71,9 +76,10 @@ public final class Script implements Refactoring {
         return params;
     }
 
+    /** script or intent. */
     @Override
     public String level() {
-        return "script";
+        return level;
     }
 
     /** Number of statements, nested ones included. */
@@ -175,6 +181,7 @@ public final class Script implements Refactoring {
                 case Stmt.Oblige oblige -> run.oblige(text(oblige.assumption(), run, env));
                 case Stmt.Fail fail -> throw new PrimitiveRejected("refactoring.failed", text(fail.message(), run, env));
                 case Stmt.Return ret -> throw new Returned(interpolate(ret.value(), run, env));
+                case Stmt.Want want -> run.want(id, want.want(), new HashMap<>(env));
             }
         }
     }

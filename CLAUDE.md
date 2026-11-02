@@ -98,7 +98,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   engine, which is how scripts are tested), Args (the one place an id-or-address is resolved), Value (Elem, Ref,
   Text, Bool, Items), Primitives (read off the Primitive records: nothing registered by hand), ChangeSignature (the
   only Java composite); the `.ref` language in `ide.refactoring.script` (in a text, `${expr}` writes a value and
-  `#{expr}` writes elements as a body names them); the catalog
+  `#{expr}` writes elements as a body names them; an `intent` is params and one `want`, what is to hold at the end,
+  kept as text and made to hold by the library's Planner through `Run.want`, refused with none); the catalog
   `refactoring/src/main/resources/ide/refactoring/standard.ref`, which writes no code of any language.
 - `rules` (nothing) — Datalog as a tool apart: Term, Atom, Literal, Clause, Rules (built from clauses or from text
   written as any Datalog reads it; refused if unsafe or not stratified), Tuple, Facts (relations asked by pattern: a
@@ -114,7 +115,11 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   made true by abduction (`Abduction`): the body read left to right, the graph (`GraphFacts`, a view of Program in no
   language) binding variables, and a fact with known arguments that does not hold changed by the primitive that
   changes it (visibility, parent, place, what a use binds, a constructor nobody has). Every effect is a quick fix; only one that says `keeps meaning`
-  may also repair a refactoring by itself (a Plan that `changesMeaning` is never taken by the Repairer).
+  may also repair a refactoring by itself (a Plan that `changesMeaning` is never taken by the Repairer). It is also
+  the library's Planner (`Knowledge.standard` registers it): a want is read as a definition's body and made to hold
+  the same way, what that breaks mended in the same plan (rule by rule, as written) without what the want asks for
+  counting toward the 4; the cheapest plan that keeps meaning runs on the Run, with no mended one the want alone, and
+  the repairer after.
 - `maven` (nothing) — what Maven says about a project: `Maven.project(folder)` is the nearest folder with a pom.xml,
   and `classpath(cache)` is what `dependency:build-classpath` answers (test scope, every module of a reactor),
   remembered in a file while the POMs' sizes and times do not change; what Maven cannot resolve is said, not thrown.

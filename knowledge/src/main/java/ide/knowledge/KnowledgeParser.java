@@ -181,30 +181,40 @@ final class KnowledgeParser {
     private static Clause definition(String text, java.util.Set<Literal> conditions) {
         var when = text.indexOf(" when ");
         var head = atom(when < 0 ? text : text.substring(0, when));
+        return new Clause(head, when < 0 ? List.of() : body(text.substring(when + 6), conditions));
+    }
+
+    /**
+     * What an intent wants, as the literals of a body read as a definition's: {@code a and given b and not c}. A
+     * {@code given} one is a condition, added to {@code conditions}.
+     */
+    static List<Literal> want(String text, java.util.Set<Literal> conditions) {
+        return body(text, conditions);
+    }
+
+    private static List<Literal> body(String text, java.util.Set<Literal> conditions) {
         var body = new ArrayList<Literal>();
         var anonymous = new int[1];
-        if (when >= 0) {
-            for (var part : split(text.substring(when + 6), " and ")) {
-                var literal = part.strip();
-                var given = literal.startsWith("given ");
-                if (given) literal = literal.substring(6).strip();
-                Literal read;
-                if (literal.startsWith("not ")) {
-                    read = new Literal.Negative(atom(literal.substring(4), anonymous));
-                } else if (literal.contains("(")) {
-                    read = new Literal.Positive(atom(literal, anonymous));
-                } else {
-                    var unequal = literal.indexOf("!=");
-                    var equal = unequal >= 0 ? unequal : literal.indexOf('=');
-                    if (equal < 0) throw new IllegalArgumentException("knowledge: expected an atom or a comparison: " + literal);
-                    read = new Literal.Comparison(term(literal.substring(0, equal), anonymous), unequal < 0,
-                            term(literal.substring(equal + (unequal >= 0 ? 2 : 1)), anonymous));
-                }
-                if (given) conditions.add(read);
-                body.add(read);
+        for (var part : split(text, " and ")) {
+            var literal = part.strip();
+            var given = literal.startsWith("given ");
+            if (given) literal = literal.substring(6).strip();
+            Literal read;
+            if (literal.startsWith("not ")) {
+                read = new Literal.Negative(atom(literal.substring(4), anonymous));
+            } else if (literal.contains("(")) {
+                read = new Literal.Positive(atom(literal, anonymous));
+            } else {
+                var unequal = literal.indexOf("!=");
+                var equal = unequal >= 0 ? unequal : literal.indexOf('=');
+                if (equal < 0) throw new IllegalArgumentException("knowledge: expected an atom or a comparison: " + literal);
+                read = new Literal.Comparison(term(literal.substring(0, equal), anonymous), unequal < 0,
+                        term(literal.substring(equal + (unequal >= 0 ? 2 : 1)), anonymous));
             }
+            if (given) conditions.add(read);
+            body.add(read);
         }
-        return new Clause(head, body);
+        return body;
     }
 
     /** A literal that holds where {@code literal} does not: an atom and its negation, {@code =} and {@code !=}. */

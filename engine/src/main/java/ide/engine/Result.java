@@ -4,7 +4,8 @@ import java.util.List;
 
 /**
  * Outcome of a transaction: applied (possibly after repairs), or rolled back because of violations. {@code trace} is
- * what ran (calls, primitives, attempts, repairs); {@code search} is how the repairer looked for repairs.
+ * what ran (calls, primitives, attempts, repairs); {@code search} is how a planner deduced what an intent made, and
+ * how the repairer looked for repairs.
  * {@code obligations} are what could not be decided and is assumed; with any, the guarantee is "assumed".
  */
 public record Result(boolean applied, List<Violation> violations, List<String> repairs, Trace trace, Trace search,
