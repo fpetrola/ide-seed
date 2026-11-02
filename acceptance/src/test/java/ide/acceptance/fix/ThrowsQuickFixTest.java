@@ -60,4 +60,26 @@ class ThrowsQuickFixTest {
         assertThat(ws.source("a/Config.java")).contains("    String read(Path path) throws Exception {");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** One more that is a supertype of what it declares: those it covers go, as they are said by it. */
+    @Test
+    void aSupertypeDeclaredCoversTheSubtypesAlreadyThere() {
+        var ws = Workspace.of(Map.of("a/Config.java", """
+                package a;
+
+                import java.io.IOException;
+                import java.sql.SQLException;
+
+                class Config {
+                    void run() throws IOException, SQLException {
+                        throw new Exception("any");
+                    }
+                }
+                """));
+
+        ws.fix("a/Config.java", 8, "add throws Exception to run()");
+
+        assertThat(ws.errors()).isEmpty();
+        assertThat(ws.source("a/Config.java")).contains("    void run() throws Exception {");
+    }
 }

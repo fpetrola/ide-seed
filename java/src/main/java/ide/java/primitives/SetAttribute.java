@@ -35,11 +35,37 @@ final class SetAttribute {
     }
 
     static Change apply(Primitive.Set set, Context c, Program before) {
-        var gone = set.attribute().equals("throws") ? untold(c, before, set.element(), set.value()) : List.<Change.Dropped>of();
-        set(c, set.element(), set.attribute(), set.value());
+        var value = set.attribute().equals("throws") ? uncovered(c, before, set.element(), set.value()) : set.value();
+        var gone = set.attribute().equals("throws") ? untold(c, before, set.element(), value) : List.<Change.Dropped>of();
+        set(c, set.element(), set.attribute(), value);
         var change = set.intent(before, null);
         for (var dropped : gone) change = change.expect(dropped);
         return change;
+    }
+
+    /**
+     * What a callable is to declare it throws, without what another of them covers: a type it declares whose supertype
+     * is among them goes, as that one says it (one not declared yet is taken as written, or of java.lang).
+     */
+    private static String uncovered(Context c, Program before, ElementId id, String value) {
+        CallableDeclaration<?> callable = c.declaration(before.element(id)).as(CallableDeclaration.class);
+        var types = java.util.Arrays.stream(value.split(",")).map(String::strip).filter(t -> !t.isEmpty()).toList();
+        var qualified = new java.util.HashMap<String, String>();
+        var ancestors = new java.util.HashMap<String, java.util.Set<String>>();
+        for (var thrown : callable.getThrownExceptions()) {
+            if (!(thrown instanceof com.github.javaparser.ast.type.ClassOrInterfaceType written)) continue;
+            var declaration = ide.java.semantics.Resolution.resolveDeclaration(written);
+            if (declaration == null) continue;
+            qualified.put(written.asString(), declaration.getQualifiedName());
+            try {
+                ancestors.put(written.asString(), declaration.getAllAncestors().stream().map(a -> a.getQualifiedName()).collect(java.util.stream.Collectors.toSet()));
+            } catch (RuntimeException unknown) {
+                // what it extends cannot be told: it stays
+            }
+        }
+        java.util.function.Function<String, String> named = t -> t.contains(".") ? t : qualified.getOrDefault(t, "java.lang." + t);
+        return String.join(", ", types.stream().filter(t -> types.stream().noneMatch(other -> other != t
+                && ancestors.getOrDefault(t, java.util.Set.of()).contains(named.apply(other)))).toList());
     }
 
     /** The uses of the types a callable declares it throws that it will not any more: they go on purpose. */

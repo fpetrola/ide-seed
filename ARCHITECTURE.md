@@ -332,7 +332,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   de un parámetro; este último encontró que los dos drivers perdían la identidad del método.
   La obligación 15 (2026-11-02): un método o constructor dice qué declara tirar, como está escrito (`THROWS`), y un
   `Set throws` declara los tipos dados, cada uno escrito como su archivo puede nombrarlo (Java importa el calificado). Un
-  tipo que deja de declarar se va a propósito: sus usos no son ligaduras perdidas.
+  tipo que deja de declarar se va a propósito: sus usos no son ligaduras perdidas. Lo que otro de los dados cubre (un
+  supertipo suyo) no se escribe: agregar `Exception` deja solo `Exception`.
 - **Abierto.** Si `diagnostics` y `completion` quedan en el mismo contrato o en uno de análisis aparte: juntos
   hasta que estorbe.
 
