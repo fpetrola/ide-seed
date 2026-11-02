@@ -324,6 +324,17 @@ final class Workbench extends JPanel {
     /** Where an agent finds this IDE, while it is served. */
     private ide.mcp.Http served;
     private Path servedConfig;
+    private Path servedSettings;
+
+    /**
+     * The command Claude Code's hook runs after each tool it uses: the event it gets, as it gets it, sent to the IDE's
+     * {@code activity} (a step of the task being done), streamed and not as an argument, however large it is.
+     */
+    static String hook(String url, String token) {
+        return "{ printf '%s' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"activity\",\"arguments\":{\"event\":'; "
+                + "cat; printf '%s' '}}}'; } | curl -s -m 3 -o /dev/null -X POST -H 'Content-Type: application/json' "
+                + "-H 'Accept: application/json, text/event-stream' -H 'Authorization: Bearer " + token + "' --data-binary @- " + url;
+    }
 
     /**
      * Serves this IDE to agents on this machine over MCP, as it is: what they change, the window shows. Writes where
@@ -346,7 +357,7 @@ final class Workbench extends JPanel {
                 throw new IllegalStateException(e.getCause());
             }
         }, tool -> {
-            say("agent: " + tool);
+            if (!tool.equals("activity")) say("agent: " + tool); // a step shows under its task
             if (!ide.text("diff", Map.of()).isEmpty()) ide.call("save", Map.of()); // what an agent changes reaches disk at once
             refresh();
             pointed();
@@ -357,7 +368,14 @@ final class Workbench extends JPanel {
                 "headers", Map.of("Authorization", "Bearer " + token)))));
         java.nio.file.Files.writeString(servedConfig, config);
         java.nio.file.Files.setPosixFilePermissions(servedConfig, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
-        if (terminal != null) terminal.environment("IDESEED_MCP_CONFIG", servedConfig.toString());
+        servedSettings = folder.resolve("ideseed-" + java.net.URI.create(served.url()).getPort() + "-settings.json");
+        java.nio.file.Files.writeString(servedSettings, Json.write(Map.of("hooks", Map.of("PostToolUse", List.of(Map.of("matcher", "*",
+                "hooks", List.of(Map.of("type", "command", "command", hook(served.url(), token)))))))));
+        java.nio.file.Files.setPosixFilePermissions(servedSettings, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        if (terminal != null) {
+            terminal.environment("IDESEED_MCP_CONFIG", servedConfig.toString());
+            terminal.environment("IDESEED_SETTINGS", servedSettings.toString());
+        }
         say("agents reach this IDE at " + served.url());
         return servedConfig;
     }
@@ -421,6 +439,7 @@ final class Workbench extends JPanel {
             served.stop();
             try {
                 java.nio.file.Files.deleteIfExists(servedConfig);
+                java.nio.file.Files.deleteIfExists(servedSettings);
             } catch (IOException ignored) {
                 // a file left behind names a port nobody listens on
             }
@@ -436,7 +455,7 @@ final class Workbench extends JPanel {
             return;
         }
         try {
-            terminal.run("claude --mcp-config \"$IDESEED_MCP_CONFIG\"");
+            terminal.run("claude --mcp-config \"$IDESEED_MCP_CONFIG\" --settings \"$IDESEED_SETTINGS\"");
             claudeListens = true;
         } catch (IOException e) {
             say("the terminal did not take it: " + e.getMessage());
@@ -464,6 +483,15 @@ final class Workbench extends JPanel {
         editors.select(line, 1, endLine, Math.max(1, lines[Math.min(endLine, lines.length) - 1].length()));
     }
 
+    private void tell(String message) {
+        try {
+            terminal.run(message);
+            say("told Claude: " + message);
+        } catch (IOException e) {
+            say("could not tell Claude in the terminal (" + e.getMessage() + "): " + message);
+        }
+    }
+
     /** Whether Claude Code was started in the terminal and the terminal still runs: what is said to it, it reads there. */
     private boolean claudeListens;
 
@@ -481,8 +509,14 @@ final class Workbench extends JPanel {
         var message = String.valueOf(steer.get("message"));
         if (told) {
             try {
-                terminal.run(message);
-                say("told Claude: " + message);
+                if (kind.equals("stop")) {
+                    terminal.type("\u001b"); // Esc: Claude Code stops what it is doing, as when the person presses it
+                    var later = new javax.swing.Timer(400, event -> tell(message)); // apart, or Esc and the text are one key
+                    later.setRepeats(false);
+                    later.start();
+                } else {
+                    tell(message);
+                }
             } catch (IOException e) {
                 say("could not tell Claude in the terminal (" + e.getMessage() + "): " + message);
             }

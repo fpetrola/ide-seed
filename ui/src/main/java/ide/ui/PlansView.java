@@ -55,11 +55,11 @@ final class PlansView extends JPanel {
     }
 
     /** A task as the tree shows it. */
-    record Line(String id, String title, String state, int depth, int done, int of, List<String> waiting) {
+    record Line(String id, String title, String state, int depth, int done, int of, List<String> waiting, String step) {
         @Override
         public String toString() {
             return id + " [" + state + "] " + title + (of > 0 ? " " + done + "/" + of : "")
-                    + (waiting.isEmpty() ? "" : " (waits " + String.join(", ", waiting) + ")");
+                    + (waiting.isEmpty() ? "" : " (waits " + String.join(", ", waiting) + ")") + (step.isEmpty() ? "" : " - " + step);
         }
     }
 
@@ -71,14 +71,17 @@ final class PlansView extends JPanel {
     private final DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode());
     private final JTree tree = new JTree(model);
     private final JEditorPane details = new JEditorPane("text/html", "");
-    private final JButton switchTo = button("Go on with this plan", "switch");
-    private final JButton planPause = button("Pause plan", "pause-plan");
-    private final JButton planResume = button("Resume plan", "resume-plan");
-    private final JButton planReplan = button("Replan…", "replan-plan");
-    private final JButton taskPause = button("Pause", "pause");
-    private final JButton taskResume = button("Resume", "resume");
-    private final JButton taskComment = button("Comment…", "comment");
-    private final JButton taskReplan = button("Replan…", "replan");
+    private final JButton planStart = button("Start", "start-plan", "DOING");
+    private final JButton planPause = button("Pause", "pause-plan", "PAUSED");
+    private final JButton planStop = button("Stop", "stop-plan", "BLOCKED");
+    private final JButton planReplan = button("Replan\u2026", "replan-plan", null);
+    private final JButton taskStart = button("Start", "start", "DOING");
+    private final JButton taskPause = button("Pause", "pause", "PAUSED");
+    private final JButton taskStop = button("Stop", "stop", "BLOCKED");
+    private final JButton taskComment = button("Comment\u2026", "comment", null);
+    private final JButton taskReplan = button("Replan\u2026", "replan", null);
+    private final java.util.Set<Integer> expanded = new java.util.HashSet<>();
+    private boolean allSteps;
     private String shown = "";
     private String active = "";
     private String chosenTask = "";
@@ -113,7 +116,7 @@ final class PlansView extends JPanel {
         var planBar = new JPanel(new BorderLayout(0, 4));
         progress.setStringPainted(true);
         planBar.add(progress, BorderLayout.PAGE_START);
-        planBar.add(row(switchTo, planPause, planResume, planReplan), BorderLayout.CENTER);
+        planBar.add(row(planStart, planPause, planStop, planReplan), BorderLayout.CENTER);
         top.add(planBar, BorderLayout.PAGE_END);
         add(top, BorderLayout.PAGE_START);
 
@@ -132,13 +135,13 @@ final class PlansView extends JPanel {
         details.setEditable(false);
         details.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
         details.addHyperlinkListener(event -> {
-            if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) follow(Integer.parseInt(event.getDescription()));
+            if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) click(event.getDescription());
         });
         var detailPanel = new JPanel(new BorderLayout());
         var detailScroll = new JScrollPane(details);
         detailScroll.setBorder(BorderFactory.createEmptyBorder());
         detailPanel.add(detailScroll, BorderLayout.CENTER);
-        detailPanel.add(row(taskPause, taskResume, taskComment, taskReplan), BorderLayout.PAGE_END);
+        detailPanel.add(row(taskStart, taskPause, taskStop, taskComment, taskReplan), BorderLayout.PAGE_END);
 
         var split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, treeScroll, detailPanel);
         split.setResizeWeight(0.5);
@@ -148,8 +151,16 @@ final class PlansView extends JPanel {
         showTask(null);
     }
 
-    private JButton button(String text, String kind) {
+    private JButton button(String text, String kind, String icon) {
         var button = new JButton(text);
+        if (icon != null) button.setIcon(Icons.of(icon));
+        button.setToolTipText(switch (kind.replace("-plan", "")) {
+            case "start" -> "Claude works on it now";
+            case "pause" -> "Claude finishes the step it is in, and waits";
+            case "stop" -> "Claude stops at once (Esc in its terminal), and waits";
+            case "comment" -> "Something for Claude to know about it";
+            default -> "Ask Claude to change the plan";
+        });
         button.putClientProperty("JButton.buttonType", "borderless");
         button.addActionListener(event -> act(kind));
         return button;
@@ -198,6 +209,10 @@ final class PlansView extends JPanel {
             showTask(null);
             return;
         }
+        if (!task.equals(chosenTask)) {
+            expanded.clear();
+            allSteps = false;
+        }
         chosenTask = task;
         showTask(found);
         filling = true;
@@ -210,6 +225,29 @@ final class PlansView extends JPanel {
         filling = false;
     }
 
+    /**
+     * What a link of the details does: {@code task:t3} shows that task, {@code link:0} opens that code, {@code more:4}
+     * shows all of that entry of the timeline, {@code steps} all the steps.
+     */
+    void click(String href) {
+        var colon = href.indexOf(':');
+        var what = colon < 0 ? href : href.substring(0, colon);
+        var which = colon < 0 ? "" : href.substring(colon + 1);
+        switch (what) {
+            case "task" -> select(which);
+            case "link" -> follow(Integer.parseInt(which));
+            case "more" -> {
+                expanded.add(Integer.parseInt(which));
+                select(chosenTask);
+            }
+            case "steps" -> {
+                allSteps = !allSteps;
+                select(chosenTask);
+            }
+            default -> { }
+        }
+    }
+
     /** Opens the code the chosen task's link {@code n} (from 0) is about. */
     void follow(int n) {
         if (n < 0 || n >= links.size()) return;
@@ -218,8 +256,8 @@ final class PlansView extends JPanel {
     }
 
     /**
-     * What the person says: of the chosen task {@code pause}, {@code resume}, {@code comment}, {@code replan}; of the
-     * plan shown {@code switch}, {@code pause-plan}, {@code resume-plan}, {@code replan-plan}.
+     * What the person says: of the chosen task {@code start}, {@code pause}, {@code stop}, {@code resume},
+     * {@code comment}, {@code replan}; of the plan shown the same, ending in {@code -plan}, or {@code switch}.
      */
     void act(String kind) {
         var ofPlan = kind.endsWith("-plan") || kind.equals("switch");
@@ -245,7 +283,7 @@ final class PlansView extends JPanel {
         for (var task : tasks) {
             var line = new Line(String.valueOf(task.get("id")), String.valueOf(task.get("title")), String.valueOf(task.get("state")),
                     number(task.get("depth")), number(task.get("done")), number(task.get("of")),
-                    ((List<?>) task.get("waiting")).stream().map(String::valueOf).toList());
+                    ((List<?>) task.get("waiting")).stream().map(String::valueOf).toList(), String.valueOf(task.getOrDefault("step", "")));
             var node = new DefaultMutableTreeNode(line);
             at.getOrDefault(String.valueOf(task.get("parent")), root).add(node);
             at.put(line.id(), node);
@@ -266,84 +304,158 @@ final class PlansView extends JPanel {
         progress.setValue(done);
         progress.setString(done + " of " + of + " done");
         headingLine = named.isEmpty() ? "No plan" : named + " (" + state + ") " + done + " of " + of + " done";
-        switchTo.setVisible(!named.isEmpty() && !shown.equals(active));
-        planPause.setVisible(state.equals("active"));
-        planResume.setVisible(state.equals("paused"));
+        var going = state.equals("active");
+        planStart.setVisible(!named.isEmpty() && !going);
+        planPause.setVisible(going);
+        planStop.setVisible(going);
         planReplan.setVisible(!named.isEmpty());
     }
 
     private String headingLine = "No plan";
 
+    private static final Map<String, String> COLORS = Map.of("doing", "#3F8BD8", "done", "#4FA85C", "blocked", "#D8586E",
+            "paused", "#D6893C", "todo", "#8C8C8C", "dropped", "#8C8C8C");
+    private static final Map<String, String> SIGNS = Map.of("doing", "\u25B6", "done", "\u2713", "blocked", "!", "paused", "\u2016",
+            "todo", "\u25CB", "dropped", "\u00D7");
+    private static final int SHORT = 160;
+    private static final int STEPS = 5;
+
+    /**
+     * The chosen task, in parts one can take in at a glance: what it is and how it is, what it is doing now, what it is
+     * about, its subtasks, its code, what was said of it (long notes cut, each to be opened), and its last steps.
+     */
     @SuppressWarnings("unchecked")
     private void showTask(Map<String, Object> task) {
         links.clear();
         var lines = new ArrayList<String>();
-        var html = new StringBuilder("<html><body style='font-family:sans-serif;margin:6px'>");
+        var html = new StringBuilder("<html><body style='margin:6px'>");
         if (task == null) {
             html.append("<font color='#808080'>Choose a task to see it.</font>");
         } else {
             var state = String.valueOf(task.get("state"));
+            var color = COLORS.getOrDefault(state, "#8C8C8C");
+            var parent = String.valueOf(task.get("parent"));
             lines.add(task.get("id") + " " + task.get("title"));
-            html.append("<b>").append(escape(task.get("id") + "  " + task.get("title"))).append("</b><br>");
-            var fields = new LinkedHashMap<String, String>();
-            fields.put("state", state);
-            fields.put("plan", String.valueOf(task.get("plan")));
-            if (!String.valueOf(task.get("parent")).isEmpty()) fields.put("part of", String.valueOf(task.get("parent")));
-            if (!((List<?>) task.get("subtasks")).isEmpty()) fields.put("subtasks", joined(task.get("subtasks")));
-            if (!((List<?>) task.get("after")).isEmpty()) fields.put("after", joined(task.get("after")));
-            if (!((List<?>) task.get("waiting")).isEmpty()) fields.put("waits for", joined(task.get("waiting")));
-            html.append("<table cellpadding='1' cellspacing='0'>");
-            fields.forEach((name, value) -> {
-                lines.add(name + ": " + value);
-                html.append("<tr><td><font color='#808080'>").append(name).append("</font></td><td>").append(escape(value)).append("</td></tr>");
-            });
-            html.append("</table>");
+            lines.add("state: " + state);
+            lines.add("plan: " + task.get("plan") + (parent.isEmpty() ? "" : ", part of " + parent));
+            html.append("<div style='font-size:115%'><b>").append(escape(String.valueOf(task.get("title")))).append("</b></div>");
+            var where = new ArrayList<String>();
+            where.add(String.valueOf(task.get("id")));
+            if (!parent.isEmpty()) where.add("in <a href='task:" + parent + "'>" + parent + "</a>");
+            where.add("plan " + task.get("plan"));
+            html.append("<div><font color='").append(color).append("'><b>").append(SIGNS.getOrDefault(state, "")).append(' ').append(state)
+                    .append("</b></font> &nbsp;<font color='#808080'>").append(String.join(" \u00B7 ", where)).append("</font></div>");
+            var waiting = (List<?>) task.get("waiting");
+            if (!waiting.isEmpty()) {
+                lines.add("waits for: " + joined(waiting));
+                html.append("<div><font color='#D6893C'>waits for</font> ").append(String.join(", ", waiting.stream()
+                        .map(id -> "<a href='task:" + id + "'>" + id + "</a>").toList())).append("</div>");
+            }
+            var timeline = (List<Map<String, Object>>) task.get("timeline");
+            var steps = new ArrayList<Integer>();
+            var said = new ArrayList<Integer>();
+            for (var i = 0; i < timeline.size(); i++) (timeline.get(i).get("kind").equals("step") ? steps : said).add(i);
+            if (state.equals("doing") && !steps.isEmpty()) {
+                var now = String.valueOf(timeline.get(steps.getLast()).get("text"));
+                lines.add("now: " + now);
+                html.append("<div style='margin-top:4px'><font color='#6A9FD8'>\u25B8 now: ").append(escape(shortened(now, SHORT)))
+                        .append("</font></div>");
+            }
             var description = String.valueOf(task.get("description"));
             if (!description.isEmpty()) {
                 lines.add(description);
-                html.append("<p>").append(escape(description).replace("\n", "<br>")).append("</p>");
+                html.append(section("About")).append("<div>").append(escape(description).replace("\n", "<br>")).append("</div>");
+            }
+            var subtasks = (List<?>) task.get("subtasks");
+            if (!subtasks.isEmpty()) {
+                html.append(section("Subtasks"));
+                var plan = (Map<String, Object>) ide.call("plan", Map.of("plan", String.valueOf(task.get("plan"))));
+                for (var line : (List<Map<String, Object>>) plan.get("tasks")) {
+                    if (!subtasks.contains(line.get("id"))) continue;
+                    var its = String.valueOf(line.get("state"));
+                    lines.add("subtask " + line.get("id") + " [" + its + "] " + line.get("title"));
+                    html.append("<div><font color='").append(COLORS.getOrDefault(its, "#8C8C8C")).append("'>").append(SIGNS.getOrDefault(its, ""))
+                            .append("</font> <a href='task:").append(line.get("id")).append("'>").append(escape(String.valueOf(line.get("title"))))
+                            .append("</a> <font color='#808080'>").append(line.get("id")).append("</font></div>");
+                }
             }
             var linked = (List<Map<String, Object>>) task.get("links");
             if (!linked.isEmpty()) {
-                html.append("<p><font color='#808080'>Code</font><br>");
+                html.append(section("Code"));
                 for (var link : linked) {
                     var place = link.get("path") + ":" + link.get("line") + (number(link.get("endLine")) > number(link.get("line"))
                             ? "-" + link.get("endLine") : "");
-                    var name = String.valueOf(link.get("element")).isEmpty() ? place : link.get("element") + "  " + place;
+                    var name = String.valueOf(link.get("element")).isEmpty() ? place : String.valueOf(link.get("element"));
                     var note = String.valueOf(link.get("note"));
-                    lines.add("link " + links.size() + ": " + name + (note.isEmpty() ? "" : " - " + note));
-                    html.append("<a href='").append(links.size()).append("'>").append(escape(name)).append("</a>")
-                            .append(note.isEmpty() ? "" : " <font color='#808080'>" + escape(note) + "</font>").append("<br>");
+                    lines.add("link " + links.size() + ": " + name + " " + place + (note.isEmpty() ? "" : " - " + note));
+                    html.append("<div><a href='link:").append(links.size()).append("'>").append(escape(name)).append("</a> <font color='#808080'>")
+                            .append(escape(place)).append(note.isEmpty() ? "" : " \u2014 " + escape(note)).append("</font></div>");
                     links.add(link);
                 }
-                html.append("</p>");
             }
-            var timeline = (List<Map<String, Object>>) task.get("timeline");
-            if (!timeline.isEmpty()) {
-                html.append("<p><font color='#808080'>Timeline</font><br>");
-                for (var entry : timeline.reversed()) {
-                    var at = String.valueOf(entry.get("at"));
-                    var time = at.length() >= 16 ? at.substring(11, 16) : at;
-                    var who = String.valueOf(entry.get("who"));
-                    lines.add(time + " " + who + " " + entry.get("kind") + ": " + entry.get("text"));
-                    html.append("<font color='#808080'>").append(time).append("</font> <b>").append(who.equals("person") ? "you" : "Claude")
-                            .append("</b> <font color='#808080'>").append(escape(String.valueOf(entry.get("kind")))).append("</font> ")
-                            .append(escape(String.valueOf(entry.get("text")))).append("<br>");
+            if (!said.isEmpty()) {
+                html.append(section("Notes"));
+                for (var i : said.reversed()) {
+                    var entry = timeline.get(i);
+                    var kind = String.valueOf(entry.get("kind"));
+                    var text = String.valueOf(entry.get("text"));
+                    lines.add(time(entry) + " " + entry.get("who") + " " + kind + ": " + text);
+                    html.append("<div style='margin-top:3px'><font color='#808080'>").append(time(entry)).append("</font> <b>")
+                            .append(entry.get("who").equals("person") ? "you" : "Claude").append("</b> ");
+                    if (kind.equals("state")) {
+                        html.append("<font color='").append(COLORS.getOrDefault(text, "#808080")).append("'>\u2192 ").append(escape(text)).append("</font>");
+                    } else {
+                        if (!kind.equals("note")) html.append("<font color='#808080'>").append(escape(kind)).append("</font> ");
+                        var whole = expanded.contains(i) || text.length() <= SHORT;
+                        html.append(escape(whole ? text : shortened(text, SHORT)).replace("\n", "<br>"));
+                        if (!whole) html.append(" <a href='more:").append(i).append("'>more</a>");
+                    }
+                    html.append("</div>");
                 }
-                html.append("</p>");
             }
-            taskPause.setVisible(!state.equals("paused") && !state.equals("done") && !state.equals("dropped"));
-            taskResume.setVisible(state.equals("paused"));
+            if (!steps.isEmpty()) {
+                html.append(section("Steps"));
+                var newest = steps.reversed();
+                for (var i : allSteps ? newest : newest.subList(0, Math.min(STEPS, newest.size()))) {
+                    var entry = timeline.get(i);
+                    lines.add(time(entry) + " " + entry.get("who") + " step: " + entry.get("text"));
+                    html.append("<div><font color='#808080'>").append(time(entry)).append("</font> ")
+                            .append(escape(shortened(String.valueOf(entry.get("text")), SHORT))).append("</div>");
+                }
+                if (steps.size() > STEPS) {
+                    html.append("<div><a href='steps'>").append(allSteps ? "only the last " + STEPS : (steps.size() - STEPS) + " earlier steps")
+                            .append("</a></div>");
+                }
+            }
+            var finished = state.equals("done") || state.equals("dropped");
+            taskStart.setVisible(!finished && !state.equals("doing"));
+            taskPause.setVisible(state.equals("doing"));
+            taskStop.setVisible(state.equals("doing"));
         }
         taskComment.setEnabled(task != null);
         taskReplan.setEnabled(task != null);
         if (task == null) {
+            taskStart.setVisible(false);
             taskPause.setVisible(false);
-            taskResume.setVisible(false);
+            taskStop.setVisible(false);
         }
         details.setText(html.append("</body></html>").toString());
         details.setCaretPosition(0);
         detail = lines;
+    }
+
+    private static String section(String name) {
+        return "<div style='margin-top:8px'><font color='#808080' size='-1'><b>" + name.toUpperCase(Locale.ROOT) + "</b></font></div>";
+    }
+
+    private static String time(Map<String, Object> entry) {
+        var at = String.valueOf(entry.get("at"));
+        return at.length() >= 16 ? at.substring(11, 16) : at;
+    }
+
+    private static String shortened(String text, int longest) {
+        var line = text.strip();
+        return line.length() <= longest ? line : line.substring(0, longest - 1) + "\u2026";
     }
 
     // ---- as tests read it
@@ -365,6 +477,11 @@ final class PlansView extends JPanel {
         var listed = new ArrayList<String>();
         for (var i = 0; i < chooser.getItemCount(); i++) listed.add(chooser.getItemAt(i).toString());
         return listed;
+    }
+
+    /** The details as they are drawn. */
+    String html() {
+        return details.getText();
     }
 
     /** The chosen task as the details say it, line by line. */
@@ -403,7 +520,8 @@ final class PlansView extends JPanel {
                 if (finished) title = "<font color='#808080'>" + title + "</font>";
                 var extra = (line.of() > 0 ? "  " + line.done() + "/" + line.of() : "")
                         + (line.waiting().isEmpty() ? "" : "  waits " + String.join(", ", line.waiting()));
-                setText("<html>" + title + "<font color='#808080'>" + escape(extra) + "  " + line.id() + "</font></html>");
+                var step = line.step().isEmpty() ? "" : "<br><font color='#6A9FD8'>\u25B8 " + escape(shortened(line.step(), 60)) + "</font>";
+                setText("<html>" + title + "<font color='#808080'>" + escape(extra) + "  " + line.id() + "</font>" + step + "</html>");
                 setIcon(icon(line.state()));
             }
             return this;

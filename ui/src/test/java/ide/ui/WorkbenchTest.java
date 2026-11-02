@@ -8,6 +8,7 @@ import javax.swing.JComponent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -321,7 +322,7 @@ class WorkbenchTest {
             workbench.act("claude");
 
             assertThat(String.join(" ", workbench.terminalView().orElseThrow().first()))
-                    .contains("claude --mcp-config \"$IDESEED_MCP_CONFIG\"");
+                    .contains("claude --mcp-config \"$IDESEED_MCP_CONFIG\" --settings \"$IDESEED_SETTINGS\"");
         } finally {
             workbench.closeDown();
         }
@@ -410,6 +411,33 @@ class WorkbenchTest {
         assertThat(workbench.editors().selectedLines()).hasValue("4-4");
     }
 
+    /** The details are in parts: subtasks to go to, long notes cut until opened, only the last steps until asked. */
+    @Test
+    void aTaskIsReadInPartsAndLongTextIsCutUntilOpened() throws IOException {
+        var workspace = planned();
+        var long_ = "word ".repeat(60).strip();
+        workspace.capabilities().invoke("task-update", Map.of("task", "t2", "note", long_));
+        for (var i = 1; i <= 7; i++) {
+            workspace.capabilities().invoke("activity", Map.of("event", Map.of("tool_name", "Bash", "tool_input", Map.of("command", "step " + i))));
+        }
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+        workbench.plans().select("t2");
+
+        assertThat(workbench.plans().detail()).contains("now: Bash: step 7", "subtask t3 [todo] Its uses")
+                .anySatisfy(line -> assertThat(line).endsWith("step: Bash: step 3"))
+                .noneSatisfy(line -> assertThat(line).endsWith("step: Bash: step 2"));
+        assertThat(workbench.plans().html().replaceAll("\\s+", " ")).contains("more:").doesNotContain(long_);
+
+        workbench.plans().click("steps");
+        assertThat(workbench.plans().detail()).anySatisfy(line -> assertThat(line).endsWith("step: Bash: step 1"));
+        var more = java.util.regex.Pattern.compile("more:\\d+").matcher(workbench.plans().html()).results().findFirst().orElseThrow().group();
+        workbench.plans().click(more);
+        assertThat(workbench.plans().html().replaceAll("\\s+", " ")).contains(long_);
+
+        workbench.plans().click("task:t3");
+        assertThat(workbench.plans().detail()).first().isEqualTo("t3 Its uses");
+    }
+
     /** What the person says from the window changes the plan at once and waits to be told to Claude. */
     @Test
     void thePersonSteersFromTheWindow() throws IOException {
@@ -437,12 +465,45 @@ class WorkbenchTest {
         assertThat(workbench.plans().plansListed()).containsExactly("Encapsulate A (paused) 1/4", "Rename B (active) 0/1");
 
         workbench.plans().choose("p1");
-        workbench.plans().act("switch");
+        workbench.plans().act("start-plan");
 
         assertThat(workbench.plans().plansListed()).containsExactly("Encapsulate A (active) 1/4", "Rename B (paused) 0/1");
         dialogs.line("do its tests first");
         workbench.plans().act("replan-plan");
-        assertThat(workspace.capabilities().invoke("steering", Map.of())).contains("switched to plan p1", "replan plan p1", "do its tests first");
+        assertThat(workspace.capabilities().invoke("steering", Map.of())).contains("started plan p1", "replan plan p1", "do its tests first");
+    }
+
+    /** Claude Code's hook, as the window writes it, tells the IDE each tool Claude used: a step of the task it is doing. */
+    @Test
+    void whatClaudeDoesIsAStepOfItsTaskThroughItsHook(@TempDir Path served) throws Exception {
+        var workspace = planned();
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+        try {
+            workbench.serve(served);
+            Path settings;
+            try (var files = Files.list(served)) {
+                settings = files.filter(f -> f.toString().endsWith("-settings.json")).findFirst().orElseThrow();
+            }
+            assertThat(Files.getPosixFilePermissions(settings)).isEqualTo(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            @SuppressWarnings("unchecked") var hook = (String) ((Map<String, Object>) ((List<?>) ((Map<String, Object>) ((List<?>)
+                    ((Map<String, Object>) ((Map<String, Object>) ide.core.Json.read(Files.readString(settings))).get("hooks"))
+                            .get("PostToolUse")).getFirst()).get("hooks")).getFirst()).get("command");
+            var event = "{\"session_id\":\"s\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"" + root.resolve("a/A.java")
+                    + "\",\"old_string\":\"x\",\"new_string\":\"" + "y".repeat(200_000) + "\"}}";
+
+            var process = new ProcessBuilder("sh", "-c", hook).redirectErrorStream(true).start();
+            try (var in = process.getOutputStream()) {
+                in.write(event.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            assertThat(process.waitFor()).as(new String(process.getInputStream().readAllBytes())).isZero();
+            javax.swing.SwingUtilities.invokeAndWait(() -> { });
+
+            assertThat(workspace.capabilities().invoke("task", Map.of("task", "t2"))).contains("\"kind\":\"step\",\"text\":\"Edit a/A.java\"");
+            assertThat(workbench.plans().lines()).contains("t2 [doing] Encapsulate x 0/2 - Edit a/A.java");
+        } finally {
+            workbench.closeDown();
+        }
+        assertThat(served).isEmptyDirectory();
     }
 
     /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */

@@ -158,8 +158,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   thread, after a sync, and saved right after, so an agent's own file tools and the IDE never disagree; Watcher syncs
   when the folder changes; Ctrl+Esc runs Claude Code in the terminal with that server; PlansView, beside the
   editors, shows the plans: which one, how far it got, its lines of action as a tree, and the chosen task with its
-  links (they open the code) and timeline; what the person says there is steered, typed into Claude's terminal if
-  Claude runs there, else told with the next answer; before each call it says where the person looks, after it
+  links (they open the code) and timeline; what the person says there (start, pause, stop, comment, replan) is steered, typed
+  into Claude's terminal if Claude runs there (stop presses Esc first), else told with the next answer; Claude Code
+  is started with a hook (`--settings`) that tells `activity` each tool it used, so each task shows its steps at no
+  cost to Claude; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
   a tool with a JSON Schema, list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it
   on stdio and Http on Streamable HTTP, 127.0.0.1 only, with a bearer token).

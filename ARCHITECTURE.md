@@ -778,6 +778,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     trabaja, así que el mensaje ("The person ...") queda esperando. La ventana lo escribe en la terminal de Claude si
     está ahí (y lo marca como dicho); si no, viaja con la próxima respuesta del servidor MCP. `steering` devuelve lo
     que todavía no se le dijo.
+  - **Decisión: el avance de una tarea lo ve el IDE, no lo cuenta Claude.** Contar cada paso le costaría tokens a
+    Claude. Por eso la ventana lo lanza con un hook de Claude Code (`--settings`, un `PostToolUse` que hace curl a
+    `activity` con el mismo token). Después de cada herramienta, el hook le avisa al IDE qué hizo, y eso queda como
+    un paso de la tarea que empezó último y sigue en curso. El hook manda el evento por un pipe y no como argumento,
+    porque un Read grande superaría el largo máximo de un argumento. Las respuestas a `activity` no llevan las
+    indicaciones de la persona, porque nadie las lee. Stop es inmediato: la ventana aprieta Esc en la terminal de
+    Claude y después escribe el mensaje, separados para que no se lean como Alt+tecla.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un
