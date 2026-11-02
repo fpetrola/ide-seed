@@ -208,11 +208,13 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
         var projection = run.projection();
         var wanted = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Literal, Boolean>());
         wanted.addAll(conditions);
-        var body = KnowledgeParser.want(want, wanted);
         var binding = new HashMap<String, String>();
+        var lists = new HashMap<String, List<String>>();
         variables.forEach((name, value) -> {
-            if (constant(value) != null) binding.put(name, constant(value));
+            if (value instanceof Value.Items items) lists.put(name, items.items().stream().map(Knowledge::constant).toList());
+            else if (constant(value) != null) binding.put(name, constant(value));
         });
+        var body = KnowledgeParser.want(want, lists, wanted);
         var trace = new Trace();
         trace.open(Trace.Kind.QUESTION, intent + "(" + String.join(", ", variables.values().stream().map(v -> shown(v, projection)).toList()) + ")");
         var found = abduction(variables, projection, wanted).wanted(intent, body, binding);
@@ -224,7 +226,7 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
             run.searched(trace.close());
             throw new PrimitiveRejected("intent.unreachable", intent + " needs " + shown(found.stuck(), projection));
         }
-        dead(found.dead(), projection, trace);
+        dead(found.dead(), projection, trace, intent);
         var ways = new ArrayList<Way>();
         var rank = 0;
         for (var way : found.found()) {
@@ -233,8 +235,18 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
         ways.sort(Comparator.comparingInt(way -> way.cost() * 100 + way.rank()));
         var plan = ways.stream().map(this::plan).filter(p -> !p.changesMeaning() && p.asks().isEmpty()).findFirst()
                 .orElse(null);
-        if (plan == null) {
-            plan = plan(new Way(steps(found.unmended().getFirst().changes(), projection, intent), 0, 0));
+        if (plan == null) { // what it asks for, with what it needs, and nothing mended: the repairer's
+            var alone = new ArrayList<Way>();
+            for (var way : found.unmended()) {
+                alone.addAll(after(intent, needs(way, projection), steps(way.changes(), projection, intent), 0, variables, projection, new Trace(), 1));
+            }
+            alone.sort(Comparator.comparingInt(Way::cost));
+            if (alone.isEmpty()) {
+                run.searched(trace.close());
+                var need = found.unmended().getFirst().needs().getFirst();
+                throw new PrimitiveRejected("intent.unreachable", intent + " needs " + (need.holds() ? "" : "not ") + shown(need.atom(), projection));
+            }
+            plan = plan(alone.getFirst());
             trace.add(Trace.Kind.NOTE, "no way the rules mend keeps meaning: " + plan.title() + " alone, which the repairer judges");
         }
         run.searched(trace.close());
@@ -361,8 +373,13 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
 
     /** The ways given up, as their steps would have been said, and why. */
     private void dead(List<Abduction.Dead> dead, Projection projection, Trace trace) {
+        dead(dead, projection, trace, null);
+    }
+
+    /** As {@link #dead(List, Projection, Trace)}, what an intent wanted said as the intent. */
+    private void dead(List<Abduction.Dead> dead, Projection projection, Trace trace, String wanted) {
         for (var way : dead) {
-            trace.add(Trace.Kind.DROPPED, said(steps(way.changes(), projection)) + ": " + way.why());
+            trace.add(Trace.Kind.DROPPED, said(steps(way.changes(), projection, wanted)) + ": " + way.why());
         }
     }
 
@@ -473,30 +490,41 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
                 steps.add(initializing(key, change.forWhat(), projection, asked));
                 continue;
             }
-            Primitive primitive = switch (change.relation()) {
-                case "static", "final", "abstract" -> new Primitive.Set(new ElementId(key), change.relation(), String.valueOf(on));
-                case "type" -> new Primitive.Set(new ElementId(key), "type", value);
-                case "visibility" -> new Primitive.Set(new ElementId(key), "visibility", value);
-                case "parent" -> new Primitive.Move(new ElementId(key), new ElementId(value), changes.stream()
-                        .filter(c -> c.relation().equals("before") && c.element().equals(key))
-                        .map(c -> new ElementId(c.added().get(1))).findFirst().orElse(null));
+            var placed = changes.stream().filter(c -> c.relation().equals("before") && c.element().equals(key))
+                    .map(c -> c.added().get(1)).findFirst().orElse(null);
+            // made when it runs: what it names may be what the plan created before it
+            java.util.function.Function<Map<String, ElementId>, Primitive> primitive = switch (change.relation()) {
+                case "static", "final", "abstract" -> made -> new Primitive.Set(resolved(key, made), change.relation(), String.valueOf(on));
+                case "type", "visibility" -> made -> new Primitive.Set(resolved(key, made), change.relation(), value);
+                case "parent" -> made -> new Primitive.Move(resolved(key, made), resolved(value, made), placed == null ? null : resolved(placed, made));
                 case "before" -> moved.containsKey(key) ? null
-                        : new Primitive.Move(new ElementId(key), projection.program().element(new ElementId(key)).parent(), new ElementId(value));
-                case "target" -> new Primitive.Retarget(key, new ElementId(value));
-                case "exists" -> new Primitive.Delete(new ElementId(key)); // what is not there any more is deleted
+                        : made -> new Primitive.Move(resolved(key, made), projection.program().element(new ElementId(key)).parent(), resolved(value, made));
+                case "superclass" -> made -> new Primitive.Link(resolved(key, made), ide.program.Mode.EXTENDS, resolved(value, made));
+                case "target" -> made -> new Primitive.Retarget(key, resolved(value, made));
+                case "exists" -> made -> new Primitive.Delete(resolved(key, made)); // what is not there any more is deleted
                 default -> throw new IllegalStateException("no primitive changes " + change.relation());
             };
             if (primitive == null) continue;
             var variables = new LinkedHashMap<String, Value>();
             variables.put("element", value(key, projection));
             variables.put("called", new Value.Text(called(key, projection)));
-            variables.put("value", value == null ? null : value(value, projection));
+            variables.put("value", value == null ? null : named(value, creations, projection));
             variables.put("was", change.removed() == null || change.removed().size() < 2 ? null : value(change.removed().get(1), projection));
             var title = title((on ? "" : "not ") + change.relation(), change.forWhat(), variables, projection, wanted);
             var promised = change.promise() != null; // broken on purpose: it changes meaning, and costs more
-            steps.add(new Step(title, List.of(), promised ? 2 : 1, !promised, (target, answers, made) -> target.apply(primitive)));
+            steps.add(new Step(title, List.of(), promised ? 2 : 1, !promised, (target, answers, made) -> target.apply(primitive.apply(made))));
         }
         return steps;
+    }
+
+    /** A value a change gives as a title says it: an element the plan creates, by the name it will have. */
+    private static Value named(String value, Map<String, Abduction.Change> creations, Projection projection) {
+        var creation = creations.get(value);
+        if (creation == null) return value(value, projection);
+        return new Value.Text(switch (creation.relation()) {
+            case "member", "parameter" -> creation.added().get(2);
+            default -> projection.program().element(new ElementId(creation.added().get(1))).name();
+        });
     }
 
     /**
@@ -540,6 +568,13 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
                     sets.add((target, answers, id, done) -> List.of(new Primitive.Create(Kind.STATEMENT, resolved(callable, done), "",
                             Map.of(ide.program.Fact.BODY, ide.program.Body.name(resolved(field, done)) + " = " + ide.program.Body.name(id)), null)));
                 }
+                case "same-superclass" -> { // it extends what the class it is like extends, as that class writes it
+                    var like = change.added().get(1);
+                    sets.add((target, answers, id, done) -> {
+                        var written = target.program().element(resolved(like, done)).fact(ide.program.Fact.SUPERCLASS);
+                        return written == null ? List.<Primitive>of() : List.<Primitive>of(new Primitive.Set(id, "superclass", written));
+                    });
+                }
                 case "same-parameters" -> { // a parameter for each of the method it is like, of the same name and type
                     var like = change.added().get(1);
                     sets.add((target, answers, id, done) -> target.program().children(resolved(like, done)).stream()
@@ -570,9 +605,9 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
         var variables = new LinkedHashMap<String, Value>();
         variables.put("kind", new Value.Text(kind));
         variables.put("named", new Value.Text(named));
-        variables.put("owner", value(owner.value(), projection));
-        variables.put("value", value(owner.value(), projection));
-        variables.put("type", value(typeOf(values.get(1), creations, projection), projection));
+        variables.put("owner", named(owner.value(), creations, projection));
+        variables.put("value", named(owner.value(), creations, projection));
+        variables.put("type", named(typeOf(values.get(1), creations, projection), creations, projection));
         var title = title(creation.relation(), creation.forWhat(), variables, projection, wanted);
         var method = kind.equals("method");
         var passed = group.stream().anyMatch(change -> change.relation().equals("passes"));
@@ -598,11 +633,14 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
     }
 
     /**
-     * The type an element is in, through what the plan creates: a constructor created is in its type, a member in its
-     * owner; an element of the program, a type (or a package) itself, or the type it is in.
+     * The type an element is in, through what the plan creates: a type created is its own, a constructor created is in
+     * its type, a member in its owner; an element of the program, a type (or a package) itself, or the type it is in.
      */
     private static String typeOf(String element, Map<String, Abduction.Change> creations, Projection projection) {
-        if (creations.containsKey(element)) return typeOf(creations.get(element).added().get(1), creations, projection);
+        var creation = creations.get(element);
+        if (creation != null && creation.relation().equals("member")
+                && Kind.valueOf(creation.added().get(3).toUpperCase(java.util.Locale.ROOT)).isType()) return element; // a type created
+        if (creation != null) return typeOf(creation.added().get(1), creations, projection);
         var program = projection.program();
         var id = new ElementId(element);
         var inType = program.contains(id) && !program.element(id).kind().isType() && program.element(id).kind() != Kind.PACKAGE;
@@ -725,8 +763,18 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
     private String title(String relation, String forWhat, Map<String, Value> variables, Projection projection, String wanted) {
         var said = says.get(relation + " for " + forWhat);
         if (said == null && forWhat.equals(wanted)) return wanted;
-        var template = said != null ? said : relation + " ${element} ${was} -> ${value}";
-        return Script.render(template, Run.on(projection, library), variables);
+        if (said != null) {
+            try {
+                return Script.render(said, Run.on(projection, library), variables);
+            } catch (RuntimeException unsaid) {
+                // what it names is not there yet: the change as it is
+            }
+        }
+        var what = variables.containsKey("element") ? variables.get("element") : variables.get("named");
+        var was = variables.get("was");
+        var value = variables.get("value");
+        return relation + " " + shown(what, projection) + (was == null ? "" : " " + shown(was, projection))
+                + (value == null ? "" : " -> " + shown(value, projection));
     }
 
     /** A way as a plan: its steps' titles in the order they run, their questions, and running them in that order. */
@@ -767,8 +815,9 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
         return new Value.Text(constant);
     }
 
-    /** An element as people read it: by its address. */
+    /** An element as people read it: by its address; a list, each of its items. */
     private static String shown(Value fact, Projection projection) {
+        if (fact instanceof Value.Items items) return "[" + String.join(", ", items.items().stream().map(item -> shown(item, projection)).toList()) + "]";
         return fact instanceof Value.Elem e && projection.program().contains(e.id())
                 ? projection.program().element(e.id()).qualified() : Value.asText(fact);
     }
@@ -788,7 +837,7 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
 
     private static String shown(Term term, Projection projection) {
         return switch (term) {
-            case Term.Variable v -> v.name();
+            case Term.Variable v -> v.anonymous() ? "_" : v.name();
             case Term.Constant c -> shown(value(c.value(), projection), projection);
         };
     }

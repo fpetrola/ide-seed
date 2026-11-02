@@ -58,8 +58,9 @@ final class GraphFacts implements Facts {
     /** What is supposed: tuples added and removed, by relation. */
     private final Map<String, java.util.Set<List<String>>> added;
     private final Map<String, java.util.Set<List<String>>> removed;
-    /** Where an element is supposed to be, and what one created is, when a change says so. */
+    /** Where an element is supposed to be, what one created is, and what a class extends, when a change says so. */
     private final Map<String, String> parents = new java.util.HashMap<>();
+    private final Map<String, String> superclasses = new java.util.HashMap<>();
     private final Map<String, String> kinds = new java.util.HashMap<>();
     /** The elements supposed to go into a parent, in the order they went. */
     private final Map<String, List<String>> arrived = new java.util.HashMap<>();
@@ -80,6 +81,7 @@ final class GraphFacts implements Facts {
             arrived.computeIfAbsent(tuple.get(1), p -> new java.util.ArrayList<>()).add(tuple.get(0));
         }
         for (var tuple : added.getOrDefault("kind", java.util.Set.of())) kinds.put(tuple.get(0), tuple.get(1));
+        for (var tuple : added.getOrDefault("superclass", java.util.Set.of())) superclasses.put(tuple.get(0), tuple.get(1));
     }
 
     /** These facts with {@code more} and without {@code less}, after what they already suppose. */
@@ -156,7 +158,8 @@ final class GraphFacts implements Facts {
             case "top" -> inTypes(first).map(e -> List.of(id(e), topOf(id(e))));
             case "package" -> inTypes(first).map(e -> List.of(id(e), packageOf(topOf(id(e)))));
             case "enclosing" -> inTypes(first).map(e -> List.of(id(e), enclosingOf(id(e))));
-            case "subclass" -> types(first).flatMap(t -> program.superclassChain(t.id()).stream().map(s -> List.of(id(t), id(s))));
+            case "subclass" -> (first == null ? program.types().stream().map(GraphFacts::id) : Stream.of(first)).filter(this::isType)
+                    .flatMap(t -> chainOf(t).stream().map(s -> List.of(t, s)));
             case "overrides" -> elements(first).filter(e -> e.kind() == Kind.METHOD)
                     .flatMap(m -> program.overridden(m).stream().map(n -> List.of(id(m), id(n))));
             case "alike" -> elements(first).flatMap(a -> program.elements().stream().filter(b -> alike(a, b))
@@ -179,7 +182,7 @@ final class GraphFacts implements Facts {
                     : similar(new ElementId(pattern.get(1)), pattern.get(2)).map(m -> List.of(id(m), pattern.get(1), pattern.get(2),
                     m.kind().name().toLowerCase(Locale.ROOT)));
             case "exists" -> elements(first).filter(e -> !e.inLibrary()).map(e -> List.of(id(e)));
-            case "stores", "passes" -> Stream.empty();
+            case "stores", "passes", "same-superclass" -> Stream.empty();
             case "superclass" -> types(first).flatMap(t -> program.superclass(t.id()).stream().map(u -> List.of(id(t), id(u))));
             case "same-parameters" -> elements(first).filter(n -> n.kind() == Kind.METHOD || n.kind() == Kind.CONSTRUCTOR)
                     .flatMap(n -> elements(pattern.size() > 1 ? pattern.get(1) : null).filter(m -> m.kind() == Kind.METHOD)
@@ -229,6 +232,24 @@ final class GraphFacts implements Facts {
         }
         for (var child : arrived.getOrDefault(parent, List.of())) if (!children.contains(child) && parent.equals(parentOf(child))) children.add(child);
         return children;
+    }
+
+    /** A type and the classes it extends, the nearest first: as they are supposed to be, if a change says so. */
+    private List<String> chainOf(String type) {
+        var chain = new java.util.ArrayList<String>();
+        for (var t = type; t != null && !chain.contains(t); t = superclassOf(t)) chain.add(t);
+        return chain;
+    }
+
+    /** The class of the workspace a class extends: the one it is supposed to, else the one it does. */
+    private String superclassOf(String type) {
+        var supposed = superclasses.get(type);
+        if (supposed != null) return supposed;
+        var element = new ElementId(type);
+        if (!program.contains(element)) return null;
+        var real = program.superclass(element).map(GraphFacts::id).orElse(null);
+        var gone = removed.get("superclass");
+        return real != null && gone != null && gone.contains(List.of(type, real)) ? null : real;
     }
 
     /** The type an element is in, or the element itself if it is a type. */

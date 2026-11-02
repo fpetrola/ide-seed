@@ -79,6 +79,31 @@ class ExtractSuperclassTest {
                 """);
     }
 
+    /** The superclass is a new class: a name something in the package already has is refused, saying so. */
+    @Test
+    void aNameThePackageAlreadyHasIsRefused() {
+        var b = """
+                package a;
+
+                public class B {
+                    protected int x;
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/B.java", b, "a/Other.java", """
+                package a;
+
+                public class Other {
+                }
+                """));
+
+        var result = ws.invoke("extract-superclass", Map.of("type", "a.B", "name", "Other", "fields", List.of("a.B#x")));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(ide.engine.Violation::code, ide.engine.Violation::detail).containsExactly(
+                org.assertj.core.groups.Tuple.tuple("intent.unreachable", "extract-superclass needs not member(_, a, Other, _)"));
+        assertThat(ws.source("a/B.java")).isEqualTo(b);
+    }
+
     @Test
     void newSuperclassTakesOverTheOldOne() {
         var ws = Workspace.of(Map.of(

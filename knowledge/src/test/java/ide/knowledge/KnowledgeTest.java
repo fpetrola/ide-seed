@@ -508,6 +508,34 @@ class KnowledgeTest {
         assertThat(field.fact(Fact.VISIBILITY)).isEqualTo("package");
     }
 
+    /**
+     * A want can ask for what is not there: extract-superclass wants a class of the name given in the type's package,
+     * between the type and what it extends, and each field given in it. The class is created; the type extends it, and
+     * it extends what the type extended; the fields go up, and the private one its type reads is opened.
+     */
+    @Test
+    void aWantCreatesWhatItAsksForAndQuantifiesOverWhatItIsGiven() {
+        var library = Library.standard();
+        Knowledge.standard(library);
+        var projection = MemoryProjection.builder()
+                .type("a.A").type("a.B").extend("a.B", "a.A")
+                .field("a.B", "x", "int").fact("a.B#x", Fact.VISIBILITY, "private").field("a.B", "y", "int")
+                .method("a.B", "get", "int").use("a.B#get()", "a.B#x", Mode.READ)
+                .build();
+        var x = id(projection.program(), "a.B#x");
+        var y = id(projection.program(), "a.B#y");
+
+        Run.on(projection, library).call("extract-superclass", Map.of("type", "a.B", "name", "Mid", "fields", List.of("a.B#x", "a.B#y")));
+
+        var program = projection.program();
+        var mid = program.find("a.Mid").orElseThrow();
+        assertThat(program.superclass(id(program, "a.B")).orElseThrow().id()).isEqualTo(mid.id());
+        assertThat(mid.fact(Fact.SUPERCLASS)).isEqualTo("A");
+        assertThat(program.element(x).qualified()).isEqualTo("a.Mid#x");
+        assertThat(program.element(x).fact(Fact.VISIBILITY)).isEqualTo("package");
+        assertThat(program.element(y).qualified()).isEqualTo("a.Mid#y");
+    }
+
     /** One whose conditions do not hold has no way, and is refused with the first it could not get past. */
     @Test
     void anIntentWhoseConditionsDoNotHoldIsRefusedWithWhatItNeeds() {

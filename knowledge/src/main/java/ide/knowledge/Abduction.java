@@ -41,8 +41,11 @@ final class Abduction {
     static final int MOST_CHANGES = 4;
     private static final String UNDO = "it would undo ";
 
-    /** Relations a primitive sets, keyed by their first argument: a visibility, a parent, what a use binds, a place, a type. */
-    static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before", "type");
+    /**
+     * Relations a primitive sets, keyed by their first argument: a visibility, a parent, what a use binds, a place, a
+     * type, the class a class extends.
+     */
+    static final Set<String> CHANGED = Set.of("visibility", "parent", "target", "before", "type", "superclass");
     /**
      * Relations a primitive turns on or off: {@code static(e)}, {@code final(e)}, {@code abstract(e)}; and
      * {@code initialized(f)}, which a value given where the field is declared turns on.
@@ -62,9 +65,11 @@ final class Abduction {
      * Relations made to hold by several primitives at once: {@code takes-arguments(m, use)}, a parameter for each
      * argument; {@code stores(p, k, f)}, a statement of k giving f the value of its parameter p; {@code passes(p, s, f)},
      * s calling p's constructor first with what it gave f, which it gives no more; {@code same-parameters(n, m)}, a
-     * parameter of the method n the plan creates for each of m's.
+     * parameter of the method n the plan creates for each of m's; {@code same-superclass(b, t)}, the class b the plan
+     * creates extending what t extends, as t writes it. The last two only an element the plan creates takes.
      */
-    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores", "passes", "same-parameters");
+    static final Set<String> COMPOSED = Set.of("takes-arguments", "stores", "passes", "same-parameters", "same-superclass");
+    private static final Set<String> ONLY_NEW = Set.of("same-parameters", "same-superclass");
     /** What a created element is called until it is: {@code new:<relation>:<n>}. */
     static final String NEW = "new:";
     private static final java.util.concurrent.atomic.AtomicInteger CREATIONS = new java.util.concurrent.atomic.AtomicInteger();
@@ -224,7 +229,7 @@ final class Abduction {
                     }
                     if (!tried) stuck(stuck, new Literal.Positive(atom));
                 } else if (known && COMPOSED.contains(atom.relation())
-                        && (!atom.relation().equals("same-parameters") || values(atom).getFirst().startsWith(NEW))) { // only a new one takes them
+                        && (!ONLY_NEW.contains(atom.relation()) || values(atom).getFirst().startsWith(NEW))) { // only a new one takes them
                     var change = new Change(atom.relation(), values(atom), null, forWhat);
                     explore(forWhat, rest, binding, plus(changes, change), needs, suppose(state, change), found, stuck);
                 } else if (known && rules.defines(atom.relation())) {
@@ -535,6 +540,11 @@ final class Abduction {
                     if (change.relation().equals("constructor-for")) added.add(new Tuple("constructor", List.of(made, values.get(1))));
                 }
                 case "stores" -> added.add(new Tuple("writes", List.of(values.get(1), values.get(2)))); // its callable writes the field
+                case "same-superclass" -> { // it extends what the other extends
+                    for (var answer : state.answers(Atom.of("superclass", Term.constant(values.get(1)), Term.variable("S")))) {
+                        added.add(new Tuple("superclass", List.of(made, answer.get("S"))));
+                    }
+                }
                 case "passes" -> removed.add(new Tuple("writes", List.of(values.get(1), values.get(2)))); // the caller does not
                 default -> {
                     // nothing more is known of it

@@ -31,8 +31,7 @@ class StepsTest {
                 ". extract-superclass",
                 "  ' create CLASS a.Base",
                 "  ' link a.B extends a.Base",
-                "  . pull-up-field",
-                "    ' move a.B#x -> a.Base",
-                "    ' set a.Base#x visibility = package");
+                "  ' move a.B#x -> a.Base",
+                "  ' set a.Base#x visibility = package");
     }
 }

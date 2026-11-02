@@ -14,7 +14,7 @@ class LibraryTest {
         var library = Library.standard();
 
         assertThat(library.listing()).contains("primitive rename", "primitive link", "composite change-signature",
-                "script encapsulate-field", "script extract-superclass", "intent pull-up-field");
+                "script encapsulate-field", "intent extract-superclass", "intent pull-up-field");
         assertThat(library.get("rename").params()).extracting(Param::name).containsExactly("element", "name");
     }
 

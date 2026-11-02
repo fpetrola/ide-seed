@@ -181,7 +181,11 @@ public final class Script implements Refactoring {
                 case Stmt.Oblige oblige -> run.oblige(text(oblige.assumption(), run, env));
                 case Stmt.Fail fail -> throw new PrimitiveRejected("refactoring.failed", text(fail.message(), run, env));
                 case Stmt.Return ret -> throw new Returned(interpolate(ret.value(), run, env));
-                case Stmt.Want want -> run.want(id, want.want(), new HashMap<>(env));
+                case Stmt.Want want -> { // the parameters, in the order they are declared
+                    var variables = new LinkedHashMap<String, Value>();
+                    params.forEach(param -> variables.put(param.name(), env.get(param.name())));
+                    run.want(id, want.want(), variables);
+                }
             }
         }
     }

@@ -184,12 +184,44 @@ final class KnowledgeParser {
         return new Clause(head, when < 0 ? List.of() : body(text.substring(when + 6), conditions));
     }
 
+    private static final java.util.regex.Pattern EACH = java.util.regex.Pattern.compile("each (\\S+) in (\\S+): (.+)");
+
     /**
      * What an intent wants, as the literals of a body read as a definition's: {@code a and given b and not c}. A
-     * {@code given} one is a condition, added to {@code conditions}.
+     * {@code given} one is a condition, added to {@code conditions}. {@code each x in xs: c} is {@code c} once for each
+     * value {@code lists} gives {@code xs}, with the value in place of {@code x}.
      */
-    static List<Literal> want(String text, java.util.Set<Literal> conditions) {
-        return body(text, conditions);
+    static List<Literal> want(String text, java.util.Map<String, List<String>> lists, java.util.Set<Literal> conditions) {
+        var body = new ArrayList<Literal>();
+        for (var part : split(text, " and ")) {
+            var each = EACH.matcher(part.strip());
+            if (!each.matches()) {
+                body.addAll(body(part, conditions));
+                continue;
+            }
+            var values = lists.get(each.group(2));
+            if (values == null) throw new IllegalArgumentException("knowledge: each " + each.group(1) + " in " + each.group(2) + ": not a list");
+            for (var value : values) {
+                for (var literal : body(each.group(3), conditions)) {
+                    var given = conditions.contains(literal);
+                    var one = substituted(literal, each.group(1), value);
+                    if (given) conditions.add(one);
+                    body.add(one);
+                }
+            }
+        }
+        return body;
+    }
+
+    /** A literal with a value in place of a variable. */
+    private static Literal substituted(Literal literal, String variable, String value) {
+        java.util.function.UnaryOperator<Term> put = t -> t instanceof Term.Variable v && v.name().equals(variable) ? Term.constant(value) : t;
+        java.util.function.UnaryOperator<Atom> in = atom -> new Atom(atom.relation(), atom.terms().stream().map(put).toList());
+        return switch (literal) {
+            case Literal.Positive p -> new Literal.Positive(in.apply(p.atom()));
+            case Literal.Negative n -> new Literal.Negative(in.apply(n.atom()));
+            case Literal.Comparison c -> new Literal.Comparison(put.apply(c.left()), c.equal(), put.apply(c.right()));
+        };
     }
 
     private static List<Literal> body(String text, java.util.Set<Literal> conditions) {

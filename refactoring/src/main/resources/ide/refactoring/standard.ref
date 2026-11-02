@@ -52,19 +52,12 @@ refactoring pull-up-method "Moves a method to the superclass of its type"
   return ${method}
 end
 
-refactoring extract-superclass "Creates a class between a type and its superclass and pulls fields up into it"
+intent extract-superclass "Creates a class between a type and its superclass and pulls fields up into it"
   param type : element(CLASS) "the type to extract from"
   param name : text "name of the new superclass" default "Abstract${name(type)}"
   param fields : elements(FIELD) "fields to pull up" from "fields(type)"
-  base := create CLASS ${owner(type)} ${name}
-  if nonempty(attr(type, "superclass"))
-    set ${base} superclass ${attr(type, "superclass")}
-  end
-  link ${type} extends ${base}
-  for f in fields
-    pull-up-field ${f}
-  end
-  return ${base}
+  want given parent(type, p) and given not member(_, p, name, _) and member(b, p, name, "class")
+    and in-between(b, type) and superclass(type, b) and each f in fields: parent(f, b)
 end
 
 refactoring rename-method-family "Renames a method with every method it overrides or that overrides it"

@@ -1601,6 +1601,26 @@ que esto no escala solo:
      plan abría `y` sin necesidad y después lo subía igual.
    - El lugar sale de lo supuesto: lo que entra a una clase va último, así que `before(y, x)` no vale después de
      subir los dos, y el plan lo pide (`Move` antes de `x`).
+
+   **Ciclo 4 hecho el 2026-11-02**: extract-superclass es una intención, y ya no llama a pull-up-field.
+   - Su `want` pide: que no haya nada con ese nombre en el paquete del tipo (`given not member(_, p, name, _)`), la
+     clase con ese nombre ahí (`member(b, p, name, "class")`, que se crea), entre el tipo y lo que extendía
+     (`in-between`), que el tipo la extienda (`superclass(type, b)`, un `Link`) y cada campo dado en ella
+     (`each f in fields: parent(f, b)`). `each x in lista:` repite su literal por cada valor de la lista.
+   - `in-between(b, t)` está en `java.rules`: b extiende lo que t extendía, como t lo escribe, con sus argumentos de
+     tipo, o nada. Lo hace `same-superclass(b, t)`, una relación compuesta como `same-parameters`: solo la toma una
+     clase que el plan crea, y la crea con un `Set superclass` del texto que escribió t. `superclass` es una relación
+     que cambia un primitivo (`Link extends`), y `subclass` sigue lo supuesto, también para lo que se crea.
+   - Los pasos arman sus primitivos al correr, así pueden nombrar algo que el plan creó antes, como la clase nueva.
+     Un título que nombra algo creado lo dice por su nombre; si una plantilla `say` no se puede decir, se dice el
+     cambio como es, con direcciones. Un camino descartado de una intención se dice con el nombre de la intención, y
+     un `_` del rastro se muestra como se escribe.
+   - El respaldo (el `want` solo, sin reparar) corre solo un camino al que no le falta nada. Si no hay ninguno, la
+     intención se rechaza diciendo qué le falta.
+   - El `super(limit)` de `Unset` todavía sale del reparador. La búsqueda dice por qué:
+     `X extract-superclass, then open-visibility a.Unset#limit private -> package, then make limit not final: promise
+     final of a.Unset#limit: ...`. Subir `limit` rompe `final-where`, y las reglas solo lo reparan sacando el `final`,
+     que es una promesa. Unir esa regla con `given-by-its-type` es el ciclo 5.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

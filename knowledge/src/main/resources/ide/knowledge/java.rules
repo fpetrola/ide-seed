@@ -48,6 +48,10 @@ rule in-scope "a member used without saying whose is one of the type it is used 
   must in-scope(s, m)
 end
 
+# A class between a class and what it extends extends that (JLS 8.1.4), as the class writes it: with the same type
+# arguments, or nothing if it extends nothing.
+def in-between(b, t) when kind(t, "class") and same-superclass(b, t)
+
 # A use binds what it names (JLS 6.5): one made without saying whose, only where what it names is in scope.
 def binds(s, m) when uses(s, m) and not self-use(s, m)
 def binds(s, m) when self-use(s, m) and in-scope(s, m)
