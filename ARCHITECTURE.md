@@ -1769,6 +1769,10 @@ que esto no escala solo:
    en una rama, un bucle o un bloque anidado que el local no tiene adentro (`retarget.evaluation`). Para hacerlo bien
    hace falta poder nombrar una sentencia anidada como lugar: queda para decidir si las sentencias de bloques anidados
    pasan a ser elementos (cambia la decisión de que un bloque anidado es parte de su sentencia).
+   *Otro, también de test1:* un proyecto abierto desde su carpeta tiene las fuentes en `src/main/java`, y un tipo creado
+   o movido iba a la carpeta del paquete contada desde la raíz del proyecto. Ahora va al source root que tiene archivos
+   de su paquete, y si ninguno tiene, al que tiene más archivos. El source root de un archivo es su carpeta sin las
+   carpetas de su paquete.
 
 **Cómo se sabe si funcionó.**
 

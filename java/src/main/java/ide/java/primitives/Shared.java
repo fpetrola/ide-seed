@@ -108,6 +108,28 @@ final class Shared {
         }
     }
 
+    /**
+     * Where the file of a top-level type {@code name} of package {@code pkg} goes: in a source root with files of that
+     * package, else in any; of those, the one with most files (a file's root is its folder without its package's).
+     */
+    static String fileFor(ide.java.text.Sources sources, String pkg, String name) {
+        var dirs = pkg.isEmpty() ? "" : pkg.replace('.', '/') + "/";
+        var roots = new java.util.TreeMap<String, Integer>();
+        var withPackage = new java.util.HashSet<String>();
+        for (var unit : sources.units()) {
+            var path = unit.path();
+            var folder = path.substring(0, path.lastIndexOf('/') + 1);
+            var declared = unit.tree().getPackageDeclaration().map(d -> d.getNameAsString().replace('.', '/') + "/").orElse("");
+            if (!folder.endsWith(declared)) continue; // a file not where its package says: no root to learn from it
+            var root = folder.substring(0, folder.length() - declared.length());
+            roots.merge(root, 1, Integer::sum);
+            if (declared.equals(dirs)) withPackage.add(root);
+        }
+        var root = roots.entrySet().stream().filter(e -> withPackage.isEmpty() || withPackage.contains(e.getKey()))
+                .max(java.util.Map.Entry.comparingByValue()).map(java.util.Map.Entry::getKey).orElse("");
+        return root + dirs + name + ".java";
+    }
+
     static String packageOf(String qualifiedType) {
         var dot = qualifiedType.lastIndexOf('.');
         return dot < 0 ? "" : qualifiedType.substring(0, dot);

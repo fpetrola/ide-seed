@@ -221,7 +221,7 @@ final class MoveElement {
         var newQualified = pkg.qualified() + "." + type.name();
         var oldPath = type.fact(Fact.FILE);
         if (oldPath == null) throw new IllegalArgumentException("only top-level types move to packages: " + type);
-        var newPath = pkg.qualified().replace('.', '/') + "/" + type.name() + ".java";
+        var newPath = Shared.fileFor(sources, pkg.qualified(), type.name());
         if (sources.has(newPath)) throw new IllegalArgumentException("already exists: " + newPath);
 
         var moving = sources.unit(oldPath);

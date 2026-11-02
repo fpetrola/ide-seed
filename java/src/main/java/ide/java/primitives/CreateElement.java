@@ -140,7 +140,7 @@ final class CreateElement {
         switch (kind) {
             case CLASS, INTERFACE -> {
                 if (owner != null && owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("types go in packages: " + owner);
-                var path = (pkg.isEmpty() ? "" : pkg.replace('.', '/') + "/") + name + ".java";
+                var path = Shared.fileFor(sources, pkg, name);
                 if (sources.has(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
                 sources.put(Map.of(path, Render.typeFile(pkg, kind == Kind.CLASS ? "class" : "interface", name)));
             }

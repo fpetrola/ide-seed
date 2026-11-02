@@ -88,7 +88,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   getter's type there; a call retargeted to a local is computed where the local is given its value: one on a branch, in a loop
   or a nested block the local is declared outside of is refused. Inline of a call made as a statement (or as a lambda's body) to a method of statements
   puts them in its place, each parameter its argument (a return among them is refused). A member moved to another file takes the imports of the simple names it uses, and a static one is used
-  from elsewhere through its new type. Nested types are deleted like members; a member merged
+  from elsewhere through its new type. A new type's file, created or moved, goes in a source root (a file's folder without its
+  package's) with files of its package, else in the one with most files. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
   the changed member's type, supertypes and subtypes); `resolvedLastTime()` tells which. The AST is never edited.
