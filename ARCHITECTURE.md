@@ -793,6 +793,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     variables `CLAUDECODE*` y `CLAUDE_CODE_*` heredadas: sin eso, un Claude lanzado desde un IDE que a su vez se abrió
     desde Claude se cree una subsesión y no guarda la conversación. Los settings con que se lanza Claude preaprueban
     las herramientas del IDE (`mcp__ideseed`), que se verifican y se pueden deshacer.
+  - **Decisión: cerrar el IDE no corta la conversación con Claude.** Los eventos del hook traen el `session_id` de
+    Claude, y session lo guarda por proyecto (`Conversation`, en `.ide/conversation.json`). Al cerrar, la ventana
+    anota si Claude seguía corriendo en su terminal; al abrir el proyecto otra vez, si seguía, lo lanza con
+    `--resume` y la configuración MCP nueva (cambian el puerto y el token, pero el servidor se sigue llamando
+    `ideseed`). Si session no tiene un id guardado, se usa la conversación más reciente que Claude Code guarda de esa
+    carpeta (`~/.claude/projects/<carpeta>`), que es conocimiento de Claude Code y por eso vive en la ventana. Antes,
+    cerrar la terminal dejaba vivos el shell (un bash interactivo ignora SIGTERM) y el Claude de adentro; ahora se
+    terminan los hijos primero y después el shell, a la fuerza si hace falta.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un

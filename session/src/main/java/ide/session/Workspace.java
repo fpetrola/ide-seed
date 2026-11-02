@@ -36,6 +36,7 @@ public final class Workspace {
     private final Maven.Classpath classpath;
     private final Plans plans;
     private final Attention attention;
+    private final Conversation conversation;
 
     private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root, Maven.Classpath classpath) {
         this.project = project;
@@ -48,6 +49,7 @@ public final class Workspace {
         this.completion = new Completion(project);
         this.plans = new Plans(root == null ? null : root.resolve(".ide/plans.json"), session::event, java.time.Clock.systemUTC());
         this.attention = new Attention(session::event);
+        this.conversation = new Conversation(root == null ? null : root.resolve(".ide/conversation.json"), session::event);
     }
 
     /** A workspace over these sources, with the standard library and knowledge; it has nowhere to save. */
@@ -201,6 +203,11 @@ public final class Workspace {
             throw new IllegalArgumentException("no line " + (line < 1 || line > lines ? line : end) + " in " + file + ": it has " + lines);
         }
         return new Plans.Link(file, line, Math.max(line, end), "", "");
+    }
+
+    /** The agent's conversation on this project. */
+    Conversation conversation() {
+        return conversation;
     }
 
     /** Where attention is, both ways. */

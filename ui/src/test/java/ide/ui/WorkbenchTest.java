@@ -507,6 +507,71 @@ class WorkbenchTest {
         assertThat(served).isEmptyDirectory();
     }
 
+    /** Where Claude Code keeps a conversation of this project, in a Claude home made for the test. */
+    private Path conversationFile(Path home, String id) throws IOException {
+        var kept = home.resolve("projects").resolve(root.toRealPath().toString().replaceAll("[^A-Za-z0-9]", "-"));
+        Files.createDirectories(kept);
+        return Files.writeString(kept.resolve(id + ".jsonl"), "{}\n");
+    }
+
+    private String claudeStarted(Workbench workbench, String action) {
+        workbench.act(action);
+        return String.join(" ", workbench.terminalView().orElseThrow().first());
+    }
+
+    /** Claude Code goes on with the conversation it had on the project: the one its tools last said, or its latest. */
+    @Test
+    void claudeGoesOnWithItsConversationOnTheProject(@TempDir Path served, @TempDir Path home) throws Exception {
+        var workspace = planned();
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+        workbench.claudeHome(home);
+        try {
+            workbench.serve(served);
+            assertThat(claudeStarted(workbench, "claude")).doesNotContain("--resume");
+
+            conversationFile(home, "latest");
+            assertThat(claudeStarted(workbench, "claude")).contains("claude --resume latest --mcp-config");
+
+            conversationFile(home, "told");
+            Files.setLastModifiedTime(conversationFile(home, "newer"), java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 60_000));
+            workspace.capabilities().invoke("activity", Map.of("event", Map.of("session_id", "told", "tool_name", "Read", "tool_input", Map.of())));
+            assertThat(claudeStarted(workbench, "claude")).contains("--resume told ");
+
+            assertThat(claudeStarted(workbench, "claude-new")).doesNotContain("--resume");
+        } finally {
+            workbench.closeDown();
+        }
+    }
+
+    /** If Claude was still working when the IDE closed, opening the project again goes on with it. */
+    @Test
+    void openedAgainClaudeGoesOnIfItWasWorkingWhenTheIdeClosed(@TempDir Path served, @TempDir Path home) throws Exception {
+        var workspace = planned();
+        conversationFile(home, "d94e78d7");
+        workspace.capabilities().invoke("activity", Map.of("event", Map.of("session_id", "d94e78d7", "tool_name", "Read", "tool_input", Map.of())));
+        var before = new Workbench(new Ide(workspace), dialogs);
+        before.claudeHome(home);
+        before.closeDown();
+        var quiet = new Workbench(new Ide(Workspace.open(root)), dialogs);
+        quiet.claudeHome(home);
+        quiet.reopened();
+        assertThat(quiet.terminalView().orElseThrow().first()).isNotEmpty().noneMatch(part -> part.contains("claude"));
+        quiet.closeDown();
+
+        Workspace.open(root).capabilities().invoke("conversation-open", Map.of("open", "true"));
+        var again = new Workbench(new Ide(Workspace.open(root)), dialogs);
+        again.claudeHome(home);
+        try {
+            again.serve(served);
+            again.reopened();
+
+            assertThat(String.join(" ", again.terminalView().orElseThrow().first())).contains("claude --resume d94e78d7");
+            assertThat(again.views().output()).contains("going on with Claude's conversation d94e78d7");
+        } finally {
+            again.closeDown();
+        }
+    }
+
     /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */
     @Test
     void whatChangesOnDiskTheWindowShows() throws Exception {

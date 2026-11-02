@@ -112,9 +112,18 @@ final class Capabilities {
                         + "tool_name, tool_input), kept as a step of the task it is doing; answers the task and the step",
                         List.of(Param.of("event", "map")), args -> {
                     var event = args.get("event") instanceof Map<?, ?> given ? given : Map.of();
+                    if (event.get("session_id") != null) workspace.conversation().in(String.valueOf(event.get("session_id")));
                     var folder = workspace.root().map(r -> r.toAbsolutePath().normalize().toString()).orElse("");
                     return Activity.step(event, folder).map(step -> workspace.plans().step(step))
                             .orElseGet(() -> entries("task", "", "step", ""));
+                }))
+                .register(Capability.of("conversation", "The agent's conversation on this project, to go on with it: its id "
+                        + "(none yet: empty), and whether it was open when the IDE closed", List.of(),
+                        args -> workspace.conversation().shown()))
+                .register(Capability.of("conversation-open", "Says whether the agent's conversation is open as the IDE closes",
+                        List.of(Param.of("open", "choice", "true", "false")), args -> {
+                    workspace.conversation().open(Boolean.parseBoolean(text(args, "open")));
+                    return workspace.conversation().shown();
                 }))
                 .register(Capability.of("steering", "What the person said about the plans that the agent was not told yet; once "
                         + "answered, it is told", List.of(), args -> workspace.plans().take().stream()

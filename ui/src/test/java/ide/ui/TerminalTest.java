@@ -97,4 +97,21 @@ class TerminalTest {
             terminal.close();
         }
     }
+
+    @Test
+    void closingItEndsWhatRunsInItNotOnlyItsShell() throws Exception {
+        var terminal = new Terminal(root);
+        terminal.start(List.of("/bin/bash", "-i", "-c", "sleep 300; exec bash"));
+        var until = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (!terminal.runs("sleep") && System.nanoTime() < until) Thread.sleep(50);
+        var shell = ProcessHandle.current().descendants().filter(p -> p.info().command().map(c -> c.endsWith("bash")).orElse(false)
+                && p.descendants().anyMatch(d -> d.info().command().map(c -> c.endsWith("sleep")).orElse(false))).findFirst().orElseThrow();
+        var sleep = shell.descendants().toList();
+
+        terminal.close();
+
+        Thread.sleep(1500);
+        assertThat(shell.isAlive()).isFalse();
+        assertThat(sleep).noneMatch(ProcessHandle::isAlive);
+    }
 }

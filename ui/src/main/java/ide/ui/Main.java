@@ -82,6 +82,7 @@ public final class Main {
                     workbench.watch();
                     try {
                         workbench.serve(Path.of(System.getProperty("user.home"), ".ideseed", "mcp"));
+                        workbench.reopened(); // Claude goes on, if it was working when the IDE closed
                     } catch (java.io.IOException | RuntimeException notServed) {
                         System.err.println("agents cannot reach this IDE: " + notServed.getMessage());
                     }

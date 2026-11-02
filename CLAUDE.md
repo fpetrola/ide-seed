@@ -141,7 +141,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   task, task-add, task-update, task-link. What the person says (`steer`: start, pause, resume, stop, comment, replan, switch)
   changes the plan at once and waits to be told to the agent once (`steering`), unless the window told it. What the agent does
   with its tools (`activity`, an event as Claude Code's hooks give it) is a step of the task it started last and still
-  does, said in a few words (Activity); the plan shows each task's last step. Attention: where attention is, both ways, between a person and an agent on the same
+  does, said in a few words (Activity); the plan shows each task's last step. Conversation: the agent's conversation on the
+  project (the session id its hooks tell), and whether it was open when the IDE closed, in `.ide/conversation.json`;
+  capabilities conversation, conversation-open. Attention: where attention is, both ways, between a person and an agent on the same
   IDE: `point` (an element or lines, with a note; numbered, an event) and `pointed`; `look` (the window says where the
   person is) and `looking` (that, with the element under the caret and what it is inside); pointing at an element marks its whole
   declaration (`JavaProjection.declared`). `guide` (resource `guide.md`): how an agent works on the IDE, what MCP says
@@ -161,7 +163,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   links (they open the code) and timeline; what the person says there (start, pause, stop, comment, replan) is steered, typed
   into Claude's terminal if Claude runs there (stop presses Esc first), else told with the next answer; Claude Code
   is started with a hook (`--settings`) that tells `activity` each tool it used, so each task shows its steps at no
-  cost to Claude; before each call it says where the person looks, after it
+  cost to Claude; Ctrl+Esc goes on with Claude's conversation on the project (`--resume`: the one its hooks told,
+  else the latest Claude Code keeps of the folder), Ctrl+Shift+Esc starts a new one, and a project opened again goes
+  on by itself if Claude was working when the IDE closed; closing the terminal ends what runs in it, not only its shell; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
   a tool with a JSON Schema, list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it
   on stdio and Http on Streamable HTTP, 127.0.0.1 only, with a bearer token).

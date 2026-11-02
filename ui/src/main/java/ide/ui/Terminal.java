@@ -192,7 +192,24 @@ final class Terminal extends JPanel {
     }
 
     /** Ends the program the terminal runs. */
+    /**
+     * Ends what runs in the terminal: what the shell started first (an interactive shell ignores being asked to end,
+     * and what it runs would outlive it), then the shell, by force if it does not end at once.
+     */
     void close() {
+        if (widget.getTtyConnector() instanceof Connector connector) {
+            ProcessHandle.of(connector.process.pid()).ifPresent(shell -> {
+                var below = shell.descendants().toList();
+                below.forEach(ProcessHandle::destroy);
+                shell.destroy();
+                try {
+                    shell.onExit().get(1, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception stillThere) {
+                    shell.destroyForcibly();
+                }
+                below.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+            });
+        }
         widget.close();
     }
 

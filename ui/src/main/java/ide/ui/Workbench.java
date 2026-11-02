@@ -283,7 +283,8 @@ final class Workbench extends JPanel {
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
-                case "claude" -> claude();
+                case "claude" -> claude(true);
+                case "claude-new" -> claude(false);
                 case "zoom-in" -> zoom(1);
                 case "zoom-out" -> zoom(-1);
                 case "zoom-reset" -> zoom(0);
@@ -437,6 +438,9 @@ final class Workbench extends JPanel {
     /** Stops serving agents and ends the terminal's program: the window is going away. */
     void closeDown() {
         if (watcher != null) watcher.stop();
+        if (ide.folder().isPresent() && terminal != null) { // so that opening the project again goes on with Claude
+            ide.call("conversation-open", Map.of("open", String.valueOf(terminal.runs("claude"))));
+        }
         if (served != null) {
             served.stop();
             try {
@@ -450,18 +454,58 @@ final class Workbench extends JPanel {
         if (terminal != null) terminal.close();
     }
 
-    /** Claude Code in the terminal, working on this IDE through MCP. */
-    private void claude() {
+    /** Where Claude Code keeps what it keeps: its conversations, under {@code projects}, by folder. */
+    private Path claudeHome = Path.of(System.getenv().getOrDefault("CLAUDE_CONFIG_DIR",
+            Path.of(System.getProperty("user.home"), ".claude").toString()));
+
+    void claudeHome(Path home) {
+        this.claudeHome = home;
+    }
+
+    /**
+     * The conversation Claude had on this project, if Claude Code still keeps it: the one its tools last told the IDE,
+     * or else the latest it has of this folder.
+     */
+    private Optional<String> conversation() {
+        var folder = ide.folder();
+        if (folder.isEmpty()) return Optional.empty();
+        Path kept;
+        try {
+            kept = claudeHome.resolve("projects").resolve(folder.get().toRealPath().toString().replaceAll("[^A-Za-z0-9]", "-"));
+        } catch (IOException gone) {
+            return Optional.empty();
+        }
+        var told = String.valueOf(ide.record("conversation", Map.of()).get("id"));
+        if (!told.isEmpty() && java.nio.file.Files.exists(kept.resolve(told + ".jsonl"))) return Optional.of(told);
+        try (var files = java.nio.file.Files.list(kept)) {
+            return files.filter(file -> file.toString().endsWith(".jsonl"))
+                    .max(java.util.Comparator.comparing(file -> file.toFile().lastModified()))
+                    .map(file -> file.getFileName().toString().replaceFirst("\\.jsonl$", ""));
+        } catch (IOException none) {
+            return Optional.empty();
+        }
+    }
+
+    /** Claude Code in the terminal, working on this IDE through MCP: going on with its conversation here, or a new one. */
+    private void claude(boolean goOn) {
         if (terminal == null || served == null) {
             say("no Claude Code here: the IDE is not served to agents (it was not opened on a folder)");
             return;
         }
+        var resumed = goOn ? conversation() : Optional.<String>empty();
         try {
-            terminal.run("claude --mcp-config \"$IDESEED_MCP_CONFIG\" --settings \"$IDESEED_SETTINGS\"");
+            terminal.run("claude" + resumed.map(id -> " --resume " + id).orElse("")
+                    + " --mcp-config \"$IDESEED_MCP_CONFIG\" --settings \"$IDESEED_SETTINGS\"");
+            resumed.ifPresent(id -> say("going on with Claude's conversation " + id));
         } catch (IOException e) {
             say("the terminal did not take it: " + e.getMessage());
         }
         terminal();
+    }
+
+    /** Opened again: if Claude was working on the project when the IDE closed, it goes on. */
+    void reopened() {
+        if (ide.folder().isPresent() && Boolean.TRUE.equals(ide.record("conversation", Map.of()).get("open"))) claude(true);
     }
 
     PlansView plans() {
@@ -621,7 +665,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "terminal", "claude", null, "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", "claude", "claude-new", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");
