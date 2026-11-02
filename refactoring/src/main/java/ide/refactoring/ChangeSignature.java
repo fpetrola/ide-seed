@@ -78,7 +78,7 @@ public final class ChangeSignature implements Refactoring {
                 .filter(p -> p.kind() == Kind.PARAM && p.name().equals(name)).findFirst().orElse(null);
     }
 
-    /** {@code type name = value}, {@code name:type=value} or a name alone; commas inside {@code <>} belong to a type. */
+    /** {@code type name = value}, {@code name:type=value} or a name alone. */
     private static List<Item> parse(String spec) {
         var items = new ArrayList<Item>();
         for (var raw : split(spec)) {
@@ -97,17 +97,32 @@ public final class ChangeSignature implements Refactoring {
         return items;
     }
 
+    /**
+     * The items of a spec: split at the commas outside brackets and quotes, and before a default value, outside the
+     * {@code <>} of a type (in a value, {@code <} compares).
+     */
     private static List<String> split(String spec) {
         var parts = new ArrayList<String>();
         var depth = 0;
+        var types = 0;
+        var value = false;
+        var quote = (char) 0;
         var start = 0;
         for (var i = 0; i < spec.length(); i++) {
             var c = spec.charAt(i);
-            if (c == '<') depth++;
-            else if (c == '>') depth--;
-            else if (c == ',' && depth == 0) {
+            if (quote != 0) {
+                if (c == '\\') i++;
+                else if (c == quote) quote = 0;
+            } else if (c == '"' || c == '\'') quote = c;
+            else if (c == '(' || c == '[' || c == '{') depth++;
+            else if (c == ')' || c == ']' || c == '}') depth--;
+            else if (c == '<' && !value) types++;
+            else if (c == '>' && !value) types--;
+            else if (c == '=' && depth == 0 && types == 0) value = true;
+            else if (c == ',' && depth == 0 && types == 0) {
                 parts.add(spec.substring(start, i));
                 start = i + 1;
+                value = false;
             }
         }
         parts.add(spec.substring(start));

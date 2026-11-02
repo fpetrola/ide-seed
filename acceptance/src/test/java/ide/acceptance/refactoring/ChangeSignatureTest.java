@@ -111,6 +111,19 @@ class ChangeSignatureTest {
         assertThat(ws.errors()).isEmpty();
     }
 
+    /** A default value is what each call passes, as Java: the commas of a call in it, and a comparison, are its own. */
+    @Test
+    void aDefaultValueMayHaveCommasAndComparisons() {
+        var ws = Workspace.of(Map.of("a/Calc.java", CALC, "b/User.java", USER));
+
+        var result = ws.invoke("change-signature", Map.of("method", "a.Calc#add(int,int,int)",
+                "parameters", "int a, int b, int unused, int top = Math.max(4, 5), boolean small = 4 < 5"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Calc.java")).contains("public int add(int a, int b, int unused, int top, boolean small) {",
+                "return add(1, 2, 0, Math.max(4, 5), 4 < 5);");
+    }
+
     /** An argument that does something would no longer do it: removing its parameter is refused. */
     @Test
     void removingAParameterWhoseCallsPassWhatDoesSomethingAborts() {
