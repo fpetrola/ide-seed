@@ -77,8 +77,9 @@ final class InlineCall {
     /**
      * A call made as a statement (or as a lambda's body) of a method of statements: its statements take the call's
      * place (or become the lambda's block), each parameter its argument. Refused: a return anywhere in them (it would
-     * leave the caller), a parameter given a value, a local of theirs named as one where the call is, an argument that
-     * does something used other than once, members of this called on another receiver.
+     * leave the caller), a parameter given a value, an argument that does something used other than once, members of
+     * this called on another receiver. A local of theirs named as one where the call is takes a name of its own, the
+     * first {@code name2}, {@code name3}... free there (the verifier sees a field it would hide).
      */
     private static Change statements(Primitive.Inline inline, Context c, Program before, MethodCallExpr call,
                                      ide.program.Element method, MethodDeclaration declaration, ide.program.ElementId site) {
@@ -114,10 +115,20 @@ final class InlineCall {
         Bodies.locals(caller).forEach(v -> there.add(v.getNameAsString()));
         ((com.github.javaparser.ast.body.CallableDeclaration<?>) caller).getParameters().forEach(p -> there.add(p.getNameAsString()));
         call.findAncestor(com.github.javaparser.ast.expr.LambdaExpr.class).ifPresent(l -> l.getParameters().forEach(p -> there.add(p.getNameAsString())));
-        for (var local : body.findAll(com.github.javaparser.ast.body.VariableDeclarator.class)) {
-            if (there.contains(local.getNameAsString())) throw new PrimitiveRejected("inline.capture", local.getNameAsString() + " is a name the caller has already");
-        }
         var copy = body.clone();
+        var theirs = new java.util.HashSet<String>();
+        copy.findAll(com.github.javaparser.ast.body.VariableDeclarator.class).forEach(v -> theirs.add(v.getNameAsString()));
+        declaration.getParameters().forEach(p -> theirs.add(p.getNameAsString())); // they are replaced by name after
+        for (var local : copy.findAll(com.github.javaparser.ast.body.VariableDeclarator.class)) { // one named as the caller's takes a name of its own
+            var name = local.getNameAsString();
+            if (!there.contains(name)) continue;
+            var n = 2;
+            while (there.contains(name + n) || theirs.contains(name + n)) n++;
+            var renamed = name + n;
+            theirs.add(renamed);
+            copy.findAll(NameExpr.class, u -> u.getNameAsString().equals(name)).forEach(u -> u.setName(renamed));
+            local.setName(renamed);
+        }
         for (var i = 0; i < params.size(); i++) {
             var name = params.get(i).getNameAsString();
             var uses = copy.findAll(NameExpr.class, n -> n.getNameAsString().equals(name));

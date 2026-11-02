@@ -185,4 +185,36 @@ class InlineMethodTest {
         assertThat(result.violations()).extracting(Violation::code).containsExactly("inline.body-shape");
         assertThat(ws.source("a/Rows.java")).isEqualTo(source);
     }
+
+    /** A local of the inlined statements named as one where the call is takes a name of its own there, as IntelliJ's. */
+    @Test
+    void aLocalNamedAsOneOfTheCallersIsRenamed() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                class Rows {
+                    void process(String line) {
+                        String name = line.trim();
+                        row(line);
+                        System.out.println(name);
+                    }
+
+                    void row(String line) {
+                        String name = line.toUpperCase();
+                        System.out.println(name + name.length());
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-method", Map.of("method", "a.Rows#row(String)"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                        String name = line.trim();
+                        String name2 = line.toUpperCase();
+                        System.out.println(name2 + name2.length());
+                        System.out.println(name);
+                """).doesNotContain("void row(");
+        assertThat(ws.errors()).isEmpty();
+    }
 }
