@@ -50,6 +50,26 @@ final class Capabilities {
                     return entries("taken", sync.taken(), "conflicts", sync.conflicts(), "refused", sync.refused(),
                             "deleted", sync.deleted());
                 }))
+                .register(Capability.of("plan", "The plan being followed: its title, its tasks numbered from 1 with their "
+                        + "state (todo, doing, done) and note, and how many are done of how many", List.of(),
+                        args -> workspace.plan().shown()))
+                .register(Capability.of("plan-set", "Sets the plan to follow: a title and its tasks, one per line, every one to do",
+                        List.of(Param.of("title", "text"), Param.of("tasks", "text")), args -> {
+                    workspace.plan().set(text(args, "title"), text(args, "tasks").lines().toList());
+                    return workspace.plan().shown();
+                }))
+                .register(Capability.of("task-add", "Adds a task, to do, at the end of the plan", List.of(Param.of("text", "text")),
+                        args -> {
+                            workspace.plan().add(text(args, "text"));
+                            return workspace.plan().shown();
+                        }))
+                .register(Capability.of("task", "Says how far a task of the plan got: todo, doing or done, with a note",
+                        List.of(Param.of("n", "text"), Param.of("state", "choice", "todo", "doing", "done"),
+                                Param.of("note", "text").optional()), args -> {
+                    workspace.plan().task(number(args, "n"), WorkPlan.State.of(text(args, "state")),
+                            args.get("note") == null ? null : String.valueOf(args.get("note")));
+                    return workspace.plan().shown();
+                }))
                 .register(Capability.of("library", "Refactorings by level", List.of(), args -> workspace.library()))
                 .register(Capability.of("define", "Registers refactorings written in .ref", List.of(Param.of("text", "text")),
                         args -> workspace.define(text(args, "text"))))

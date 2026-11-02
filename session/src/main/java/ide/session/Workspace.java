@@ -34,6 +34,7 @@ public final class Workspace {
     private final Completion completion;
     private final Path root;
     private final Maven.Classpath classpath;
+    private final WorkPlan plan;
 
     private Workspace(JavaProjection project, Library library, Knowledge knowledge, Path root, Maven.Classpath classpath) {
         this.project = project;
@@ -44,6 +45,7 @@ public final class Workspace {
         this.fixes = new Fixes(project, knowledge);
         this.navigation = new Navigation(project);
         this.completion = new Completion(project);
+        this.plan = new WorkPlan(root == null ? null : root.resolve(".ide/plan.json"), session::event);
     }
 
     /** A workspace over these sources, with the standard library and knowledge; it has nowhere to save. */
@@ -160,6 +162,11 @@ public final class Workspace {
 
     public void save(Path root) {
         session.save(root);
+    }
+
+    /** The plan being followed, kept with the project. */
+    WorkPlan plan() {
+        return plan;
     }
 
     /** Takes what changed on disk where the workspace was opened from, as edits by hand. */

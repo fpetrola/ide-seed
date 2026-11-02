@@ -253,6 +253,11 @@ public final class Session {
         log.append(event);
     }
 
+    /** Appends an event that is not a transaction (a plan changed) to the log. */
+    public void event(Map<String, ?> event) {
+        log.append(event);
+    }
+
     /** Appends every event to a JSONL file from now on. */
     public void logTo(Path file) {
         log = EventLog.to(file);
