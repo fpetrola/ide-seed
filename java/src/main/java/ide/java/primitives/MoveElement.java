@@ -47,11 +47,16 @@ final class MoveElement {
         if (target.kind() == Kind.PACKAGE) moveType(c, before, element, target);
         else if (element.kind() == Kind.PARAM) moveParam(c, element, target, anchor);
         else if (element.kind() == Kind.STATEMENT) moveStatement(c, before, element, target, anchor);
-        else moveMember(c, element, target, anchor);
+        else moveMember(c, before, element, target, anchor);
         return move.intent(before, null);
     }
 
-    private static void moveMember(Context c, Element member, Element target, Element anchor) {
+    /**
+     * A member into another type. Going to another file, the types it names by their simple names are named there too
+     * (imported as its file imports them, or from its package); a static one is used from elsewhere through its new
+     * type, written as each file can name it.
+     */
+    private static void moveMember(Context c, Program before, Element member, Element target, Element anchor) {
         var moved = c.ids().address(member.id()).withOwner(target.id());
         if (c.ids().has(moved)) throw new PrimitiveRejected("projection.duplicate", c.ids().render(moved) + " already exists");
         var declaration = c.declaration(member);
@@ -59,11 +64,62 @@ final class MoveElement {
         var type = destination.as(TypeDeclaration.class);
         var text = Members.text(declaration.unit(), declaration.node(), Members.indentation(destination.unit(), type));
         var edits = new EditSet();
+        if (!destination.unit().path().equals(declaration.unit().path())) {
+            for (var qualified : named(c, before, declaration.unit(), declaration.node())) Imports.nameable(edits, destination.unit(), qualified);
+        }
+        if ("true".equals(member.fact(Fact.STATIC))) through(c, before, member, target, edits);
         Members.remove(edits, declaration.unit(), declaration.node());
         if (anchor == null) Members.append(edits, destination.unit(), type, text);
         else Members.insertBefore(edits, destination.unit(), c.declaration(anchor).node(), text);
         c.sources().apply(edits);
         c.ids().move(member.id(), target.id());
+    }
+
+    /** The types a declaration names by a simple name its file can name them by: imported, or of its package. */
+    private static TreeSet<String> named(Context c, Program before, Unit unit, Node node) {
+        var simple = new TreeSet<String>();
+        node.findAll(ClassOrInterfaceType.class, t -> t.getScope().isEmpty()).forEach(t -> simple.add(t.getNameAsString()));
+        for (var scope : node.findAll(com.github.javaparser.ast.expr.NameExpr.class)) { // Type.member: a name before a dot
+            if (scope.getParentNode().filter(p -> p instanceof com.github.javaparser.ast.expr.MethodCallExpr call && call.getScope().filter(scope::equals).isPresent()
+                    || p instanceof com.github.javaparser.ast.expr.FieldAccessExpr access && access.getScope() == scope).isPresent()) simple.add(scope.getNameAsString());
+        }
+        var named = new TreeSet<String>();
+        for (var name : simple) {
+            unit.tree().getImports().stream().filter(i -> !i.isAsterisk() && !i.isStatic() && i.getName().getIdentifier().equals(name))
+                    .findFirst().ifPresentOrElse(i -> named.add(i.getNameAsString()), () -> {
+                        var pkg = Imports.packageOf(unit);
+                        var local = pkg.isEmpty() ? name : pkg + "." + name;
+                        if (!pkg.isEmpty() && before.find(local).filter(e -> e.kind().isType()).isPresent()) named.add(local);
+                    });
+        }
+        return named;
+    }
+
+    /** The uses of a static member made outside the type it goes to name it through that type. */
+    private static void through(Context c, Program before, Element member, Element target, EditSet edits) {
+        for (var use : before.referencesTo(member.id())) {
+            if (before.within(use.site(), member.id()) || inside(before, use.site(), target)) continue;
+            var node = c.use(use.id());
+            var unit = c.sources().unitOf(node);
+            var name = Imports.nameable(edits, unit, target.qualified());
+            switch (node) {
+                case com.github.javaparser.ast.expr.NameExpr read -> edits.replace(unit, read, name + "." + member.name());
+                case com.github.javaparser.ast.expr.MethodCallExpr call when call.getScope().isEmpty() -> edits.replace(unit, call.getName(), name + "." + member.name());
+                case com.github.javaparser.ast.expr.MethodCallExpr call -> edits.replace(unit, call.getScope().orElseThrow(), name);
+                case com.github.javaparser.ast.expr.FieldAccessExpr access -> edits.replace(unit, access.getScope(), name);
+                default -> {
+                    // a method reference, or what names it otherwise, stays as written: the verifier sees what it binds
+                }
+            }
+        }
+    }
+
+    /** Whether an element is in {@code type}, or in a type inside it. */
+    private static boolean inside(Program program, ide.program.ElementId element, Element type) {
+        for (var at = program.enclosingType(element); ; at = program.enclosingType(at.parent())) {
+            if (at.id().equals(type.id())) return true;
+            if (at.parent() == null || program.element(at.parent()).kind() == Kind.PACKAGE) return false;
+        }
     }
 
     private static void moveStatement(Context c, Program before, Element statement, Element method, Element anchor) {

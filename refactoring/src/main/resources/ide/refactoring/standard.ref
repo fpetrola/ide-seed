@@ -69,6 +69,15 @@ refactoring rename-method-family "Renames a method with every method it override
   return ${method}
 end
 
+refactoring move-members "Moves members to another class, as IntelliJ's Move Members: what used them from elsewhere names their new class"
+  param members : elements(FIELD,METHOD) "the members to move"
+  param to : element(CLASS,INTERFACE) "where they go"
+  for m in members
+    move ${m} ${to}
+  end
+  return ${to}
+end
+
 refactoring move-type "Moves a top-level type to another package"
   param type : element(CLASS,INTERFACE) "the type to move"
   param package : element(PACKAGE) "the destination package"
