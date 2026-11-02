@@ -63,6 +63,15 @@ final class RetargetUse {
             if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
             var expression = (Expression) node;
             var receiver = expression.isFieldAccessExpr() ? unit.textOf(expression.asFieldAccessExpr().getScope()) + "." : "";
+            var was = before.element(ref.target()).kind();
+            if (was == Kind.PARAM || was == Kind.LOCAL) { // a value read through what holds it: the one variable of its type there
+                var type = before.element(target.parent()).name();
+                var holders = before.children(ref.site()).stream().filter(e -> (e.kind() == Kind.PARAM || e.kind() == Kind.LOCAL)
+                        && type.equals(e.fact(ide.program.Fact.TYPE))).toList();
+                if (holders.size() != 1) throw new PrimitiveRejected("retarget.receiver", "no one variable of "
+                        + type + " in " + before.element(ref.site()).qualified() + " to call " + target.name() + " on");
+                receiver = holders.getFirst().name() + ".";
+            }
             switch (ref.mode()) {
                 case READ -> edits.replace(unit, expression, receiver + target.name() + "()");
                 case NEW -> {

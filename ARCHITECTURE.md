@@ -1755,6 +1755,10 @@ que esto no escala solo:
    *Decidida el 2026-11-02 como se propuso (decisión 35), en la noche autónoma que Fernando pidió.* Los dos drivers
    cumplen la obligación 13 también para parámetros; extract declara que los usos del fragmento de un parámetro del
    método se van (el nuevo tiene los suyos), y `said` dice la lectura de un parámetro.
+   introduce-parameter-object (2026-11-02) quedó compuesto: la clase con un campo `private final` por parámetro, su
+   constructor y sus getters, un parámetro nuevo cuyas llamadas pasan `new #{k}(#{params})` (un argumento dicho sin
+   lenguaje sobre los parámetros del método: en cada llamada, lo que les pasa), el retarget de cada lectura de un
+   parámetro viejo a su getter (sobre la única variable del método de ese tipo), y el delete de los viejos.
 
 **Cómo se sabe si funcionó.**
 

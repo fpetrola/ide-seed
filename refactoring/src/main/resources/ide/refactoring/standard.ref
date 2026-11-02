@@ -359,6 +359,30 @@ refactoring introduce-constant "Moves an expression into a constant, a static fi
   return ${f}
 end
 
+refactoring introduce-parameter-object "Groups parameters of a method into a class it takes instead, as IntelliJ's Introduce Parameter Object"
+  param method : element(METHOD) "the method"
+  param params : elements(PARAM) "the parameters it groups" from "params(method)"
+  param name : text "name of the class" default "${cap(name(method))}Parameters"
+  param parameter : text "name of the parameter that takes them" default "parameters"
+  c := create CLASS ${owner(top(method))} ${name}
+  for p in params
+    f := create FIELD ${c} ${name(p)}
+    set ${f} type ${type(p)}
+    set ${f} visibility private
+    set ${f} final true
+  end
+  k := generate-constructor ${c} ${fields(c)}
+  create PARAM ${method} ${parameter} facts="type=${name}" argument="new #{k}(#{params})"
+  for p in params
+    g := generate-getter ${first(fields(c) | named name(p))}
+    for r in refs(p)
+      retarget ${r} ${g}
+    end
+    delete ${p}
+  end
+  return ${c}
+end
+
 refactoring introduce-variable "Moves an expression into a local declared right before its statement, which reads it, as IntelliJ's Introduce Variable"
   param method : element(METHOD) "the method the expression is in"
   param lines : lines "the expression's stretch"

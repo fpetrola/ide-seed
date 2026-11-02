@@ -41,6 +41,24 @@ final class CreateElement {
     }
 
     /**
+     * What a call passes for a new parameter, said in no language over the method's parameters: each is what the call
+     * passes for it; a new object's type is named as the call's file can.
+     */
+    private static String passing(Context c, EditSet edits, ide.java.text.Unit unit, ide.program.Body.Expression said,
+                                  Shared.Call call, List<String> parameters) {
+        return switch (said) {
+            case ide.program.Body.Parameter p -> unit.textOf(call.arguments().get(parameters.indexOf(c.program().element(p.parameter()).name())));
+            case ide.program.Body.New made -> {
+                var type = c.program().element(c.program().element(made.constructor()).parent());
+                var arguments = new ArrayList<String>();
+                for (var argument : made.arguments()) arguments.add(passing(c, edits, unit, argument, call, parameters));
+                yield "new " + ide.java.syntax.Imports.nameable(edits, unit, type.qualified()) + "(" + String.join(", ", arguments) + ")";
+            }
+            default -> throw new PrimitiveRejected("create.argument", "what a call passes is said with parameters and new objects only: " + ide.program.Body.text(said));
+        };
+    }
+
+    /**
      * A local of a method, declared with no value in a statement of its own at the start of its body (where a move puts
      * it after), first among the locals of its name.
      */
@@ -149,7 +167,12 @@ final class CreateElement {
                 com.github.javaparser.ast.body.CallableDeclaration<?> method = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
                 var edits = new EditSet();
                 Lists.append(edits, declaration.unit(), method.getParameters(), method.getName(), "Object " + name);
-                for (var call : calls) Lists.append(edits, sources.unitOf(call.node()), call.arguments(), call.from(), argument);
+                var said = argument != null && ide.program.Body.names(argument) ? ide.program.Body.value(argument, c.program(), owner.id()) : null;
+                for (var call : calls) {
+                    var unit = sources.unitOf(call.node());
+                    var passed = said == null ? argument : passing(c, edits, unit, said, call, Shared.parameterNames(method));
+                    Lists.append(edits, unit, call.arguments(), call.from(), passed);
+                }
                 var names = new ArrayList<>(Shared.parameterNames(method));
                 names.add(name);
                 sources.apply(edits);
