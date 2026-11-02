@@ -41,6 +41,13 @@ def clash(m, u) when parent(x, u) and alike(x, m) and x != m
 
 say parent for in-scope "pull-up-dependency ${qualified(element)} -> ${qualified(value)}"
 
+# A member used without saying whose is in scope where it is used (JLS 6.5.6.1, 15.12.1). It is mended before who can
+# use what, which comes next: what brings a member in scope can bring it in reach too.
+rule in-scope "a member used without saying whose is one of the type it is used in, or of one that type extends"
+  for s, m where self-use(s, m)
+  must in-scope(s, m)
+end
+
 # A use binds what it names (JLS 6.5): one made without saying whose, only where what it names is in scope.
 def binds(s, m) when uses(s, m) and not self-use(s, m)
 def binds(s, m) when self-use(s, m) and in-scope(s, m)

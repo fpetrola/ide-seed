@@ -1592,6 +1592,15 @@ que esto no escala solo:
      derivado sigue al padre supuesto (`GraphFacts.with`), y lo que entra a un padre va último, como hace `Move`.
    - Un hecho nuevo del grafo: `uses(s, m)`, cualquier referencia de s a m.
    - Las violaciones de antes de un cambio se preguntan una vez por búsqueda, no en cada estado supuesto.
+
+   **Ciclo 3 hecho el 2026-11-02**: dónde está en el alcance un nombre también es una regla (`rule in-scope`, JLS
+   6.5.6.1 y 15.12.1). Subir un campo cuyo inicializador lee otro privado sube también ese otro, antes que él, en el
+   mismo plan, sin reparar después. Antes, `pull-up-dependency` lo hacía el reparador.
+   - La regla se escribe antes que la de acceso, y por eso se repara antes: lo que trae un miembro al alcance puede
+     dejarlo también al alcance de la mano (`y` en la misma clase que `x` es privado y alcanza). En el otro orden, el
+     plan abría `y` sin necesidad y después lo subía igual.
+   - El lugar sale de lo supuesto: lo que entra a una clase va último, así que `before(y, x)` no vale después de
+     subir los dos, y el plan lo pide (`Move` antes de `x`).
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

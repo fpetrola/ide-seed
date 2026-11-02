@@ -139,7 +139,11 @@ class PullUpFieldTest {
         var result = ws.invoke("pull-up-field", Map.of("field", "a.B#x"));
 
         assertThat(result.violations()).isEmpty();
-        assertThat(result.repairs()).containsExactly("pull-up-dependency a.B#y -> a.A");
+        assertThat(result.repairs()).isEmpty(); // y goes with it, before it: where a name is in scope is a rule too
+        assertThat(result.steps()).containsExactly(
+                ". pull-up-field",
+                "  ' move a.B#x -> a.A",
+                "  ' move a.B#y -> a.A");
         assertThat(ws.source("a/A.java")).isEqualTo("""
                 package a;
 
