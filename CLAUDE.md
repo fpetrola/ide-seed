@@ -54,7 +54,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   one use, `said`: a statement, or a whole body, in no language when all of it can be said so), LanguageRules (access, visibilities, how
   the language writes a field's default value), Diagnostic,
   CompletionContext, PrimitiveRejected (and the rules every driver applies: nothing changes a library element; a
-  field merges only into a field, a method into a method).
+  field merges only into a field, a method into a method, a local into a field of its name).
 - `projection-kit` (projection, JUnit, AssertJ) — the kit for driver writers: ProjectionContract (the obligations as
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
   with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,

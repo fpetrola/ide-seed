@@ -212,7 +212,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
       body), así la creación es un paso y no dos con marcadores. Una sentencia se crea dicha en el lenguaje de
       cuerpos, al final del cuerpo, y hace los usos que nombra.
     - `Delete(element, into)`: sin `into`, borra lo que nada usa; con `into`, fusiona: un campo en un campo, un
-      método en un método, y los usos del borrado pasan al otro.
+      método en un método, un local en el campo de su nombre (su declaración le da al campo el valor que daba, ahí:
+      convert-local-to-field), y los usos del borrado pasan al otro.
     - `Move(element, parent, before)`: también reordena parámetros, y lleva una sentencia antes de otra o al final de
       un cuerpo, en su método o en otro; entre métodos, los usos hechos en ella pasan a ser del otro.
     - `Rename(element, name)`.

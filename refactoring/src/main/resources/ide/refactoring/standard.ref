@@ -272,6 +272,17 @@ refactoring generate-constructor "A constructor that takes a value for each fiel
   return ${c}
 end
 
+refactoring convert-local-to-field "Makes a local a field of its type, as IntelliJ's Convert Local to Field: its declaration gives the field its value"
+  param local : element(LOCAL) "the local"
+  let method = owner(local)
+  f := create FIELD ${owner(method)} ${name(local)}
+  set ${f} visibility private
+  set ${f} static ${attr(method, "static")}
+  set ${f} type ${type(local)}
+  delete ${local} into=${f}
+  return ${f}
+end
+
 refactoring make-final "Makes a field final: nothing may assign it but where it is declared or a constructor"
   param field : element(FIELD) "the field"
   set ${field} final true

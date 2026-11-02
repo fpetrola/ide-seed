@@ -18,14 +18,18 @@ public final class PrimitiveRejected extends RuntimeException {
         return code;
     }
 
-    /** Every projection merges a field only into a field, and a method only into a method. */
+    /** Every projection merges a field only into a field, a method only into a method, a local only into a field of its name. */
     public static void unlessMergeable(Program before, Primitive.Delete delete) {
         if (delete.into() == null) return;
         var element = before.element(delete.element());
         var into = before.element(delete.into());
-        if (element.kind() != into.kind() || element.kind() != Kind.FIELD && element.kind() != Kind.METHOD) {
+        var local = element.kind() == Kind.LOCAL && into.kind() == Kind.FIELD;
+        if (!local && (element.kind() != into.kind() || element.kind() != Kind.FIELD && element.kind() != Kind.METHOD)) {
             throw new PrimitiveRejected("delete.into", element.qualified() + " cannot go into " + into.qualified()
-                    + ": a field goes into a field, a method into a method");
+                    + ": a field goes into a field, a method into a method, a local into a field");
+        }
+        if (local && !element.name().equals(into.name())) {
+            throw new PrimitiveRejected("delete.into", element.qualified() + " goes into a field of its name, not " + into.qualified());
         }
     }
 

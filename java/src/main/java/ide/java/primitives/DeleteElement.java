@@ -41,7 +41,8 @@ final class DeleteElement {
         PrimitiveRejected.unlessMergeable(before, delete);
         var element = before.element(delete.element());
         var change = delete.intent(before, null);
-        if (element.kind() == Kind.LOCAL) for (var gone : deleteLocal(c, before, element)) change = change.expect(gone);
+        if (element.kind() == Kind.LOCAL && delete.into() != null) for (var gone : mergeLocal(c, before, element)) change = change.expect(gone);
+        else if (element.kind() == Kind.LOCAL) for (var gone : deleteLocal(c, before, element)) change = change.expect(gone);
         else if (element.kind() == Kind.STATEMENT) deleteStatement(c, before, element);
         else if (element.kind() == Kind.PARAM) for (var gone : deleteParam(c, before, element)) change = change.expect(gone);
         else if (element.kind().isType()) deleteType(c, before, element);
@@ -82,6 +83,45 @@ final class DeleteElement {
         c.ids().forget(local.id());
         c.ids().placeLocals(local.parent(), others);
         if (place >= 0) {
+            c.ids().forget(own.get(place));
+            c.ids().placeStatements(local.parent(), own.stream().filter(s -> !s.equals(own.get(place))).toList());
+        }
+        return gone;
+    }
+
+    /**
+     * A local that goes into the field of its name: its declaration gives the field the value it was given, there, and
+     * says nothing if it gave none; its uses are the field's (the intent says so), and the method's other locals of its
+     * name close ranks.
+     */
+    private static List<Change.Dropped> mergeLocal(Context c, Program before, Element local) {
+        var declaration = c.declaration(local);
+        var variable = declaration.as(VariableDeclarator.class);
+        var statement = variable.getParentNode().filter(d -> ((VariableDeclarationExpr) d).getVariables().size() == 1)
+                .flatMap(Node::getParentNode).filter(ExpressionStmt.class::isInstance).orElse(null);
+        var unit = declaration.unit();
+        if (statement == null || !ide.java.syntax.Statements.alone(unit, statement)) {
+            throw new PrimitiveRejected("delete.unsupported", local.qualified() + " is not declared alone on its lines");
+        }
+        CallableDeclaration<?> callable = variable.findAncestor(CallableDeclaration.class).orElseThrow();
+        var others = new LinkedHashMap<ElementId, String>();
+        for (var other : Bodies.locals(callable)) {
+            if (other != variable) others.put(c.reader().local(other), other.getNameAsString());
+        }
+        var place = Bodies.place(Bodies.statements(callable), statement);
+        var own = before.children(local.parent()).stream().filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList();
+        var type = ((VariableDeclarationExpr) variable.getParentNode().orElseThrow()).getElementType().getRange().orElseThrow();
+        var gone = before.referencesFrom(local.parent()).stream() // the type it was declared with is named no more
+                .filter(r -> c.use(r.id()).getRange().filter(type::contains).isPresent())
+                .map(r -> new Change.Dropped(r.site(), r.target())).toList();
+        var edits = new EditSet();
+        var value = variable.getInitializer().orElse(null);
+        if (value != null) edits.replace(unit, statement, local.name() + " = " + unit.textOf(value) + ";");
+        else Members.remove(edits, unit, statement);
+        c.sources().apply(edits);
+        c.ids().forget(local.id());
+        c.ids().placeLocals(local.parent(), others);
+        if (value == null && place >= 0) {
             c.ids().forget(own.get(place));
             c.ids().placeStatements(local.parent(), own.stream().filter(s -> !s.equals(own.get(place))).toList());
         }
