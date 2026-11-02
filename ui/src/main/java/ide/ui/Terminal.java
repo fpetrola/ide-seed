@@ -34,6 +34,9 @@ final class Terminal extends JPanel {
 
     private final Path folder;
     private final JediTermWidget widget;
+    private final java.util.Map<String, String> environment = new HashMap<>();
+    /** What it runs when it is first shown: the user's shell, or a line run in it first. */
+    private List<String> first = shell();
 
     Terminal(Path folder) {
         super(new BorderLayout());
@@ -42,7 +45,7 @@ final class Terminal extends JPanel {
         add(widget, BorderLayout.CENTER);
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing() && !running()) {
-                start(shell());
+                start(first);
             }
         });
     }
@@ -53,8 +56,33 @@ final class Terminal extends JPanel {
         return List.of(shell, "-l");
     }
 
+    /** A variable the programs it starts will have. */
+    void environment(String name, String value) {
+        environment.put(name, value);
+    }
+
+    /**
+     * Runs a line in the shell: typed into it if it is running, or, if it has not started, run first by an interactive
+     * shell that then stays.
+     */
+    void run(String line) throws IOException {
+        if (running()) {
+            type(line + "\r");
+            return;
+        }
+        var shell = shell().getFirst();
+        first = List.of(shell, "-l", "-i", "-c", line + "; exec " + shell + " -l");
+        if (isShowing()) start(first);
+    }
+
+    /** What it will run when it is first shown. */
+    List<String> first() {
+        return first;
+    }
+
     void start(List<String> command) {
         var environment = new HashMap<>(System.getenv());
+        environment.putAll(this.environment);
         environment.put("TERM", "xterm-256color");
         environment.put("TERMINAL_EMULATOR", "IdeSeed");
         try {

@@ -77,7 +77,7 @@ De la arquitectura (nuevos):
 ## 4. Mapa de módulos
 
 ```
-          cli       ui       mcp       (adaptadores: solo session y core)
+          cli       ui  -->  mcp       (adaptadores: solo session y core; la ui sirve el mcp)
             \       |       /
                  acceptance            (solo tests: donde los productos se encuentran)
                      |
@@ -117,8 +117,8 @@ pom declara solo los productos que usa, y el pom es el mapa:
 | session     | java, engine, refactoring, knowledge, maven; JavaParser en runtime | el ensamblado                         |
 | acceptance  | session, solo para tests                                   | escenarios transversales, samples, reglas    |
 | cli         | session, core                                              | adaptador: la terminal                       |
-| ui          | session, core; RSyntaxTextArea                             | adaptador: la ventana Swing                  |
-| mcp         | session, core                                              | adaptador: servidor MCP por stdio            |
+| ui          | session, core, mcp; RSyntaxTextArea, JediTerm, pty4j       | adaptador: la ventana Swing                  |
+| mcp         | session, core                                              | adaptador: servidor MCP por stdio y HTTP     |
 
 Cómo se hace cumplir:
 
@@ -739,7 +739,17 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   - `mcp`: JSON-RPC 2.0 por stdio, una línea por mensaje: `initialize`, `ping`, `tools/list` (cada capacidad una
     herramienta, su esquema un JSON Schema) y `tools/call` (lo que responde la capacidad, o un resultado de error).
     Si una llamada cambia las herramientas, como `define`, avisa con `notifications/tools/list_changed`.
-    `target/ide-mcp.jar`.
+    `target/ide-mcp.jar`. El protocolo (`Server.handle`) está separado de sus transportes: stdio (`run`) y Streamable
+    HTTP (`Http`), solo en 127.0.0.1 y con un token: `POST /mcp`, que responde JSON, o un flujo de eventos cuando hay más
+    de un mensaje, y 202 a una notificación. Cada mensaje corre en el turno que le dan.
+  - **Decisión: la ui depende de mcp.** Para que un agente (Claude Code en la terminal) trabaje sobre *el mismo* IDE que
+    muestra la ventana, y no sobre un `Workspace` propio que la ventana no ve, la ventana sirve su IDE por HTTP. Cada
+    llamada corre en el hilo de Swing y después la ventana se muestra de nuevo. Al abrirse escribe dónde encontrarla, con
+    el token, en `~/.ideseed/mcp/ideseed-<puerto>.json` (solo legible por el usuario; se borra al cerrar), le pasa la
+    ruta a la terminal en `IDESEED_MCP_CONFIG`, y Ctrl+Esc (la tecla del plugin de Claude Code en JetBrains) corre ahí
+    `claude --mcp-config "$IDESEED_MCP_CONFIG"`. Es la única dependencia entre adaptadores: mcp sigue sin conocer a
+    nadie, y la ui solo lo enciende. Lo que cambia por MCP queda en el IDE hasta que se guarda: un agente que lee los
+    archivos del disco no lo ve.
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 

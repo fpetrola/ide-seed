@@ -45,6 +45,12 @@ public final class Main {
             FlatLaf.updateUI();
             var frame = new JFrame();
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowClosing(java.awt.event.WindowEvent event) {
+                    if (frame.getContentPane() instanceof Workbench workbench) workbench.closeDown();
+                }
+            });
             frame.setSize(1400, 900);
             frame.setLocationRelativeTo(null);
             open(frame, args.length > 0 ? Path.of(args[0]) : example());
@@ -71,7 +77,13 @@ public final class Main {
             @Override
             protected void done() {
                 try {
+                    if (frame.getContentPane() instanceof Workbench before) before.closeDown();
                     var workbench = new Workbench(get(), new SwingDialogs(frame));
+                    try {
+                        workbench.serve(Path.of(System.getProperty("user.home"), ".ideseed", "mcp"));
+                    } catch (java.io.IOException | RuntimeException notServed) {
+                        System.err.println("agents cannot reach this IDE: " + notServed.getMessage());
+                    }
                     workbench.opener(folder -> {
                         var chosen = folder == null ? folder(frame) : folder;
                         if (chosen != null) open(frame, chosen);

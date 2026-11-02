@@ -31,6 +31,11 @@
             <groupId>ide</groupId>
             <artifactId>ide-core</artifactId>
         </dependency>
+        <!-- the window serves itself to agents over MCP, so that Claude Code in its terminal works on this IDE -->
+        <dependency>
+            <groupId>ide</groupId>
+            <artifactId>ide-mcp</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.fifesoft</groupId>
             <artifactId>rsyntaxtextarea</artifactId>

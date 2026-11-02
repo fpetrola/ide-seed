@@ -290,6 +290,43 @@ class WorkbenchTest {
         assertThat(terminal.running()).isFalse();
     }
 
+    /**
+     * Served to agents, the window is the IDE they work on: a tool called over MCP changes the program the editors
+     * show, and Claude Code starts in the terminal knowing where to find it.
+     */
+    @Test
+    void anAgentWorksOnTheIdeTheWindowShows(@TempDir Path served) throws Exception {
+        var workbench = workbench();
+        workbench.open("a/A.java", 4, 16);
+        try {
+            var config = workbench.serve(served);
+
+            assertThat(java.nio.file.Files.getPosixFilePermissions(config))
+                    .isEqualTo(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            @SuppressWarnings("unchecked") var server = (Map<String, Object>) ((Map<String, Object>) ((Map<String, Object>)
+                    ide.core.Json.read(Files.readString(config))).get("mcpServers")).get("ideseed");
+            @SuppressWarnings("unchecked") var headers = (Map<String, Object>) server.get("headers");
+            var call = java.net.http.HttpRequest.newBuilder(java.net.URI.create(String.valueOf(server.get("url"))))
+                    .header("Authorization", String.valueOf(headers.get("Authorization")))
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
+                            + "\"params\":{\"name\":\"rename\",\"arguments\":{\"element\":\"a.A#x\",\"name\":\"count\"}}}")).build();
+            var answer = java.net.http.HttpClient.newHttpClient().send(call, java.net.http.HttpResponse.BodyHandlers.ofString());
+            javax.swing.SwingUtilities.invokeAndWait(() -> { }); // the window has done what the call asked
+
+            assertThat(answer.body()).contains("\"isError\":false");
+            assertThat(workbench.text("a/A.java")).contains("public int count;").contains("return count + p;");
+            assertThat(workbench.views().output()).contains("agent: rename");
+
+            workbench.act("claude");
+
+            assertThat(String.join(" ", workbench.terminalView().orElseThrow().first()))
+                    .contains("claude --mcp-config \"$IDESEED_MCP_CONFIG\"");
+        } finally {
+            workbench.closeDown();
+        }
+        assertThat(served).isEmptyDirectory();
+    }
+
     /** In a window the size of the one Main opens, the editors take most of the height; the views below, the rest. */
     @Test
     void theEditorsTakeMostOfTheHeight() throws IOException {

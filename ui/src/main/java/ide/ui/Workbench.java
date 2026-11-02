@@ -1,5 +1,9 @@
 package ide.ui;
 
+import ide.core.Json;
+import java.io.IOException;
+import java.nio.file.Path;
+import javax.swing.SwingUtilities;
 import ide.core.Capability;
 
 import javax.swing.AbstractAction;
@@ -258,6 +262,7 @@ final class Workbench extends JPanel {
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
+                case "claude" -> claude();
                 case "zoom-in" -> zoom(1);
                 case "zoom-out" -> zoom(-1);
                 case "zoom-reset" -> zoom(0);
@@ -293,6 +298,74 @@ final class Workbench extends JPanel {
         }
         views.setSelectedComponent(terminal);
         terminal.requestFocusInWindow();
+    }
+
+    /** Where an agent finds this IDE, while it is served. */
+    private ide.mcp.Http served;
+    private Path servedConfig;
+
+    /**
+     * Serves this IDE to agents on this machine over MCP, as it is: what they change, the window shows. Writes where
+     * to find it, with its token, into {@code folder}, readable only by the user, and tells the terminal.
+     */
+    Path serve(Path folder) throws IOException {
+        var token = java.util.HexFormat.of().formatHex(random(24));
+        served = ide.serve(token, work -> {
+            try {
+                if (SwingUtilities.isEventDispatchThread()) work.run();
+                else SwingUtilities.invokeAndWait(work);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw new IllegalStateException(e.getCause());
+            }
+        }, tool -> {
+            say("agent: " + tool);
+            refresh();
+        });
+        java.nio.file.Files.createDirectories(folder);
+        servedConfig = folder.resolve("ideseed-" + java.net.URI.create(served.url()).getPort() + ".json");
+        var config = Json.write(Map.of("mcpServers", Map.of("ideseed", Map.of("type", "http", "url", served.url(),
+                "headers", Map.of("Authorization", "Bearer " + token)))));
+        java.nio.file.Files.writeString(servedConfig, config);
+        java.nio.file.Files.setPosixFilePermissions(servedConfig, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        if (terminal != null) terminal.environment("IDESEED_MCP_CONFIG", servedConfig.toString());
+        say("agents reach this IDE at " + served.url());
+        return servedConfig;
+    }
+
+    private static byte[] random(int bytes) {
+        var seed = new byte[bytes];
+        new java.security.SecureRandom().nextBytes(seed);
+        return seed;
+    }
+
+    /** Stops serving agents and ends the terminal's program: the window is going away. */
+    void closeDown() {
+        if (served != null) {
+            served.stop();
+            try {
+                java.nio.file.Files.deleteIfExists(servedConfig);
+            } catch (IOException ignored) {
+                // a file left behind names a port nobody listens on
+            }
+            served = null;
+        }
+        if (terminal != null) terminal.close();
+    }
+
+    /** Claude Code in the terminal, working on this IDE through MCP. */
+    private void claude() {
+        if (terminal == null || served == null) {
+            say("no Claude Code here: the IDE is not served to agents (it was not opened on a folder)");
+            return;
+        }
+        try {
+            terminal.run("claude --mcp-config \"$IDESEED_MCP_CONFIG\"");
+        } catch (IOException e) {
+            say("the terminal did not take it: " + e.getMessage());
+        }
+        terminal();
     }
 
     /** The terminal, if there is one. */
@@ -385,7 +458,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "terminal", null, "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", "claude", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");

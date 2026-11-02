@@ -135,8 +135,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea, IntelliJ's menus, both IDEs' keys:
   Workbench, Editors, Views, Form from a capability's schema, Dialogs as an interface the tests script, Keymap, Terminal:
   JediTerm over pty4j, the user's shell in the project's folder, started when first shown, Alt+F12; tested with no
-  screen), `mcp` (Server: JSON-RPC 2.0 on stdio, each capability a tool with a JSON Schema, list_changed after
-  a call that changes the tools).
+  screen; the one adapter that uses another: the window serves its own IDE over mcp's Http, each call on Swing's
+  thread, and Ctrl+Esc runs Claude Code in the terminal with that server), `mcp` (Server: JSON-RPC 2.0, each capability
+  a tool with a JSON Schema, list_changed after a call that changes the tools; `handle` is the protocol, `run` serves it
+  on stdio and Http on Streamable HTTP, 127.0.0.1 only, with a bearer token).
 
 ## Principles (do not break them; say so if an instruction does)
 

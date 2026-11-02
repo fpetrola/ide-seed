@@ -21,6 +21,11 @@ final class Ide {
         return workspace.root();
     }
 
+    /** This IDE served to agents over MCP's HTTP transport, each call in {@code turn}; {@code called} hears each tool. */
+    ide.mcp.Http serve(String token, java.util.function.Consumer<Runnable> turn, java.util.function.Consumer<String> called) {
+        return ide.mcp.Http.start(new ide.mcp.Server(workspace, called), turn, token);
+    }
+
     Capability capability(String id) {
         return workspace.capabilities().get(id);
     }
