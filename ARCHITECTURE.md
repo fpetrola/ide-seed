@@ -1763,6 +1763,12 @@ que esto no escala solo:
    parámetro viejo a su getter (sobre la única variable del método de ese tipo), y el delete de los viejos.
    convert-to-instance-method también: move del método estático al tipo del parámetro, `set static false`, y el
    parámetro fusionado en ese tipo. Mover un estático declara que se van los usos del tipo por el que se lo nombraba.
+   *Hueco que encontró test1 (2026-11-02):* el cuerpo de un método son sus sentencias de primer nivel, así que el local
+   de introduce-variable se declara antes de la sentencia entera; una expresión dentro de un `while` o de un `if` se
+   calcularía una sola vez, antes. Ahora el driver rechaza el retarget de una llamada a un local cuando la llamada corre
+   en una rama, un bucle o un bloque anidado que el local no tiene adentro (`retarget.evaluation`). Para hacerlo bien
+   hace falta poder nombrar una sentencia anidada como lugar: queda para decidir si las sentencias de bloques anidados
+   pasan a ser elementos (cambia la decisión de que un bloque anidado es parte de su sentencia).
 
 **Cómo se sabe si funcionó.**
 

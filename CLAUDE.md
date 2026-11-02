@@ -85,7 +85,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. A new parameter's argument may be said in no language over the method's parameters (each call passes
   what it passed them); a read of a parameter or local retargeted to a getter is made on the one variable of the
-  getter's type there. Inline of a call made as a statement (or as a lambda's body) to a method of statements
+  getter's type there; a call retargeted to a local is computed where the local is given its value: one on a branch, in a loop
+  or a nested block the local is declared outside of is refused. Inline of a call made as a statement (or as a lambda's body) to a method of statements
   puts them in its place, each parameter its argument (a return among them is refused). A member moved to another file takes the imports of the simple names it uses, and a static one is used
   from elsewhere through its new type. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and

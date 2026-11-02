@@ -103,21 +103,31 @@ public final class Bodies {
         var declared = declaration.getParentNode().filter(d -> d instanceof VariableDeclarationExpr v && v.getVariables().size() == 1)
                 .flatMap(Node::getParentNode).filter(ExpressionStmt.class::isInstance).orElse(null);
         if (declared == null || !(declared.getParentNode().orElse(null) instanceof BlockStmt block)) return declaration;
+        var branch = branch(block, use);
+        if (branch != null) return branch;
         Node at = use;
-        for (var parent = use.getParentNode().orElse(null); parent != block; parent = parent.getParentNode().orElse(null)) {
-            if (parent == null) return use;
-            var conditional = parent instanceof ConditionalExpr || parent instanceof LambdaExpr || parent instanceof SwitchExpr
-                    || parent instanceof BinaryExpr b && (b.getOperator() == BinaryExpr.Operator.AND || b.getOperator() == BinaryExpr.Operator.OR)
-                    || parent instanceof Statement && parent.getParentNode().orElse(null) != block;
-            if (conditional) return parent;
-            at = parent;
-        }
+        while (at.getParentNode().orElseThrow() != block) at = at.getParentNode().orElseThrow();
         var statements = block.getStatements();
         for (var i = statements.indexOf((Statement) declared) + 1; i < statements.indexOf((Statement) at); i++) {
             var busy = busy(statements.get(i), null);
             if (busy != null) return busy;
         }
         return busy(at, use);
+    }
+
+    /**
+     * What makes {@code use} run other than once each time a statement of {@code block} runs, or null: a branch, a loop,
+     * a lambda, a statement of a block nested in it; {@code use} itself when it is not in the block.
+     */
+    public static Node branch(BlockStmt block, Expression use) {
+        for (var parent = use.getParentNode().orElse(null); parent != block; parent = parent.getParentNode().orElse(null)) {
+            if (parent == null) return use;
+            var conditional = parent instanceof ConditionalExpr || parent instanceof LambdaExpr || parent instanceof SwitchExpr
+                    || parent instanceof BinaryExpr b && (b.getOperator() == BinaryExpr.Operator.AND || b.getOperator() == BinaryExpr.Operator.OR)
+                    || parent instanceof Statement && parent.getParentNode().orElse(null) != block;
+            if (conditional) return parent;
+        }
+        return null;
     }
 
     /** What in {@code node}, before {@code until} if given (and not around it), does something or reads the heap, or null. */

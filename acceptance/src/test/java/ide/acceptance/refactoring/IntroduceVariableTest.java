@@ -68,4 +68,60 @@ class IntroduceVariableTest {
                 """);
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** An expression that reads a local of its method: the local's value reads it too. */
+    @Test
+    void anExpressionThatReadsALocal() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.List;
+
+                class Rows {
+                    void print(String line) {
+                        List<String> fields = List.of(line.split(","));
+                        System.out.println("dni " + fields.get(3) + ".");
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#print(String)", "lines", "8:37-8:49", "name", "dni"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                        List<String> fields = List.of(line.split(","));
+                        String dni = fields.get(3);
+                        System.out.println("dni " + dni + ".");
+                """).doesNotContain("computeDni");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /**
+     * An expression in a loop would be computed once, before it, by a local declared before the loop (a body's
+     * statements are its top-level ones): refused, the code as it was.
+     */
+    @Test
+    void anExpressionInALoopIsRefusedRatherThanComputedOnce() {
+        var source = """
+                package a;
+
+                import java.util.List;
+
+                class Rows {
+                    void print(List<String> lines) {
+                        for (String line : lines) {
+                            List<String> fields = List.of(line.split(","));
+                            System.out.println("dni " + fields.get(3) + ".");
+                        }
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Rows.java", source));
+
+        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#print(List<String>)", "lines", "9:41-9:53", "name", "dni"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.toString()).contains("retarget.evaluation");
+        assertThat(ws.source("a/Rows.java")).isEqualTo(source);
+    }
 }

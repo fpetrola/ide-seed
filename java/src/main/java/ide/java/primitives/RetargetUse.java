@@ -52,6 +52,12 @@ final class RetargetUse {
             var reads = target.kind() == Kind.LOCAL && call.getArguments().stream().allMatch(Expression::isNameExpr); // a local's value takes them
             if (!call.getArguments().isEmpty() && !reads) throw new PrimitiveRejected("retarget.call", call + " passes arguments a value cannot take");
             if (target.kind() == Kind.LOCAL && call.getScope().isPresent()) throw new PrimitiveRejected("retarget.call", call + " is made on something a local is not of");
+            if (target.kind() == Kind.LOCAL) { // the value is computed once, where the local is given it: the call must run once there too
+                var declared = c.declaration(target).as(com.github.javaparser.ast.body.VariableDeclarator.class).findAncestor(com.github.javaparser.ast.stmt.BlockStmt.class).orElseThrow();
+                var branch = ide.java.semantics.Bodies.branch(declared, call);
+                if (branch != null) throw new PrimitiveRejected("retarget.evaluation", call + " runs on a branch, in a loop or a nested block (line "
+                        + branch.getBegin().orElseThrow().line + ") that " + target.name() + " is declared outside of: its value would be computed once, before");
+            }
             for (var argument : call.getArguments()) { // what they read is read no more here
                 var range = argument.getRange().orElseThrow();
                 for (var r : before.referencesFrom(ref.site())) {
