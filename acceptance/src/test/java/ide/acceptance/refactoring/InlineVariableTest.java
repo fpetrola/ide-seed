@@ -124,6 +124,71 @@ class InlineVariableTest {
                 """, "a.A#twice()/c", "inline.effects");
     }
 
+    private static final String ROWS = """
+            package a;
+
+            import java.util.List;
+
+            class Rows {
+                void save(String id, String name, Object customer) {
+                }
+
+                void process(List<String> fields) {
+                    String id = fields.get(1);
+                    String name = fields.get(2);
+                    Object customer = new StringBuilder(name);
+                    save(id, name, customer);
+                }
+            }
+            """;
+
+    /**
+     * A value with effects read once, where nothing between its declaration and the read does anything or reads the
+     * heap, runs at the same point among what else runs: it moves there. Last first, the arguments keep their order.
+     */
+    @Test
+    void aValueWithEffectsReadOnceRightAfterMovesToTheRead() {
+        var ws = Workspace.of(Map.of("a/Rows.java", ROWS.replace("Object customer = new StringBuilder(name);", "StringBuilder customer = new StringBuilder(\"c\");")));
+
+        for (var local : java.util.List.of("customer", "name", "id")) {
+            var result = ws.invoke("inline-variable", Map.of("local", "a.Rows#process(List<String>)/" + local));
+            assertThat(result.violations()).as(local).isEmpty();
+        }
+
+        assertThat(ws.source("a/Rows.java")).contains("""
+                    void process(List<String> fields) {
+                        save(fields.get(1), fields.get(2), new StringBuilder("c"));
+                    }
+                """);
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /** What runs between would run before the value now, and it could tell. */
+    @Test
+    void aValueWithEffectsWithSomethingThatRunsBetweenStays() {
+        refused(ROWS, "a.Rows#process(List<String>)/id", "inline.effects");
+    }
+
+    /** Read only on one branch, the value would not always run. */
+    @Test
+    void aValueWithEffectsReadOnABranchStays() {
+        refused("""
+                package a;
+
+                import java.util.List;
+
+                class A {
+                    int first(List<Integer> values, boolean any) {
+                        int v = values.get(0);
+                        if (any) {
+                            return v;
+                        }
+                        return 0;
+                    }
+                }
+                """, "a.A#first(List<Integer>,boolean)/v", "inline.effects");
+    }
+
     @Test
     void aValueReadAfterWhatItReadsChangesStays() {
         refused("""

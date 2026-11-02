@@ -14,8 +14,9 @@ import ide.projection.PrimitiveRejected;
 /**
  * Replaces a read of a local by the value it is given where it is declared, parenthesized where the read needs it.
  * What would change what the program does without changing what a name binds, which the verifier cannot see, is
- * refused here: a local given another value afterwards, a value with effects or of another type than the local, a
- * value read after what it reads may have changed, and a read in a lambda or a class, which happens later. The change
+ * refused here: a local given another value afterwards, a value of another type than the local, a value read after
+ * what it reads may have changed, and a read in a lambda or a class, which happens later. A value with effects moves
+ * from its declaration to the read, when it is read once and nothing between could tell; else it is refused. The change
  * says the read is gone and that the value's uses, as they bind where it is declared, are made where it was: a name
  * there that binds something else is a capture.
  */
@@ -35,7 +36,12 @@ final class InlineLocal {
                 new PrimitiveRejected("inline.no-value", local.qualified() + " is given no value where it is declared"));
         if (!(c.use(read.id()) instanceof NameExpr use)) throw new PrimitiveRejected("inline.not-a-read", read.id() + " does not read " + local.name());
         var effect = Bodies.effect(value);
-        if (effect != null) throw new PrimitiveRejected("inline.effects", "'" + effect + "' would run where " + local.name() + " is read");
+        var moves = effect != null; // it runs once, where it is read: it is read once, and nothing between could tell
+        if (moves && before.referencesTo(local.id()).size() > 1) {
+            throw new PrimitiveRejected("inline.effects", "'" + effect + "' would run where " + local.name() + " is read, each time");
+        }
+        var past = moves ? Bodies.movedPast(variable, use) : null;
+        if (past != null) throw new PrimitiveRejected("inline.effects", "'" + effect + "' would run where " + local.name() + " is read, after or without '" + past + "'");
         var other = otherType(variable, value);
         if (other != null) throw new PrimitiveRejected("inline.type", "'" + value + "' is " + other + ", " + local.name() + " is " + variable.getType());
         var deferred = Bodies.deferred(variable, use);
@@ -51,7 +57,15 @@ final class InlineLocal {
         }
         var unit = declaration.unit();
         var text = Bodies.needsParentheses(value, use) ? "(" + unit.textOf(value) + ")" : unit.textOf(value);
-        c.sources().apply(Shared.edits(e -> e.replace(unit, use, text)));
+        if (moves) { // the value leaves its declaration, and the uses it made there with it
+            for (var made : before.referencesFrom(read.site())) {
+                if (c.use(made.id()).getRange().filter(range::contains).isPresent()) change = change.expect(new Change.Dropped(made.site(), made.target()));
+            }
+        }
+        c.sources().apply(Shared.edits(e -> {
+            e.replace(unit, use, text);
+            if (moves) e.replace(unit, ide.java.text.Unit.after(variable.getName().getEnd().orElseThrow()), value.getEnd().orElseThrow(), "");
+        }));
         return change;
     }
 

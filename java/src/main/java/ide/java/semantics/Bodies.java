@@ -29,6 +29,9 @@ import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.ContinueStmt;
@@ -88,6 +91,43 @@ public final class Bodies {
                 || n instanceof ArrayCreationExpr || n instanceof ArrayInitializerExpr || n instanceof LambdaExpr
                 || n instanceof MethodReferenceExpr || n instanceof AssignExpr
                 || n instanceof UnaryExpr u && u.getOperator().name().endsWith("CREMENT")).orElse(null);
+    }
+
+    /**
+     * What keeps a value with effects from moving, from {@code declaration} (alone in its statement), to {@code use}, or
+     * null when it runs there at the same point among what else runs: the use is in a statement of the declaration's
+     * block, read whatever happens (not on a branch, in a loop or a lambda), and what runs between them, in the
+     * statements between and in the use's own before it, has no effects and reads only locals.
+     */
+    public static Node movedPast(VariableDeclarator declaration, Expression use) {
+        var declared = declaration.getParentNode().filter(d -> d instanceof VariableDeclarationExpr v && v.getVariables().size() == 1)
+                .flatMap(Node::getParentNode).filter(ExpressionStmt.class::isInstance).orElse(null);
+        if (declared == null || !(declared.getParentNode().orElse(null) instanceof BlockStmt block)) return declaration;
+        Node at = use;
+        for (var parent = use.getParentNode().orElse(null); parent != block; parent = parent.getParentNode().orElse(null)) {
+            if (parent == null) return use;
+            var conditional = parent instanceof ConditionalExpr || parent instanceof LambdaExpr || parent instanceof SwitchExpr
+                    || parent instanceof BinaryExpr b && (b.getOperator() == BinaryExpr.Operator.AND || b.getOperator() == BinaryExpr.Operator.OR)
+                    || parent instanceof Statement && parent.getParentNode().orElse(null) != block;
+            if (conditional) return parent;
+            at = parent;
+        }
+        var statements = block.getStatements();
+        for (var i = statements.indexOf((Statement) declared) + 1; i < statements.indexOf((Statement) at); i++) {
+            var busy = busy(statements.get(i), null);
+            if (busy != null) return busy;
+        }
+        return busy(at, use);
+    }
+
+    /** What in {@code node}, before {@code until} if given (and not around it), does something or reads the heap, or null. */
+    private static Node busy(Node node, Node until) {
+        for (var n : node.findAll(Node.class)) {
+            if (until != null && (n.isAncestorOf(until) || n == until || !n.getEnd().orElseThrow().isBefore(until.getBegin().orElseThrow()))) continue;
+            if (n instanceof Expression e && effect(e) != null) return effect(e);
+            if (n instanceof FieldAccessExpr || n instanceof ArrayAccessExpr || n instanceof NameExpr name && Resolution.resolveField(name) != null) return n;
+        }
+        return null;
     }
 
     /**

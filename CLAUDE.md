@@ -75,7 +75,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   others are gone (they are the new method's parameters, or its own local). A renamed local may take the name of one
   in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline
   replaces a read of a local by its value (InlineLocal) and refuses what would change behavior without changing a
-  binding (another value later, effects, another type, what it reads changed between, a read in a lambda); a local
+  binding (another value later, effects unless read once with nothing between that could tell, when the value
+  moves there, another type, what it reads changed between, a read in a lambda); a local
   nothing reads is deleted with its lines; a deleted parameter takes its argument from every call, whose uses go on
   purpose (one with effects is refused). The top-level statements of each body are elements; the primitives that
   change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.

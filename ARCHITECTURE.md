@@ -407,7 +407,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   con sus usos, y puede tomar el nombre de uno de un bloque hermano: los locales del método se numeran de nuevo.
   `Inline` de la lectura de un local la reemplaza por su valor (`InlineLocal`), entre paréntesis si hace falta, y
   dice que los usos del valor se hacen ahí. Rechaza lo que cambiaría lo que hace el programa sin cambiar a qué liga un
-  nombre, que el verificador no ve: un local al que se le da otro valor después, un valor con efectos o de otro tipo
+  nombre, que el verificador no ve: un local al que se le da otro valor después, un valor con efectos (salvo que se
+  lea una vez, en una sentencia del mismo bloque, sin condición, y que lo que corre entre la declaración y la lectura
+  no haga nada ni lea más que locales: entonces el valor se muda a la lectura) o de otro tipo
   que el local, uno que se leería después de que cambie lo que lee (una escritura en el medio, una llamada si lee un
   campo, la vuelta siguiente de un ciclo), y una lectura que pasa más tarde, en una lambda o una clase. Un local que
   nada lee se borra con sus líneas, si su valor no tiene efectos. Desde la fase 2 lee las sentencias del primer nivel
