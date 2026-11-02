@@ -432,7 +432,9 @@ refactoring introduce-local-object "Makes locals one object of an existing class
   param locals : elements(LOCAL) "the locals, declared in the order the constructor takes them"
   param name : text "name of the object" default "${decap(name(owner(constructor)))}"
   require eq(count(locals), count(params(constructor))) "${qualified(constructor)} takes ${count(params(constructor))} values"
-  let at = statement(first(refs(first(locals))))
+  require nonempty(refs(locals)) "none of the locals is read"
+  # before the first use of any of them: one may be read nowhere
+  let at = statement(first(refs(locals)))
   o := create LOCAL ${owner(first(locals))} ${name} facts="type=${qualified(owner(constructor))}"
   move ${first(statements(owner(first(locals))))} ${owner(at)} before=${at}
   # the last first: a read made a getter's call on the object renumbers the uses after it

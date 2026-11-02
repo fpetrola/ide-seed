@@ -101,7 +101,7 @@ final class ScriptFunctions {
             case "types-of" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
             case "subclasses" -> elems(graph.subclasses(element(args, 0).id()));
             case "family" -> elems(graph.family(element(args, 0)));
-            case "refs" -> new Value.Items(graph.referencesTo(element(args, 0).id()).stream().<Value>map(r -> new Value.Ref(r.id())).toList());
+            case "refs" -> refs(Value.items(args.get(0)).stream().map(this::element).toList());
             // references
             case "mode" -> text(reference(args.getFirst()).mode().label());
             case "site" -> elem(graph.unresolved(ref(args.getFirst())).map(Unresolved::site).orElseGet(() -> reference(args.getFirst()).site()));
@@ -150,6 +150,15 @@ final class ScriptFunctions {
             if (e.id().equals(target)) return true;
             if (e.parent() == null) return false;
         }
+    }
+
+    /** The uses of an element; of several, those of each, in the order each site makes them. */
+    private Value refs(List<Element> of) {
+        var uses = of.size() == 1 ? graph.referencesTo(of.getFirst().id()) : of.stream()
+                .flatMap(e -> graph.referencesTo(e.id()).stream()).map(Reference::site).distinct()
+                .flatMap(site -> graph.referencesFrom(site).stream())
+                .filter(r -> of.stream().anyMatch(e -> e.id().equals(r.target()))).toList();
+        return new Value.Items(uses.stream().<Value>map(r -> new Value.Ref(r.id())).toList());
     }
 
     private Element element(List<Value> args, int index) {

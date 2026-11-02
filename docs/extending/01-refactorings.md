@@ -84,7 +84,7 @@ Functions over the program, called as `f(x, ...)`:
 - About an element: `name`, `kind`, `qualified`, `owner`, `top`, `type`, `declared-type`, `attr(e, "static")`,
   `superclass`, `enclosing`, `body`, `getter-of`.
 - Lists: `members`, `fields`, `methods`, `params`, `variables`, `constructors`, `statements`, `subclasses`,
-  `family` (a method with everything it overrides and everything that overrides it), `refs` (the uses of an element).
+  `family` (a method with everything it overrides and everything that overrides it), `refs` (the uses of an element; of several, all of them in the order they are made).
 - About a use: `mode(r)` (`"read"`, `"write"`, `"call"`...), `site(r)`, `target(r)`, `statement(r)`.
 - Text and logic: `cap`, `decap`, `join`, `concat`, `eq`, `ne`, `not`, `and`, `or`, `empty`, `nonempty`, `count`,
   `first`, `last`, `reversed`.

@@ -66,4 +66,58 @@ class IntroduceLocalObjectTest {
                 """);
         assertThat(ws.errors()).isEmpty();
     }
+
+    @Test
+    void aLocalNothingReadsGoesToTheConstructorToo() {
+        var ws = Workspace.of(Map.of("a/Address.java", ADDRESS, "a/Report.java", """
+                package a;
+
+                import java.sql.ResultSet;
+                import java.sql.SQLException;
+
+                class Report {
+                    void print(ResultSet rs) throws SQLException {
+                        while (rs.next()) {
+                            String id = rs.getString("id");
+                            String street = rs.getString("street");
+                            System.out.println(street);
+                        }
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-local-object", Map.of("constructor", "a.Address#new(String,String)",
+                "locals", List.of("a.Report#print(ResultSet)/id", "a.Report#print(ResultSet)/street"), "name", "address"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Report.java")).contains("""
+                        while (rs.next()) {
+                            Address address = new Address(rs.getString("id"), rs.getString("street"));
+                            System.out.println(address.getStreet());
+                        }
+                """);
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    private static final String ADDRESS = """
+            package a;
+
+            public class Address {
+                private final String id;
+                private final String street;
+
+                public Address(String id, String street) {
+                    this.id = id;
+                    this.street = street;
+                }
+
+                public String getId() {
+                    return id;
+                }
+
+                public String getStreet() {
+                    return street;
+                }
+            }
+            """;
 }
