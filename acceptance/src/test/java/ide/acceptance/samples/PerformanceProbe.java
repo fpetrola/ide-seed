@@ -20,8 +20,11 @@ class PerformanceProbe {
             var t2 = System.nanoTime();
             var again = ws.invoke("rename", Map.of("element", "big.Customer0#f1", "name", "g1")); // with the program read
             var t3 = System.nanoTime();
-            System.out.printf("PROBE n=%d load=%dms rename=%dms applied=%s again=%dms applied=%s%n", n, (t1 - t0) / 1_000_000,
-                    (t2 - t1) / 1_000_000, result.applied(), (t3 - t2) / 1_000_000, again.applied());
+            var up = ws.invoke("pull-up-field", Map.of("field", "big.Customer0#f2")); // an intent: what the rules say is broken, mended
+            var t4 = System.nanoTime();
+            System.out.printf("PROBE n=%d load=%dms rename=%dms applied=%s again=%dms applied=%s pull-up=%dms applied=%s%n", n,
+                    (t1 - t0) / 1_000_000, (t2 - t1) / 1_000_000, result.applied(), (t3 - t2) / 1_000_000, again.applied(),
+                    (t4 - t3) / 1_000_000, up.applied());
         }
     }
 }

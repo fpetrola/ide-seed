@@ -1645,6 +1645,18 @@ que esto no escala solo:
      apéndice, deducido.
    - Un paso de creación da por nombre dónde se crea (`${in}`) y en qué tipo (`${type}`), para decir lo que se crea
      dentro de algo que también se crea. Las plantillas ya no llaman a `name(...)` sobre lo que todavía no existe.
+
+   **Costo de las intenciones, medido el 2026-11-02** con `PerformanceProbe`, que ahora también sube un campo, en el
+   sample de 100 clases (unos 10.000 usos):
+   - pull-up-field tarda 1,2 s, contra 0,35 s del script que era; los dos incluyen la verificación. Antes de un ajuste
+     tardaba 6 s: `GraphFacts` recorría todos los elementos para `parent(x, u)` con solo `u`, y para `alike` con los dos
+     conocidos, y la regla de alcance los pregunta por cada uso. Ahora lo que hay en un padre se le pregunta al padre
+     (también para `member`, `constructor` y `parameter` con su dueño).
+   - De lo que queda, unos 430 ms son las reglas de alcance y de acceso, preguntadas enteras dos veces: antes del
+     cambio y en el estado supuesto.
+   - Los quick fixes de una línea ya tardaban 2,4 s, y con esas dos reglas tardan 2,9 s.
+   - Lo que sigue para bajarlo: preguntar las violaciones solo alrededor de lo que cambió, y compartir la evaluación de
+     antes entre las búsquedas de un mismo problema.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**

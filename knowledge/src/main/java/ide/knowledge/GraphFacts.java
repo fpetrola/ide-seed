@@ -121,7 +121,10 @@ final class GraphFacts implements Facts {
         Stream<List<String>> tuples = switch (relation) {
             case "kind" -> elements(first).map(e -> List.of(id(e), e.kind().name().toLowerCase(Locale.ROOT)));
             case "name" -> elements(first).map(e -> List.of(id(e), e.name()));
-            case "parent" -> elements(first).filter(e -> e.parent() != null).map(e -> List.of(id(e), e.parent().value()));
+            case "parent" -> first == null && second(pattern) != null // what is in a parent: its children, not every element
+                    ? program.contains(new ElementId(second(pattern))) ? program.children(new ElementId(second(pattern))).stream()
+                            .map(e -> List.of(id(e), e.parent().value())) : Stream.empty()
+                    : elements(first).filter(e -> e.parent() != null).map(e -> List.of(id(e), e.parent().value()));
             case "uses" -> references(first).map(r -> List.of(r.site().value(), r.target().value()));
             case "visibility" -> elements(first).filter(e -> e.fact(Fact.VISIBILITY) != null)
                     .map(e -> List.of(id(e), e.fact(Fact.VISIBILITY)));
@@ -145,9 +148,9 @@ final class GraphFacts implements Facts {
             case "expected" -> holes(first).flatMap(u -> projection.needs(u.id()).stream()
                     .filter(n -> n.expected() != null).map(n -> List.of(u.id(), n.expected())));
             case "start-value" -> first == null ? Stream.empty() : Stream.of(List.of(first, projection.rules().defaultValue(first)));
-            case "member" -> elements(first).filter(e -> parentOf(id(e)) != null)
+            case "member" -> in(first, second(pattern)).filter(e -> parentOf(id(e)) != null)
                     .map(e -> List.of(id(e), parentOf(id(e)), e.name(), e.kind().name().toLowerCase(Locale.ROOT)));
-            case "parameter" -> elements(first).filter(e -> e.kind() == Kind.PARAM).map(p -> List.of(id(p), parentOf(id(p)), p.name(),
+            case "parameter" -> in(first, second(pattern)).filter(e -> e.kind() == Kind.PARAM).map(p -> List.of(id(p), parentOf(id(p)), p.name(),
                     pattern.size() > 3 && pattern.get(3) != null ? pattern.get(3) : ""));
             case "constructor-for" -> holes(pattern.size() > 2 ? pattern.get(2) : null).flatMap(u -> program.elements().stream()
                     .filter(k -> k.kind() == Kind.CONSTRUCTOR && takes(k, u)).map(k -> List.of(id(k), k.parent().value(), u.id())));
@@ -162,13 +165,13 @@ final class GraphFacts implements Facts {
                     .flatMap(t -> chainOf(t).stream().map(s -> List.of(t, s)));
             case "overrides" -> elements(first).filter(e -> e.kind() == Kind.METHOD)
                     .flatMap(m -> program.overridden(m).stream().map(n -> List.of(id(m), id(n))));
-            case "alike" -> elements(first).flatMap(a -> program.elements().stream().filter(b -> alike(a, b))
-                    .map(b -> List.of(id(a), id(b))));
+            case "alike" -> elements(first).flatMap(a -> (second(pattern) != null ? elements(second(pattern)) : program.elements().stream())
+                    .filter(b -> alike(a, b)).map(b -> List.of(id(a), id(b))));
             case "before" -> elements(first).filter(e -> parentOf(id(e)) != null).flatMap(a -> {
                 var siblings = childrenOf(parentOf(id(a)));
                 return siblings.subList(siblings.indexOf(id(a)) + 1, siblings.size()).stream().map(b -> List.of(id(a), b));
             });
-            case "constructor" -> elements(first).filter(e -> e.kind() == Kind.CONSTRUCTOR)
+            case "constructor" -> in(first, second(pattern)).filter(e -> e.kind() == Kind.CONSTRUCTOR)
                     .map(k -> List.of(id(k), parentOf(id(k))));
             case "named" -> program.types().stream().map(t -> List.of(id(t), t.name()));
             case "unresolved" -> program.unresolved().stream().filter(u -> first == null || first.equals(u.id()))
@@ -342,6 +345,19 @@ final class GraphFacts implements Facts {
     private Stream<Reference> references(String site) {
         return site == null ? program.references().stream()
                 : program.contains(new ElementId(site)) ? program.referencesFrom(new ElementId(site)).stream() : Stream.<Reference>empty();
+    }
+
+    private static String second(List<String> pattern) {
+        return pattern.size() > 1 ? pattern.get(1) : null;
+    }
+
+    /**
+     * The element named, if any is; else what is in {@code parent} as supposed, if it is named (what stays and what
+     * arrives); else every element.
+     */
+    private Stream<Element> in(String id, String parent) {
+        if (id != null || parent == null) return elements(id);
+        return childrenOf(parent).stream().map(ElementId::new).filter(program::contains).map(program::element);
     }
 
     /** The element named, if any is; every element, if none is. */
