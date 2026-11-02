@@ -167,6 +167,11 @@ public final class JavaProjection implements Projection {
         return spans.stream().sorted(java.util.Comparator.comparingInt(size)).toList();
     }
 
+    /** The whole stretch an element's declaration takes, from its modifiers to its end; nothing for what has no text. */
+    public Optional<Span> declared(ElementId element) {
+        return Positions.declared(reading(), element).map(range -> new Span(range.begin.line, range.begin.column, range.end.line, range.end.column));
+    }
+
     @Override
     public Program program() {
         return reading().program();

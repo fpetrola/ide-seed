@@ -25,6 +25,12 @@ public final class Positions {
     private Positions() {
     }
 
+    /** The whole stretch of an element's declaration (its comment left out); nowhere for what the sources do not declare. */
+    public static Optional<Range> declared(Reader.Reading reading, ElementId element) {
+        if (!reading.program().contains(element) || !reading.declarations().containsKey(element)) return Optional.empty();
+        return reading.declaration(element).node().getRange();
+    }
+
     /** Where the name of an element's declaration starts; nowhere for what the sources do not declare. */
     public static Optional<Location> of(Reader.Reading reading, ElementId element) {
         if (!reading.program().contains(element) || !reading.declarations().containsKey(element)) return Optional.empty();

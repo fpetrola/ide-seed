@@ -172,13 +172,15 @@ public final class Workspace {
     }
 
     /**
-     * Points the person at an element, where it is declared, or at lines {@code line..end} of a file, with a note:
+     * Points the person at an element, its whole declaration, or at lines {@code line..end} of a file, with a note:
      * refused if there is no such element, file or line.
      */
     Attention.Pointed point(Optional<String> element, Optional<String> path, int line, int end, String note) {
         if (element.isPresent()) {
             var at = where(element.get()).orElseThrow(() -> new IllegalArgumentException("no element " + element.get() + " is declared in a file"));
-            return attention.point(at.path(), at.line(), at.line(), element.get(), note);
+            var whole = project.declared(project.program().find(element.get()).orElseThrow().id());
+            return attention.point(at.path(), whole.map(JavaProjection.Span::line).orElse(at.line()),
+                    whole.map(JavaProjection.Span::endLine).orElse(at.line()), element.get(), note);
         }
         var file = path.orElseThrow(() -> new IllegalArgumentException("point at an element, or at a path and a line"));
         if (!files().contains(file)) throw new IllegalArgumentException("no file " + file);

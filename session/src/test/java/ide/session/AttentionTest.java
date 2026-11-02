@@ -49,13 +49,13 @@ class AttentionTest {
     }
 
     @Test
-    void pointingAtAnElementIsPointingWhereItIsDeclared() throws Exception {
+    void pointingAtAnElementIsPointingAtItsWholeDeclaration() throws Exception {
         var ws = open();
 
         var pointed = call(ws, "point", Map.of("element", "a.P#get()", "note", "this one reads x"));
 
         assertThat(pointed).containsEntry("n", 1L).containsEntry("path", "a/P.java").containsEntry("line", 6L)
-                .containsEntry("endLine", 6L).containsEntry("note", "this one reads x").containsEntry("element", "a.P#get()");
+                .containsEntry("endLine", 8L).containsEntry("note", "this one reads x").containsEntry("element", "a.P#get()");
         assertThat(call(ws, "pointed", Map.of())).isEqualTo(pointed);
     }
 
