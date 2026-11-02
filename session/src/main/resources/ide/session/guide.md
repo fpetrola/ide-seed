@@ -6,11 +6,13 @@ tools the IDE takes before your next call.
   step, make one with `plan-new`: a title, what it is for, and its tasks one per line, a subtask indented under its line
   of action. Tasks have stable ids (`t7`): give each a description with `task-update` when it is not obvious what it
   means or how we know it is done, say what waits for what (its after), and link the code it is about with `task-link`.
-- As you go, say how each task is with `task-update`: doing when you start it, done (or blocked, dropped) with a short
-  note of what you did or found. When the plan changes, change the tasks (`task-add`, `task-update` with parent or
+- As you go, say how each task is with `task-update`: doing when you start it, done (or blocked, dropped) with a note
+  of one or two lines: what you did or found, not how. You need not report your steps: the IDE sees each tool you use
+  and shows it under the task you are doing. When the plan changes, change the tasks (`task-add`, `task-update` with parent or
   after) rather than making a new plan, so their history is kept. `plans`, `plan` and `task` show where things are;
   `plan-switch` goes on with another plan.
-- The person steers from the window: pause or resume a plan or a task, comment on one, ask to replan, or switch plans.
+- The person steers from the window: start, pause, resume or stop a plan or a task, comment on one, ask to replan, or
+  switch plans. Stop means at once: if you were interrupted, that was the person.
   It changes the plan at once and reaches you as a message, "The person ...", in your chat or after an answer of these
   tools; `steering` answers what was not told yet. Do what it says before going on: a paused task or plan is not
   worked on until it is resumed.

@@ -76,6 +76,7 @@ public final class Plans {
     private final Map<String, Plan> plans = new LinkedHashMap<>();
     private final Map<String, Task> tasks = new LinkedHashMap<>();
     private final List<Steer> steering = new ArrayList<>();
+    private final List<String> started = new ArrayList<>(); // tasks in the order they were last started
     private String active = "";
     private int planned;
     private int numbered;
@@ -180,6 +181,7 @@ public final class Plans {
                 wait(task, after.isBlank() || after.equals("none") ? List.of() : List.of(after.split("\\s*,\\s*"))));
         changes.getOrDefault("state", Optional.empty()).ifPresent(state -> {
             task.state = State.valueOf(state.toUpperCase(Locale.ROOT));
+            if (task.state == State.DOING) started(task);
             task.timeline.add(entry(who, "state", said(task.state)));
             event.put("state", said(task.state));
         });
@@ -209,6 +211,22 @@ public final class Plans {
                 .orElse("plan " + plan.id + " \"" + plan.title + "\"");
         var said = text.isBlank() ? "" : ": " + text.strip();
         var message = switch (kind) {
+            case "start" -> {
+                if (task.isPresent()) {
+                    if (!task.get().plan.equals(active)) activate(task.get().plan);
+                    task.get().state = State.DOING;
+                    started(task.get());
+                } else {
+                    activate(plan.id);
+                    plan.state = PlanState.ACTIVE;
+                }
+                yield "The person started " + what + said + ". Work on it now" + (task.isPresent() ? "." : ", from where it is.");
+            }
+            case "stop" -> {
+                if (task.isPresent()) task.get().state = State.PAUSED;
+                else plan.state = PlanState.PAUSED;
+                yield "The person stopped " + what + said + ". Do not go on with it, not even the step you were in; wait for the person.";
+            }
             case "pause" -> {
                 if (task.isPresent()) task.get().state = State.PAUSED;
                 else plan.state = PlanState.PAUSED;
@@ -231,13 +249,49 @@ public final class Plans {
                 yield "The person switched to " + what + (was.isEmpty() || was.equals(plan.id) ? "" : "; plan " + was + " waits, paused")
                         + said + ". Go on with it.";
             }
-            default -> throw new IllegalArgumentException("say pause, resume, comment, replan or switch, not " + kind);
+            default -> throw new IllegalArgumentException("say start, pause, resume, stop, comment, replan or switch, not " + kind);
         };
         task.ifPresent(t -> t.timeline.add(entry("person", kind, text.isBlank() ? kind : text.strip())));
         var steer = new Steer(steering.size() + 1, message, told);
         steering.add(steer);
         changed(Map.of("event", "steer", "kind", kind, "about", task.map(t -> t.id).orElse(plan.id), "text", text.strip()));
         return steer;
+    }
+
+    /**
+     * A step the agent took, kept in the timeline of the task it is doing: the one it started last that is still being
+     * done, in the active plan. Answers that task (none: empty) and the step.
+     */
+    Map<String, Object> step(String text) {
+        var doing = current();
+        doing.ifPresent(task -> {
+            task.timeline.add(entry("agent", "step", text));
+            save();
+        });
+        var shown = new LinkedHashMap<String, Object>();
+        shown.put("task", doing.map(task -> task.id).orElse(""));
+        shown.put("step", text);
+        return shown;
+    }
+
+    private Optional<Task> current() {
+        for (var id : started.reversed()) {
+            var task = tasks.get(id);
+            if (task.state == State.DOING && task.plan.equals(active)) return Optional.of(task);
+        }
+        return active.isEmpty() ? Optional.empty()
+                : plans.get(active).tasks.reversed().stream().map(tasks::get).filter(task -> task.state == State.DOING).findFirst();
+    }
+
+    private void started(Task task) {
+        started.remove(task.id);
+        started.add(task.id);
+    }
+
+    /** The last step of a task being done, if it took any. */
+    private String lastStep(Task task) {
+        if (task.state != State.DOING) return "";
+        return task.timeline.reversed().stream().filter(entry -> entry.kind().equals("step")).map(Entry::text).findFirst().orElse("");
     }
 
     /** What the person said that the agent was not told yet, now told. */
@@ -386,6 +440,7 @@ public final class Plans {
             line.put("done", done(below));
             line.put("of", below.size());
             line.put("waiting", waiting(task));
+            line.put("step", lastStep(task));
             return line;
         }).toList());
         shown.put("done", done(plan.tasks));

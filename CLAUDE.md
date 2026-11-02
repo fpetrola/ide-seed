@@ -138,8 +138,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   person and an agent follow, several, one active; each a tree of tasks (lines of action and subtasks, depth first)
   with stable ids (`p1`, `t7`), a description, what each waits for, links into the code and a timeline of who said or
   did what; in `.ide/plans.json`, each change an event; capabilities plans, plan, plan-new, plan-switch, plan-state,
-  task, task-add, task-update, task-link. What the person says (`steer`: pause, resume, comment, replan, switch)
-  changes the plan at once and waits to be told to the agent once (`steering`), unless the window told it. Attention: where attention is, both ways, between a person and an agent on the same
+  task, task-add, task-update, task-link. What the person says (`steer`: start, pause, resume, stop, comment, replan, switch)
+  changes the plan at once and waits to be told to the agent once (`steering`), unless the window told it. What the agent does
+  with its tools (`activity`, an event as Claude Code's hooks give it) is a step of the task it started last and still
+  does, said in a few words (Activity); the plan shows each task's last step. Attention: where attention is, both ways, between a person and an agent on the same
   IDE: `point` (an element or lines, with a note; numbered, an event) and `pointed`; `look` (the window says where the
   person is) and `looking` (that, with the element under the caret and what it is inside); pointing at an element marks its whole
   declaration (`JavaProjection.declared`). `guide` (resource `guide.md`): how an agent works on the IDE, what MCP says

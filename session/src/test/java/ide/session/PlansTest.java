@@ -211,4 +211,65 @@ class PlansTest {
         assertThat(Files.readAllLines(root.resolve(".ide/events.jsonl"))).anyMatch(line -> line.contains("\"event\":\"plan\""))
                 .anyMatch(line -> line.contains("\"event\":\"task\""));
     }
+
+    @Test
+    void whatTheAgentDoesIsAStepOfTheTaskItIsDoingWithoutItSayingIt() throws Exception {
+        var ws = encapsulating();
+        call(ws, "task-update", Map.of("task", "t3", "state", "doing"));
+
+        call(ws, "activity", Map.of("event", Map.of("tool_name", "Edit", "tool_input",
+                Map.of("file_path", root.resolve("a/P.java").toString(), "old_string", "x", "new_string", "y"))));
+        call(ws, "activity", Map.of("event", Map.of("tool_name", "Bash", "tool_input",
+                Map.of("command", "mvn -q test", "description", "Run the tests"))));
+        call(ws, "activity", Map.of("event", Map.of("tool_name", "mcp__ideseed__encapsulate-field", "tool_input",
+                Map.of("field", "a.P#x"))));
+        call(ws, "activity", Map.of("event", Map.of("tool_name", "mcp__ideseed__task-update", "tool_input", Map.of("task", "t3"))));
+
+        var timeline = call(ws, "task", Map.of("task", "t3")).get("timeline").toString();
+        assertThat(timeline).contains("kind=step, text=Edit a/P.java", "kind=step, text=Bash: Run the tests",
+                "kind=step, text=encapsulate-field field=a.P#x").doesNotContain("task-update");
+        assertThat(tasks(call(ws, "plan", Map.of())).get(2)).containsEntry("step", "encapsulate-field field=a.P#x");
+    }
+
+    @Test
+    void aStepIsTheLatestTaskStartedThatIsStillBeingDone() throws Exception {
+        var ws = encapsulating();
+        call(ws, "task-update", Map.of("task", "t1", "state", "doing"));
+        call(ws, "task-update", Map.of("task", "t3", "state", "doing"));
+        call(ws, "task-update", Map.of("task", "t3", "state", "done"));
+
+        var step = call(ws, "activity", Map.of("event", Map.of("tool_name", "Read", "tool_input", Map.of("file_path", "/elsewhere/X.java"))));
+
+        assertThat(step).containsEntry("task", "t1").containsEntry("step", "Read /elsewhere/X.java");
+        assertThat(call(ws, "task", Map.of("task", "t1")).get("timeline").toString()).contains("Read /elsewhere/X.java");
+    }
+
+    @Test
+    void withNothingBeingDoneAStepIsSaidButNotKept() throws Exception {
+        var ws = encapsulating();
+
+        var step = call(ws, "activity", Map.of("event", Map.of("tool_name", "Grep", "tool_input", Map.of("pattern", "public"))));
+
+        assertThat(step).containsEntry("task", "").containsEntry("step", "Grep public");
+    }
+
+    @Test
+    void startingAndStoppingAPlanOrATask() throws Exception {
+        var ws = encapsulating();
+        call(ws, "plan-new", Map.of("title", "Rename the orders", "tasks", "Rename Order"));
+
+        var started = call(ws, "steer", Map.of("kind", "start", "plan", "p1"));
+        assertThat(call(ws, "plan", Map.of())).containsEntry("id", "p1").containsEntry("state", "active");
+        assertThat(started.get("message").toString()).contains("started plan p1", "Work on it");
+
+        call(ws, "steer", Map.of("kind", "start", "task", "t3"));
+        assertThat(call(ws, "task", Map.of("task", "t3"))).containsEntry("state", "doing");
+
+        var stopped = call(ws, "steer", Map.of("kind", "stop", "task", "t3"));
+        assertThat(call(ws, "task", Map.of("task", "t3"))).containsEntry("state", "paused");
+        assertThat(stopped.get("message").toString()).contains("stopped", "t3", "Do not go on with it");
+
+        call(ws, "steer", Map.of("kind", "stop", "plan", "p1"));
+        assertThat(call(ws, "plan", Map.of())).containsEntry("state", "paused");
+    }
 }

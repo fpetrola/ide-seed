@@ -68,6 +68,20 @@ class ServerTest {
         assertThat(second).contains("a/P.java").doesNotContain("The person");
     }
 
+    /** A hook telling what the agent did reads no answer: what the person said waits for the agent's next call. */
+    @Test
+    void whatTheAgentsHooksTellDoesNotTakeWhatThePersonSaid() {
+        var workspace = Workspace.of(Map.of("a/P.java", P));
+        workspace.capabilities().invoke("plan-new", Map.of("title", "Encapsulate P", "tasks", "Encapsulate x"));
+        workspace.capabilities().invoke("steer", Map.of("kind", "pause", "task", "t1"));
+
+        var hook = exchange(workspace, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"activity\","
+                + "\"arguments\":{\"event\":{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"a/P.java\"}}}}}").getFirst().toString();
+
+        assertThat(hook).doesNotContain("The person");
+        assertThat(workspace.capabilities().invoke("steering", Map.of())).contains("The person paused task t1");
+    }
+
     /** How to work on the IDE is said when an agent arrives, as the IDE's guide says it. */
     @Test
     void itTellsAnArrivingAgentHowToWorkOnTheIde() {

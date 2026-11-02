@@ -101,10 +101,13 @@ public final class Server {
         }
     }
 
-    /** An answer, and with it what the person said in the IDE that the agent was not told yet (the IDE's steering). */
+    /**
+     * An answer, and with it what the person said in the IDE that the agent was not told yet (the IDE's steering); not
+     * with what the agent's hooks tell ({@code activity}): nobody reads those answers.
+     */
     private List<Map<String, Object>> along(String name, String answer) {
         var content = new java.util.ArrayList<Map<String, Object>>(List.of(Map.of("type", "text", "text", answer)));
-        if (name.equals("steering") || !workspace.capabilities().ids().contains("steering")) return content;
+        if (name.equals("steering") || name.equals("activity") || !workspace.capabilities().ids().contains("steering")) return content;
         var said = (List<?>) Json.read(workspace.capabilities().invoke("steering", Map.of()));
         if (!said.isEmpty()) {
             content.add(Map.of("type", "text", "text", "From the person, in the IDE:\n" + String.join("\n",

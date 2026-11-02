@@ -99,15 +99,23 @@ final class Capabilities {
                     return workspace.link(text(args, "task"), optional(args, "element"), optional(args, "path"), from,
                             args.containsKey("end") ? number(args, "end") : from, optional(args, "note").orElse(""));
                 }))
-                .register(Capability.of("steer", "What the person says about a plan or a task (pause, resume, comment, replan, "
-                        + "switch to a plan): it changes at once, and waits to be told to the agent unless told is true",
-                        List.of(Param.of("kind", "choice", "pause", "resume", "comment", "replan", "switch"), Param.of("plan", "text").optional(),
+                .register(Capability.of("steer", "What the person says about a plan or a task (start, pause, resume, stop, comment, "
+                        + "replan, switch to a plan): it changes at once, and waits to be told to the agent unless told is true",
+                        List.of(Param.of("kind", "choice", "start", "pause", "resume", "stop", "comment", "replan", "switch"), Param.of("plan", "text").optional(),
                                 Param.of("task", "text").optional(), Param.of("text", "text").optional(), Param.of("told", "text").optional()),
                         args -> {
                             var steer = workspace.plans().steer(text(args, "kind"), optional(args, "plan"), optional(args, "task"),
                                     optional(args, "text").orElse(""), optional(args, "told").map(Boolean::parseBoolean).orElse(false));
                             return entries("n", steer.n(), "message", steer.message());
                         }))
+                .register(Capability.of("activity", "What an agent did with one of its tools (an event as its hooks give it: "
+                        + "tool_name, tool_input), kept as a step of the task it is doing; answers the task and the step",
+                        List.of(Param.of("event", "map")), args -> {
+                    var event = args.get("event") instanceof Map<?, ?> given ? given : Map.of();
+                    var folder = workspace.root().map(r -> r.toAbsolutePath().normalize().toString()).orElse("");
+                    return Activity.step(event, folder).map(step -> workspace.plans().step(step))
+                            .orElseGet(() -> entries("task", "", "step", ""));
+                }))
                 .register(Capability.of("steering", "What the person said about the plans that the agent was not told yet; once "
                         + "answered, it is told", List.of(), args -> workspace.plans().take().stream()
                         .map(steer -> entries("n", steer.n(), "message", steer.message())).toList()))
