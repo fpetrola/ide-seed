@@ -145,6 +145,12 @@ final class SetAttribute {
             case FieldDeclaration field -> field.getVariables().forEach(v -> edits.replace(unit, v.getType(), written));
             case MethodDeclaration m -> edits.replace(unit, m.getType(), written);
             case Parameter param -> edits.replace(unit, param.getType(), written);
+            case com.github.javaparser.ast.body.VariableDeclarator local -> { // a local declared alone: its declaration's type
+                var declared = local.getParentNode().filter(d -> d instanceof com.github.javaparser.ast.expr.VariableDeclarationExpr v
+                        && v.getVariables().size() == 1).orElseThrow(() -> new ide.projection.PrimitiveRejected("set.unsupported",
+                        element.qualified() + " is declared with others: its type is theirs too"));
+                edits.replace(unit, ((com.github.javaparser.ast.expr.VariableDeclarationExpr) declared).getElementType(), written);
+            }
             default -> throw new IllegalArgumentException("unsupported type change: " + element);
         }
         c.sources().apply(edits);

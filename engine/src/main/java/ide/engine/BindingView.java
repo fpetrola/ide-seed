@@ -10,7 +10,8 @@ import java.util.List;
 /**
  * Every use the change did not mean to change still binds to the same element. A use that binds something else by
  * the same name is rebound; one that binds nothing is unresolved, unless only access hides its target (then it is an
- * access violation, which a repair can widen).
+ * access violation, which a repair can widen). A call that now binds a method its old target still overrides is not
+ * rebound: the object is the same, and so is what dispatch runs (whether overriding changed is the dispatch view's).
  */
 public final class BindingView implements View {
 
@@ -19,7 +20,18 @@ public final class BindingView implements View {
         var baseline = comparison.baseline();
         var after = comparison.after();
         var diff = baseline.diff(after);
-        return diff.lost().stream().map(ref -> lost(ref, diff.gained(), baseline, after, comparison.rules())).toList();
+        return diff.lost().stream().filter(ref -> !sameDispatch(ref, diff.gained(), after))
+                .map(ref -> lost(ref, diff.gained(), baseline, after, comparison.rules())).toList();
+    }
+
+    /** Whether a call lost is made again, from the same site, of a method that its old target still overrides. */
+    private static boolean sameDispatch(Reference ref, List<Reference> gained, Program after) {
+        if (ref.mode() != ide.program.Mode.CALL || !after.contains(ref.target())) return false;
+        var old = after.element(ref.target());
+        if (old.kind() != ide.program.Kind.METHOD || "true".equals(old.fact(ide.program.Fact.STATIC))) return false;
+        var overridden = after.overriddenTransitively(old).stream().map(e -> e.id()).toList();
+        return gained.stream().anyMatch(g -> g.site().equals(ref.site()) && g.name().equals(ref.name())
+                && g.mode() == ide.program.Mode.CALL && overridden.contains(g.target()));
     }
 
     private static Violation lost(Reference ref, List<Reference> gained, Program baseline, Program after, LanguageRules rules) {

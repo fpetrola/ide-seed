@@ -90,7 +90,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   the baseline, pins; `attempt` undoes what is refused or does not verify; a point restores the baseline and pins
   too; `commit()` verifies and repairs),
   Verifier (a list of Views compared through a Comparison: BindingView, which also sees a written body binding
-  something else than it names, AccessView, DispatchView, which ignores an override no call of the overridden method
+  something else than it names, and takes a call now binding what its old target still overrides as the same
+  dispatch, AccessView, DispatchView, which ignores an override no call of the overridden method
   can reach, and CompilerView: every error that was not there before, even if the code did not compile; costly,
   last), Repairer (plans from saved points), Trace (the tree of what ran or was searched; `lines()` is the
   only place that writes sigils), Result, Plan/Remedy/QuickFix. Tested alone over MemoryProjection.

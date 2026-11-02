@@ -242,8 +242,8 @@ refactoring merge-duplicate "Keeps one of two methods with the same body: uses o
   return ${keep}
 end
 
-refactoring generalize-declared-type "Declares a field or parameter with one of its supertypes"
-  param element : element(FIELD,PARAM) "the field or parameter"
+refactoring generalize-declared-type "Declares a field, parameter or local with one of its supertypes"
+  param element : element(FIELD,PARAM,LOCAL) "the field, parameter or local"
   param type : element(CLASS,INTERFACE) "the supertype to declare it with"
   link ${element} declared ${type}
   return ${element}

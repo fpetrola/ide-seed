@@ -45,6 +45,30 @@ class ViewsTest {
                         org.assertj.core.groups.Tuple.tuple("binding.unresolved", "a.C#a no longer binds to a.A"));
     }
 
+    /**
+     * A call that now binds the method its old target overrides runs the same: the object is the same, and so is what
+     * dispatch picks (whether overriding changed is the dispatch view's to say). A call to an unrelated method is rebound.
+     */
+    @Test
+    void aCallNowBindingWhatItsTargetOverridesIsTheSameDispatch() {
+        var projection = MemoryProjection.builder()
+                .type(Kind.INTERFACE, "a.I").method("a.I", "run", "void").method("a.I", "stop", "void")
+                .type("a.A").implement("a.A", "a.I").method("a.A", "run", "void").method("a.A", "stop", "void")
+                .type("a.B").method("a.B", "stop", "void")
+                .type("a.C").method("a.C", "go", "void")
+                .use("a.C#go()", "a.A#run()", Mode.CALL, ide.program.Reference.Receiver.OTHER)
+                .use("a.C#go()", "a.A#stop()", Mode.CALL, ide.program.Reference.Receiver.OTHER)
+                .build();
+        var before = projection.program();
+
+        projection.apply(new Primitive.Retarget(reference(before, "a.C#go()", "a.A#run()"), id(before, "a.I#run()")));
+        projection.apply(new Primitive.Retarget(reference(before, "a.C#go()", "a.A#stop()"), id(before, "a.B#stop()")));
+
+        assertThat(new BindingView().check(new Comparison(before, projection)))
+                .extracting(Violation::code, Violation::detail).containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("binding.rebound", "a.C#go() now binds stop to a.B#stop() instead of a.A#stop()"));
+    }
+
     @Test
     void bindingSeesABodyThatBindsSomethingElseThanItNames() {
         var projection = MemoryProjection.builder()

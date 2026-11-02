@@ -414,7 +414,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   de cada cuerpo; los primitivos que cambian esa lista les conservan el id, y una edición a mano también, por orden y
   texto. Borrar un parámetro saca su argumento de cada llamada, y declara que los usos que ese argumento hacía se van
   a propósito (antes el verificador los tomaba por ligaduras perdidas); un argumento con efectos se rechaza
-  (`delete.effects`), porque dejarían de pasar.
+  (`delete.effects`), porque dejarían de pasar. El tipo declarado de un local se generaliza como el de un campo o un
+  parámetro; como el uso del tipo es de su método, el `Link` declara que ese uso se retargetea.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el
@@ -460,7 +461,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   acumula pins tipados; no conoce ningún atributo. Las vistas son una clase cada una (`BindingView`, `AccessView`,
   `DispatchView`, `CompilerView`) detrás de `View` y `Comparison`; `Verifier` es una lista de vistas, y las costosas
   corren solo si las baratas no ven nada. La exención de lo que ya estaba roto vive en la vista que la necesita
-  (acceso). `Trace` es un árbol de datos y el único lugar que escribe sigilos; el planificador de `knowledge` también
+  (acceso). Para `BindingView`, una llamada que ahora liga un método que su destino viejo sigue sobrescribiendo no
+  está religada (2026-11-02): el objeto es el mismo y el despacho elige lo mismo; si cambió qué sobrescribe qué lo dice
+  `DispatchView`. Así se puede declarar un parámetro con una interfaz que su tipo implementa. `Trace` es un árbol de
+  datos y el único lugar que escribe sigilos; el planificador de `knowledge` también
   responde su deducción como `Trace`. Tests propios sobre la proyección en memoria: transacción, reparador, rastro y
   cada vista sola. En la fase 5 el intento pasó de la sesión a la transacción, y remedios y quick fixes dejaron de
   recibir las reglas aparte de la proyección. En la fase 6 la transacción nació con su reparador (decisión 17). En
