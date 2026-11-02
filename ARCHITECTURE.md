@@ -814,6 +814,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     carpeta (`~/.claude/projects/<carpeta>`), que es conocimiento de Claude Code y por eso vive en la ventana. Antes,
     cerrar la terminal dejaba vivos el shell (un bash interactivo ignora SIGTERM) y el Claude de adentro; ahora se
     terminan los hijos primero y después el shell, a la fuerza si hace falta.
+  - **Decisión: la conversación se cuelga de las tareas por tiempo, no porque Claude lo diga.** Claude Code escribe
+    la conversación en un JSONL. Session la lee (`Transcript`, sabiendo dónde está por el hook o por la ventana al
+    retomarla) y cada mensaje va a la tarea que estaba en curso cuando se dijo: entre las que estaban en curso en ese
+    momento, la que se empezó último. Es la misma regla que para los pasos, y a Claude no le cuesta nada. El archivo
+    se lee de a partes (solo lo agregado desde la última vez) y solo se parsean las líneas de la persona y de Claude,
+    porque las que guardan los pedidos a la API pesan MB. Saber leer ese formato es conocimiento de Claude Code
+    dentro de session, igual que los eventos del hook en `Activity`. Si Claude Code cambia el formato, se rompe ahí y
+    en ningún otro lado.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un

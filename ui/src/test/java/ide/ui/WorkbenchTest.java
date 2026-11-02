@@ -395,6 +395,17 @@ class WorkbenchTest {
                 "  t4 [todo] Its tests (waits t3)");
     }
 
+    /** A plan stopped is still the one that goes on: it is shown, paused. */
+    @Test
+    void aStoppedPlanIsStillShown() throws IOException {
+        var workspace = planned();
+        workspace.capabilities().invoke("steer", Map.of("kind", "stop", "plan", "p1"));
+
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+
+        assertThat(workbench.plans().lines()).first().isEqualTo("Encapsulate A (paused) 1 of 4 done");
+    }
+
     /** Choosing a task shows everything it has; a link opens the code it is about. */
     @Test
     void aTaskIsSeenInDetailAndItsLinksOpenTheCode() throws IOException {
@@ -519,6 +530,41 @@ class WorkbenchTest {
         return String.join(" ", workbench.terminalView().orElseThrow().first());
     }
 
+    /** A task shows what was said while it was being done: the person's messages, Claude's answers, its tools as one line. */
+    @Test
+    void aTaskShowsTheConversationHadWhileItWasBeingDone(@TempDir Path home) throws Exception {
+        var workspace = planned();
+        var transcript = conversationFile(home, "s1");
+        workspace.capabilities().invoke("conversation-in", Map.of("id", "s1", "transcript", transcript.toString()));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t3", "state", "doing"));
+        Thread.sleep(5);
+        java.util.function.BiConsumer<String, Object> said = (type, content) -> {
+            try {
+                Files.writeString(transcript, ide.core.Json.write(Map.of("type", type, "isSidechain", false, "timestamp",
+                        java.time.Instant.now().toString(), "message", Map.of("role", type, "content", content))) + "\n",
+                        java.nio.file.StandardOpenOption.APPEND);
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        };
+        said.accept("user", "and the uses in B?");
+        said.accept("assistant", List.of(Map.of("type", "text", "text", "B reads x twice; I will make it call getX().")));
+        for (var file : List.of("a/A.java", "a/B.java", "a/C.java")) {
+            said.accept("assistant", List.of(Map.of("type", "tool_use", "id", file, "name", "Read", "input", Map.of("file_path", file))));
+        }
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+
+        workbench.plans().select("t3");
+
+        assertThat(workbench.plans().conversation()).extracting(line -> line.substring(6)).containsExactly("person text: and the uses in B?",
+                "agent text: B reads x twice; I will make it call getX().", "agent tool: Read a/A.java", "agent tool: Read a/B.java",
+                "agent tool: Read a/C.java");
+        assertThat(workbench.plans().conversationHtml().replaceAll("\\s+", " ")).contains("+2 tools").doesNotContain("a/C.java");
+        var tools = java.util.regex.Pattern.compile("tools:\\d+").matcher(workbench.plans().conversationHtml()).results().findFirst().orElseThrow().group();
+        workbench.plans().click(tools);
+        assertThat(workbench.plans().conversationHtml()).contains("a/C.java");
+    }
+
     /** Claude Code goes on with the conversation it had on the project: the one its tools last said, or its latest. */
     @Test
     void claudeGoesOnWithItsConversationOnTheProject(@TempDir Path served, @TempDir Path home) throws Exception {
@@ -529,8 +575,9 @@ class WorkbenchTest {
             workbench.serve(served);
             assertThat(claudeStarted(workbench, "claude")).doesNotContain("--resume");
 
-            conversationFile(home, "latest");
+            var latest = conversationFile(home, "latest");
             assertThat(claudeStarted(workbench, "claude")).contains("claude --resume latest --mcp-config");
+            assertThat(workspace.capabilities().invoke("conversation", Map.of())).contains(latest.toString()); // to read it
 
             conversationFile(home, "told");
             Files.setLastModifiedTime(conversationFile(home, "newer"), java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 60_000));

@@ -71,6 +71,12 @@ final class PlansView extends JPanel {
     private final DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode());
     private final JTree tree = new JTree(model);
     private final JEditorPane details = new JEditorPane("text/html", "");
+    private final JEditorPane talk = new JEditorPane("text/html", "");
+    private final javax.swing.JTabbedPane parts = new javax.swing.JTabbedPane();
+    private List<String> talked = List.of();
+    private final java.util.Set<Integer> openTools = new java.util.HashSet<>();
+    private final java.util.Set<Integer> openSaid = new java.util.HashSet<>();
+    private boolean allTalk;
     private final JButton planStart = button("Start", "start-plan", "DOING");
     private final JButton planPause = button("Pause", "pause-plan", "PAUSED");
     private final JButton planStop = button("Stop", "stop-plan", "BLOCKED");
@@ -140,11 +146,21 @@ final class PlansView extends JPanel {
         var detailPanel = new JPanel(new BorderLayout());
         var detailScroll = new JScrollPane(details);
         detailScroll.setBorder(BorderFactory.createEmptyBorder());
-        detailPanel.add(detailScroll, BorderLayout.CENTER);
+        talk.setEditable(false);
+        talk.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
+        talk.addHyperlinkListener(event -> {
+            if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) click(event.getDescription());
+        });
+        var talkScroll = new JScrollPane(talk);
+        talkScroll.setBorder(BorderFactory.createEmptyBorder());
+        parts.addTab("Task", detailScroll);
+        parts.addTab("Conversation", talkScroll);
+        parts.setToolTipTextAt(1, "What you and Claude said, and the tools it used, while this task was being done");
+        detailPanel.add(parts, BorderLayout.CENTER);
         detailPanel.add(row(taskStart, taskPause, taskStop, taskComment, taskReplan), BorderLayout.PAGE_END);
 
         var split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, treeScroll, detailPanel);
-        split.setResizeWeight(0.5);
+        split.setResizeWeight(0.35); // the details, and the conversation, take most of the height
         split.setBorder(BorderFactory.createEmptyBorder());
         add(split, BorderLayout.CENTER);
         showPlan(Map.of());
@@ -177,9 +193,12 @@ final class PlansView extends JPanel {
     /** Everything again as the IDE answers it now; the plan shown is the active one if that changed. */
     @SuppressWarnings("unchecked")
     void refresh() {
-        var listed = ((List<Map<String, Object>>) ide.call("plans", Map.of())).stream().map(p -> new Listed(String.valueOf(p.get("id")),
+        var plans = (List<Map<String, Object>>) ide.call("plans", Map.of());
+        var listed = plans.stream().map(p -> new Listed(String.valueOf(p.get("id")),
                 String.valueOf(p.get("title")), String.valueOf(p.get("state")), number(p.get("done")), number(p.get("of")))).toList();
-        var nowActive = listed.stream().filter(p -> p.state().equals("active")).map(Listed::id).findFirst().orElse(active);
+        // the plan that goes on, even paused or stopped; it is what the person wants to see
+        var nowActive = plans.stream().filter(p -> Boolean.TRUE.equals(p.get("active"))).map(p -> String.valueOf(p.get("id")))
+                .findFirst().orElse(listed.isEmpty() ? "" : listed.getLast().id());
         if (!nowActive.equals(active) || listed.stream().noneMatch(p -> p.id().equals(shown))) shown = nowActive;
         active = nowActive;
         filling = true;
@@ -212,9 +231,13 @@ final class PlansView extends JPanel {
         if (!task.equals(chosenTask)) {
             expanded.clear();
             allSteps = false;
+            openTools.clear();
+            openSaid.clear();
+            allTalk = false;
         }
         chosenTask = task;
         showTask(found);
+        showTalk(task);
         filling = true;
         var root = (DefaultMutableTreeNode) model.getRoot();
         var nodes = root.depthFirstEnumeration();
@@ -242,6 +265,18 @@ final class PlansView extends JPanel {
             }
             case "steps" -> {
                 allSteps = !allSteps;
+                select(chosenTask);
+            }
+            case "tools" -> {
+                openTools.add(Integer.parseInt(which));
+                select(chosenTask);
+            }
+            case "said" -> {
+                openSaid.add(Integer.parseInt(which));
+                select(chosenTask);
+            }
+            case "earlier" -> {
+                allTalk = true;
                 select(chosenTask);
             }
             default -> { }
@@ -444,6 +479,72 @@ final class PlansView extends JPanel {
         detail = lines;
     }
 
+    private static final int TALK = 40;
+    private static final int LONG_SAID = 600;
+
+    /**
+     * What was said while the task was being done, in order: the person's messages marked, the agent's answers, and its
+     * tools, those used one after another as one line until opened; the last ones, until the earlier are asked for.
+     */
+    @SuppressWarnings("unchecked")
+    private void showTalk(String task) {
+        List<Map<String, Object>> messages;
+        try {
+            messages = (List<Map<String, Object>>) ((Map<String, Object>) ide.call("task-talk", Map.of("task", task))).get("messages");
+        } catch (RuntimeException none) {
+            messages = List.of();
+        }
+        var lines = new ArrayList<String>();
+        var html = new StringBuilder("<html><body style='margin:6px'>");
+        if (messages.isEmpty()) {
+            html.append("<font color='#808080'>Nothing was said while this task was being done, or Claude's conversation is not known yet.</font>");
+        }
+        var from = allTalk ? 0 : Math.max(0, messages.size() - TALK);
+        if (from > 0) html.append("<div><a href='earlier'>").append(from).append(" earlier</a></div>");
+        for (var i = from; i < messages.size(); i++) {
+            var message = messages.get(i);
+            var text = String.valueOf(message.get("text"));
+            var time = time(message);
+            if (message.get("kind").equals("tool")) {
+                var group = i;
+                var tools = new ArrayList<String>();
+                while (i < messages.size() && messages.get(i).get("kind").equals("tool")) tools.add(String.valueOf(messages.get(i++).get("text")));
+                i--;
+                tools.forEach(tool -> lines.add(time + " agent tool: " + tool));
+                html.append("<div style='margin-top:2px'><font color='#808080'>").append(time).append(" \u25B8 ");
+                if (tools.size() == 1 || openTools.contains(group)) {
+                    html.append(String.join("<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\u25B8 ", tools.stream().map(t -> escape(shortened(t, 100))).toList()));
+                } else {
+                    html.append(escape(shortened(tools.getFirst(), 60))).append(" <a href='tools:").append(group).append("'>+")
+                            .append(tools.size() - 1).append(" tools</a>");
+                }
+                html.append("</font></div>");
+                continue;
+            }
+            var person = message.get("who").equals("person");
+            lines.add(time + " " + message.get("who") + " text: " + text);
+            var whole = openSaid.contains(i) || text.length() <= LONG_SAID;
+            var said = marked(escape(whole ? text : shortened(text, LONG_SAID)));
+            html.append("<table width='100%' cellpadding='4' cellspacing='0' style='margin-top:4px'")
+                    .append(person ? " bgcolor='#3A4A5A'" : "").append("><tr><td><font color='#808080'>").append(time)
+                    .append("</font> <b>").append(person ? "you" : "Claude").append("</b><br>").append(said);
+            if (!whole) html.append(" <a href='said:").append(i).append("'>more</a>");
+            html.append("</td></tr></table>");
+        }
+        talk.setText(html.append("</body></html>").toString());
+        talk.setCaretPosition(talk.getDocument().getLength()); // the latest, as a chat shows it
+        parts.setTitleAt(1, messages.isEmpty() ? "Conversation" : "Conversation (" + messages.size() + ")");
+        talked = lines;
+    }
+
+    /** Claude's markdown, as far as it reads better: bold, code, list items, lines. */
+    private static String marked(String escaped) {
+        return escaped.replaceAll("\\*\\*(.+?)\\*\\*", "<b>$1</b>")
+                .replaceAll("`([^`]+)`", "<font face='monospaced' color='#A9B7C6'>$1</font>")
+                .replaceAll("(?m)^\\s*[-*] ", "\u2022 ")
+                .replace("\n", "<br>");
+    }
+
     private static String section(String name) {
         return "<div style='margin-top:8px'><font color='#808080' size='-1'><b>" + name.toUpperCase(Locale.ROOT) + "</b></font></div>";
     }
@@ -482,6 +583,16 @@ final class PlansView extends JPanel {
     /** The details as they are drawn. */
     String html() {
         return details.getText();
+    }
+
+    /** What was said while the chosen task was being done, line by line. */
+    List<String> conversation() {
+        return talked;
+    }
+
+    /** The conversation as it is drawn. */
+    String conversationHtml() {
+        return talk.getText();
     }
 
     /** The chosen task as the details say it, line by line. */

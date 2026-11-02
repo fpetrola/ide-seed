@@ -463,10 +463,10 @@ final class Workbench extends JPanel {
     }
 
     /**
-     * The conversation Claude had on this project, if Claude Code still keeps it: the one its tools last told the IDE,
-     * or else the latest it has of this folder.
+     * Where Claude Code keeps the conversation Claude had on this project, if it still keeps it: the one its tools last
+     * told the IDE, or else the latest it has of this folder.
      */
-    private Optional<String> conversation() {
+    private Optional<Path> conversation() {
         var folder = ide.folder();
         if (folder.isEmpty()) return Optional.empty();
         Path kept;
@@ -476,11 +476,10 @@ final class Workbench extends JPanel {
             return Optional.empty();
         }
         var told = String.valueOf(ide.record("conversation", Map.of()).get("id"));
-        if (!told.isEmpty() && java.nio.file.Files.exists(kept.resolve(told + ".jsonl"))) return Optional.of(told);
+        if (!told.isEmpty() && java.nio.file.Files.exists(kept.resolve(told + ".jsonl"))) return Optional.of(kept.resolve(told + ".jsonl"));
         try (var files = java.nio.file.Files.list(kept)) {
             return files.filter(file -> file.toString().endsWith(".jsonl"))
-                    .max(java.util.Comparator.comparing(file -> file.toFile().lastModified()))
-                    .map(file -> file.getFileName().toString().replaceFirst("\\.jsonl$", ""));
+                    .max(java.util.Comparator.comparing(file -> file.toFile().lastModified()));
         } catch (IOException none) {
             return Optional.empty();
         }
@@ -492,7 +491,9 @@ final class Workbench extends JPanel {
             say("no Claude Code here: the IDE is not served to agents (it was not opened on a folder)");
             return;
         }
-        var resumed = goOn ? conversation() : Optional.<String>empty();
+        var kept = goOn ? conversation() : Optional.<Path>empty();
+        var resumed = kept.map(file -> file.getFileName().toString().replaceFirst("\\.jsonl$", ""));
+        kept.ifPresent(file -> ide.call("conversation-in", Map.of("id", resumed.get(), "transcript", file.toString())));
         try {
             terminal.run("claude" + resumed.map(id -> " --resume " + id).orElse("")
                     + " --mcp-config \"$IDESEED_MCP_CONFIG\" --settings \"$IDESEED_SETTINGS\"");
