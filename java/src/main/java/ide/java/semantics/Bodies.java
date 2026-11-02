@@ -92,13 +92,12 @@ public final class Bodies {
     }
 
     /**
-     * The variables a method or constructor declares in its own body, in the order they are written; those of a class
-     * or a lambda inside it are theirs.
+     * The variables a method or constructor declares in its own body, in the order they are written, a lambda's in it
+     * too (not its parameters); those of a class inside it are theirs.
      */
     public static List<VariableDeclarator> locals(CallableDeclaration<?> callable) {
         return callable.findAll(VariableDeclarator.class, v -> v.getParentNode().filter(VariableDeclarationExpr.class::isInstance).isPresent()
-                && v.findAncestor(CallableDeclaration.class).orElse(null) == callable
-                && v.findAncestor(LambdaExpr.class).map(lambda -> lambda.findAncestor(CallableDeclaration.class).orElse(null) != callable).orElse(true));
+                && v.findAncestor(CallableDeclaration.class).orElse(null) == callable);
     }
 
     /**

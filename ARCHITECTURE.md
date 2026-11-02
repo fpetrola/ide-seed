@@ -1813,6 +1813,10 @@ que esto no escala solo:
    (`Repo.count`) pasa a ser del objeto (`count`, o `this.count` si un nombre lo oculta). Por lo mismo, move-members
    nombra a través del tipo viejo los static que el miembro usaba de él, y en el tipo destino deja sin calificar lo
    que se nombraba a través de ese tipo, en el orden que sea que se muevan.
+   *Para la limpieza final de test1 (2026-11-02, con lo que eligió Fernando):* un local declarado en una lambda es un
+   LOCAL del método que la tiene, como uno de un bloque anidado (`process(...)/dni`), y así se inlinea o se renombra; los
+   parámetros de la lambda y sus sentencias siguen sin ser elementos. Además, ANNOTATIONS es un hecho nuevo, las
+   anotaciones como están escritas, y `set` las reemplaza, cada una en su línea e importada.
 
 **Cómo se sabe si funcionó.**
 

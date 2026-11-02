@@ -73,8 +73,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);
   binding one writes the name and imports it. A field or call that surely binds nothing (for a call: no method of that
   name where it is looked up) is an unresolved use too; binding it renames the use. What one needs (expected type,
-  arguments) is asked of the projection (semantics.UseNeeds). The locals of a method or constructor (not of a lambda or
-  a class inside it) are its elements and their uses references from it, and so are the uses of its parameters (on
+  arguments) is asked of the projection (semantics.UseNeeds). The locals of a method or constructor (a lambda's in it
+  too, not its parameters; not a class's inside it) are its elements and their uses references from it, and so are the uses of its parameters (on
   nothing, in their statement); JavaRules reaches a local only from inside
   its method. An expression extracted may be operands of a String concatenation next
   to each other, from inside a literal: it is split and they are grouped, when the value stays the same. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the

@@ -291,4 +291,33 @@ class InlineVariableTest {
                 }
                 """, "a.A#area(int[])/s", "binding.rebound");
     }
+
+    /** A local declared in a lambda is its method's, and is inlined in the lambda as anywhere. */
+    @Test
+    void aLocalOfALambdaIsItsMethodsAndIsInlinedThere() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.List;
+
+                class Rows {
+                    void process(List<String> lines, String prefix) {
+                        lines.forEach(line -> {
+                            String full = prefix + line;
+                            System.out.println(full);
+                        });
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-variable", Map.of("local", "a.Rows#process(List<String>,String)/full"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                        lines.forEach(line -> {
+                            System.out.println(prefix + line);
+                        });
+                """);
+        assertThat(ws.errors()).isEmpty();
+    }
 }
