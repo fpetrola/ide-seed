@@ -17,6 +17,10 @@ import java.util.List;
  * ...                                            what the method does now, as it is: first, and what follows is added
  * #{constructor:3}(#{param:7})                   a constructor's object made first by another constructor, of its
  *                                                type or of its superclass: first
+ * add #{local:5} to #{local:6}                   puts a value at the end of a list
+ * each #{local:8} in #{local:6}                  does, for each value of a list held in a local of its own, what
+ *                                                its block will hold: made empty, the local declared by it
+ * list of #{class:1}                             a new list, empty, of values of a type (a value; also a local's type)
  * </pre>
  * A body is the body of one method: its parameters are values the body has, not uses between elements. Like
  * {@link Fact}, it grows only when a template needs to say something it cannot.
@@ -45,6 +49,14 @@ public record Body(List<Statement> statements) {
     public record Assign(ElementId field, Expression value) implements Statement {
     }
 
+    /** Puts {@code value} at the end of {@code list}. */
+    public record Add(Expression value, Expression list) implements Statement {
+    }
+
+    /** Does, for each value of {@code list} held in {@code local}, what its block holds: made empty, declaring the local. */
+    public record Each(ElementId local, Expression list) implements Statement {
+    }
+
     public sealed interface Expression {
     }
 
@@ -54,6 +66,16 @@ public record Body(List<Statement> statements) {
 
     /** The value of one of the method's parameters, or of one of its locals: a read of it, from the method. */
     public record Parameter(ElementId parameter) implements Expression {
+    }
+
+    /** A new list, empty, of values of {@code type}. */
+    public record NewList(ElementId type) implements Expression {
+    }
+
+    /** The type of the elements of a list type said in no language ({@code list of #{class:1}}), or null if it is no such text. */
+    public static ElementId listOf(String text) {
+        var matcher = java.util.regex.Pattern.compile("list of #\\{([^}]+)}").matcher(text.strip());
+        return matcher.matches() ? new ElementId(matcher.group(1)) : null;
     }
 
     /** What the method's type starts with, as a field of that type does: what a method answers that knows nothing yet. */
@@ -129,6 +151,8 @@ public record Body(List<Statement> statements) {
             case Construct c -> name(c.constructor()) + "(" + text(c.arguments()) + ")";
             case Return r -> "return " + text(r.value());
             case Assign a -> name(a.field()) + " = " + text(a.value());
+            case Add a -> "add " + text(a.value()) + " to " + text(a.list());
+            case Each e -> "each " + name(e.local()) + " in " + text(e.list());
         };
     }
 
@@ -140,6 +164,7 @@ public record Body(List<Statement> statements) {
             case Default d -> "default";
             case Call call -> (call.receiver() == null ? "" : text(call.receiver()) + ".") + name(call.method()) + "(" + text(call.arguments()) + ")";
             case New n -> "new " + name(n.constructor()) + "(" + text(n.arguments()) + ")";
+            case NewList l -> "list of " + name(l.type());
         };
     }
 
@@ -174,6 +199,11 @@ public record Body(List<Statement> statements) {
                 uses.add(new Use(a.field(), Mode.WRITE));
                 uses(a.value(), uses);
             }
+            case Add a -> {
+                uses(a.list(), uses);
+                uses(a.value(), uses);
+            }
+            case Each e -> uses(e.list(), uses);
         }
         return uses;
     }
@@ -193,6 +223,9 @@ public record Body(List<Statement> statements) {
             case New n -> {
                 uses.add(new Use(n.constructor(), Mode.NEW));
                 n.arguments().forEach(argument -> uses(argument, uses));
+            }
+            case NewList l -> {
+                // the list's type is no element; what its values are is the local's declared type
             }
         }
     }
@@ -215,6 +248,17 @@ public record Body(List<Statement> statements) {
             Statement statement;
             if (keyword("return")) {
                 statement = new Return(expression());
+            } else if (keyword("add")) {
+                var value = expression();
+                if (!keyword("to")) throw error("'to'");
+                statement = new Add(value, expression());
+            } else if (keyword("each")) {
+                var local = element(Kind.LOCAL);
+                if (!method.equals(program.element(local).parent())) {
+                    throw new IllegalArgumentException("body: " + local + " is not a local of " + method + ", in: " + text);
+                }
+                if (!keyword("in")) throw error("'in'");
+                statement = new Each(local, expression());
             } else {
                 var element = element(Kind.FIELD, Kind.CONSTRUCTOR);
                 if (program.element(element).kind() == Kind.CONSTRUCTOR) {
@@ -237,6 +281,10 @@ public record Body(List<Statement> statements) {
             if (text.startsWith("default", at) && (at + 7 == text.length() || !Character.isJavaIdentifierPart(text.charAt(at + 7)))) {
                 at += 7;
                 return new Default();
+            }
+            if (keyword("list")) {
+                if (!keyword("of")) throw error("'of'");
+                return new NewList(element(Kind.CLASS, Kind.INTERFACE, Kind.ENUM));
             }
             if (keyword("new")) {
                 var constructor = element(Kind.CONSTRUCTOR);

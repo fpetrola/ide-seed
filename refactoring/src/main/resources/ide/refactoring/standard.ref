@@ -415,6 +415,34 @@ refactoring introduce-variable "Moves an expression into a local declared right 
   return ${v}
 end
 
+refactoring split-loop "Splits a loop in two, as Fowler's Split Loop: the first puts in a list the value each turn makes, the second does with each what came after it; it reads them all before doing anything" changes meaning
+  param loop : element(STATEMENT) "the loop"
+  param value : element(LOCAL) "what each turn makes, declared in the loop's block"
+  param name : text "name of the list" default "values"
+  let of = first(types-named(type(value)))
+  require nonempty(of) "${type(value)} is no type a list can say"
+  let start = statement(first(refs(value)))
+  require eq(owner(start), loop) "${name(value)} is first read in no statement of the loop's own"
+  let rest = after(start)
+  list := create LOCAL ${owner(value)} ${name} facts="type=list of #{of}"
+  set ${list} initializer "list of #{of}"
+  move ${first(statements(owner(value)))} ${owner(loop)} before=${loop}
+  each := create LOCAL ${owner(value)} ${concat(name(value), "In", cap(name))} facts="type=${type(value)}"
+  # made in the loop first, so that what moves into it reads the value until it reads its own
+  turn := create STATEMENT ${loop} "" facts="body=each #{each} in #{list}"
+  move ${start} ${turn}
+  for s in rest
+    move ${s} ${turn}
+  end
+  for r in refs(value)
+    retarget ${r} ${each}
+  end
+  move ${turn} ${owner(loop)} before=${first(after(loop))}
+  create STATEMENT ${loop} "" facts="body=add #{value} to #{list}"
+  rename ${each} ${name(value)}
+  return ${list}
+end
+
 refactoring introduce-field "Moves an expression into a field that starts with it and that the place reads, as IntelliJ's Introduce Field"
   param method : element(METHOD) "the method the expression is in"
   param lines : lines "the expression's stretch"

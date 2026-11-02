@@ -32,6 +32,7 @@ public final class Script implements Refactoring {
     private final Map<String, String> sources;
     private final List<Stmt> body;
     private final String level;
+    private boolean changesMeaning;
 
     /** An anonymous script: a block of statements run with the given variables, as knowledge effects are. */
     public static Script block(String statements, List<String> variables) {
@@ -69,6 +70,17 @@ public final class Script implements Refactoring {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public boolean changesMeaning() {
+        return changesMeaning;
+    }
+
+    /** This script, saying it may change what the program does. */
+    Script changingMeaning() {
+        changesMeaning = true;
+        return this;
     }
 
     @Override

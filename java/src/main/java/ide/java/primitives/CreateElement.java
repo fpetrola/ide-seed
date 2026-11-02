@@ -93,10 +93,18 @@ final class CreateElement {
         return made;
     }
 
-    /** A statement at the end of a body (a constructor called, at its start), said in no language, written in Java. */
-    private static ElementId statement(Context c, Program before, ElementId method, String said) {
+    /**
+     * A statement at the end of a body (a constructor called, at its start), or of the block a statement holds, said in
+     * no language, written in Java.
+     */
+    private static ElementId statement(Context c, Program before, ElementId parent, String said) {
         if (said == null) throw new PrimitiveRejected("create.statement", "a statement is said in no language, as its body");
+        var method = before.memberOf(parent).id();
         var body = ide.program.Body.parse(said, before, method);
+        if (!parent.equals(method) || body.statements().size() == 1 && body.statements().getFirst() instanceof ide.program.Body.Each) {
+            if (body.statements().size() != 1) throw new PrimitiveRejected("create.statement", "'" + said + "' is not one statement");
+            return WriteBody.into(c, before, parent, body.statements().getFirst());
+        }
         var callable = before.element(method);
         var nothing = body.statements().size() == 1 && body.statements().getFirst() instanceof ide.program.Body.Return answer
                 && answer.value() instanceof ide.program.Body.Default

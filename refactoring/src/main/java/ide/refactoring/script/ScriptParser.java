@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Parses {@code .ref} text: one statement per line, blocks closed by {@code end}, {@code #} comments.
  * <pre>
- * refactoring &lt;id&gt; ["description"]
+ * refactoring &lt;id&gt; ["description"] [changes meaning]
  *   param &lt;name&gt; : text|lines|bool|element(KINDS)|elements(KINDS)|choice(A,B) ["description"] [default "template"] [from "expr"]
  *   let v = expr  |  v := &lt;id&gt; args  |  &lt;id&gt; args  |  for x in expr ... end  |  if expr ... [else ...] end
  *   try "label" ... end
@@ -54,6 +54,8 @@ public final class ScriptParser {
         var intent = header.startsWith("intent ");
         if (!intent && !header.startsWith("refactoring ")) throw error("expected 'refactoring <id>' or 'intent <id>'", header);
         var rest = header.substring(header.indexOf(' ') + 1).strip();
+        var changesMeaning = rest.endsWith(" changes meaning");
+        if (changesMeaning) rest = rest.substring(0, rest.length() - " changes meaning".length()).strip();
         var space = rest.indexOf(' ');
         var id = space < 0 ? rest : rest.substring(0, space);
         var description = space < 0 ? "" : unquote(rest.substring(space + 1).strip());
@@ -76,7 +78,8 @@ public final class ScriptParser {
         }
         var body = intent ? List.<Stmt>of(want()) : block("end");
         next++;
-        return new Script(id, description, params, defaults, sources, body, intent ? "intent" : "script");
+        var script = new Script(id, description, params, defaults, sources, body, intent ? "intent" : "script");
+        return changesMeaning ? script.changingMeaning() : script;
     }
 
     /** An intent's one statement: {@code want ...}, going on in the lines that start with {@code and}, then {@code end}. */

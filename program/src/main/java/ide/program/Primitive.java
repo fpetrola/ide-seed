@@ -41,8 +41,9 @@ public sealed interface Primitive {
                 if (c.kind() == Kind.PACKAGE) yield Change.produced(produced);
                 var change = Change.produced(produced).pin(produced, Change.Aspect.PARENT, Change.Aspect.NAME);
                 if (c.kind() == Kind.STATEMENT && c.facts().containsKey(Fact.BODY)) { // what the statement says, its method makes
-                    for (var use : Body.parse(c.facts().get(Fact.BODY), before, c.parent()).uses()) {
-                        change = change.expect(new Change.Added(c.parent(), use.element(), before.element(use.element()).name(), use.mode()));
+                    var method = before.memberOf(c.parent()).id(); // in a block another statement holds, too
+                    for (var use : Body.parse(c.facts().get(Fact.BODY), before, method).uses()) {
+                        change = change.expect(new Change.Added(method, use.element(), before.element(use.element()).name(), use.mode()));
                     }
                 }
                 yield c.facts().containsKey(Fact.VISIBILITY) ? change.pin(produced, Change.Aspect.VISIBILITY) : change;

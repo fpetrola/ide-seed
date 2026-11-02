@@ -1776,6 +1776,16 @@ que esto no escala solo:
    introduce-variable lleva el local antes de la sentencia más interna, en su bloque (`${owner(at)}`). Una rama que no
    es un bloque (`if (c) x();`) no tiene dónde, y se rechaza. El rechazo de `retarget.evaluation` queda como guarda.
    Por ahora es del driver de Java: la proyección en memoria no tiene bloques, y el contrato todavía no lo pide.
+   *split-loop (2026-11-02, a pedido de test1, con el diseño que eligió Fernando):* el Split Loop de Fowler para un
+   bucle que lee (`while (rs.next())`) y actúa (`println`): el primero junta en una lista el valor de cada vuelta, el
+   segundo hace con cada valor lo que venía después. Lee todo antes de actuar: si la lectura falla a mitad, ya no se
+   imprimió nada. Ningún verificador de ligaduras lo ve, así que el refactoring lo declara (`changes meaning` en el
+   catálogo, `Refactoring.changesMeaning`, y su capacidad empieza con "Changes meaning:") para que lo elija una
+   persona a sabiendas. No hay primitivo nuevo: el lenguaje de cuerpos aprendió la lista (`list of #{T}`, también como
+   tipo de un local), `add #{v} to #{l}` y `each #{x} in #{l}`, un bucle vacío que declara el local; una sentencia se
+   crea al final del bloque que tiene otra sentencia, y una se mueve a ese final. El orden del script importa: el
+   bucle nuevo se crea primero dentro del viejo, para que lo que entra en él lea el valor hasta que lea el suyo (un
+   nombre que un momento no liga nada deja de ser un uso y corre la numeración de los demás), y recién después sale.
    *Otro, también de test1:* un proyecto abierto desde su carpeta tiene las fuentes en `src/main/java`, y un tipo creado
    o movido iba a la carpeta del paquete contada desde la raíz del proyecto. Ahora va al source root que tiene archivos
    de su paquete, y si ninguno tiene, al que tiene más archivos. El source root de un archivo es su carpeta sin las

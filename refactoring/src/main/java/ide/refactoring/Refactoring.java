@@ -15,6 +15,14 @@ public interface Refactoring {
         return "";
     }
 
+    /**
+     * Whether it may change what the program does (when, or how many times, something runs): only a person chooses it,
+     * knowing so; nothing that verifies bindings can tell.
+     */
+    default boolean changesMeaning() {
+        return false;
+    }
+
     /** Declared parameters, in positional order. */
     List<Param> params();
 

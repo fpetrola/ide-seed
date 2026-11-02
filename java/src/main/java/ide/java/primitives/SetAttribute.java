@@ -166,7 +166,9 @@ final class SetAttribute {
         var method = element.kind() == Kind.PARAM ? c.program().element(element.parent()) : null;
         var names = method == null ? null : Shared.parameterNames(c.declaration(method).as(CallableDeclaration.class));
         var edits = new EditSet();
-        var written = type.contains(".") && c.ids().has(new Address.Type(type)) ? Imports.nameable(edits, unit, type) : type;
+        var listOf = ide.program.Body.listOf(type);
+        var written = listOf != null ? WriteBody.listType(c, id, edits, unit, listOf) // said in no language
+                : type.contains(".") && c.ids().has(new Address.Type(type)) ? Imports.nameable(edits, unit, type) : type;
         switch (declaration.node()) {
             case FieldDeclaration field -> field.getVariables().forEach(v -> edits.replace(unit, v.getType(), written));
             case MethodDeclaration m -> edits.replace(unit, m.getType(), written);

@@ -46,8 +46,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   statement is created said in the body language at the end of a body, moved before another or into another method
   with the uses made in it, and deleted with them; one that calls a constructor goes first), Change (produced element,
   expectations, pins: what a repair may not take back) and Body (what a method does in no language, a statement a
-  line: return, assign a field, new, a call, the type's default, a constructor called first, over elements named
-  `#{id}`; a parameter or local it names is a read of it; a created statement expects the uses it names Added; a body is its
+  line: return, assign a field, new, a call, the type's default, a constructor called first, a new list, add to a
+  list, each value of a list in a local (a loop made empty, which declares it; `list of #{T}` is also a local's
+  type), over elements named `#{id}`; a statement is created at the end of a body or of the one block a statement of
+  it holds; a parameter or local it names is a read of it; a created statement expects the uses it names Added; a body is its
   statements: there is no Set of a whole body).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit` (a null text: the file gone),
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
@@ -82,7 +84,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   moves there, another type, what it reads changed between, a read in a lambda); a local
   nothing reads is deleted with its lines; a deleted parameter takes its argument from every call, whose uses go on
   purpose (one with effects is refused). The statements of each body are elements, and so are those of the blocks
-  each holds (Bodies.nested); a statement moves before one of a nested block, alone on its lines, the same way; the
+  each holds (Bodies.nested); a statement moves before one of a nested block, alone on its lines, or to the end of
+  the one block a statement holds, the same way; the
   primitives that change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
   `inside` answers the innermost element, a statement or a local too. `mains` are the classes a program runs from: the first
   top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
@@ -114,7 +117,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   Text, Bool, Items), Primitives (read off the Primitive records: nothing registered by hand), ChangeSignature (the
   only Java composite); the `.ref` language in `ide.refactoring.script` (in a text, `${expr}` writes a value and
   `#{expr}` writes elements as a body names them; an `intent` is params and one `want`, what is to hold at the end,
-  kept as text and made to hold by the library's Planner through `Run.want`, refused with none); the catalog
+  kept as text and made to hold by the library's Planner through `Run.want`, refused with none; a refactoring that
+  says `changes meaning` may change when things run, which no verifier can tell: its capability says so first, for a
+  person to choose it knowing it); the catalog
   `refactoring/src/main/resources/ide/refactoring/standard.ref`, which writes no code of any language.
 - `rules` (nothing) — Datalog as a tool apart: Term, Atom, Literal, Clause, Rules (built from clauses or from text
   written as any Datalog reads it; refused if unsafe or not stratified), Tuple, Facts (relations asked by pattern: a

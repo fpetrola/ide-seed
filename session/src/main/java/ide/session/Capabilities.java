@@ -23,7 +23,8 @@ final class Capabilities {
     static CapabilityRegistry of(Workspace workspace, Collection<Refactoring> refactorings) {
         var registry = new CapabilityRegistry();
         for (var refactoring : refactorings) {
-            registry.register(Capability.of(refactoring.id(), refactoring.description(), refactoring.params(),
+            var description = refactoring.changesMeaning() ? "Changes meaning: " + refactoring.description() : refactoring.description();
+            registry.register(Capability.of(refactoring.id(), description, refactoring.params(),
                     args -> Session.report(workspace.invoke(refactoring.id(), args))));
         }
         var path = Param.of("path", "text");

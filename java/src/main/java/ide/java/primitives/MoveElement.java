@@ -152,7 +152,13 @@ final class MoveElement {
         }
         if (anchor != null && anchor.id().equals(statement.id())) return;
         var nested = holder.kind() == Kind.STATEMENT; // among the statements another holds in its blocks
-        if (nested && (anchor == null || !(c.declaration(anchor).node().getParentNode().orElse(null) instanceof com.github.javaparser.ast.stmt.BlockStmt)
+        var siblings = before.children(holder.id()).stream().filter(e -> e.kind() == Kind.STATEMENT).toList();
+        if (anchor == null && !siblings.isEmpty() && siblings.getLast().id().equals(statement.id())) return; // at its end already
+        var block = !nested ? null : anchor != null ? null : c.declaration(holder).node() instanceof com.github.javaparser.ast.stmt.BlockStmt b ? b
+                : c.declaration(holder).node() instanceof com.github.javaparser.ast.nodeTypes.NodeWithBody<?> loop
+                && loop.getBody() instanceof com.github.javaparser.ast.stmt.BlockStmt b ? b : null;
+        if (nested && anchor == null && block == null) throw new PrimitiveRejected("move.before", holder.qualified() + " holds no one block to end");
+        if (nested && anchor != null && (!(c.declaration(anchor).node().getParentNode().orElse(null) instanceof com.github.javaparser.ast.stmt.BlockStmt)
                 || !Statements.alone(c.declaration(anchor).unit(), c.declaration(anchor).node()))) {
             throw new PrimitiveRejected("move.before", "a statement goes into another's block only before one of it alone on its lines");
         }
@@ -174,13 +180,15 @@ final class MoveElement {
         CallableDeclaration<?> callable = destination.as(CallableDeclaration.class);
         var statements = Bodies.statements(callable);
         var at = destination.unit();
-        var indent = nested ? at.indentation(c.declaration(anchor).node().getBegin().orElseThrow().line)
+        var indent = nested && anchor != null ? at.indentation(c.declaration(anchor).node().getBegin().orElseThrow().line)
+                : block != null ? (block.getStatements().isNonEmpty() ? at.indentation(block.getStatements().getFirst().orElseThrow().getBegin().orElseThrow().line)
+                : at.indentation(block.getBegin().orElseThrow().line) + "    ")
                 : statements.isEmpty() ? at.indentation(callable.getBegin().orElseThrow().line) + "    "
                 : at.indentation(statements.getFirst().getBegin().orElseThrow().line);
         var text = Members.text(unit, node, indent);
         var edits = new EditSet();
         Members.remove(edits, unit, node);
-        if (anchor == null) Statements.append(edits, at, Bodies.body(callable), indent, text);
+        if (anchor == null) Statements.append(edits, at, block != null ? block : Bodies.body(callable), indent, text);
         else Statements.insertBefore(edits, at, c.declaration(anchor).node(), text);
         var source = statement.parent();
         var left = before.children(source).stream().filter(e -> e.kind() == Kind.STATEMENT && !e.id().equals(statement.id()))

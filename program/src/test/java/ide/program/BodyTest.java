@@ -127,4 +127,25 @@ class BodyTest {
         assertThat(Body.parse("#{field:2} = #{param:5}; return #{field:2};", program, SET).statements()).hasSize(2);
         assertThatThrownBy(() -> Body.parse("this.x = 1", program, SET)).hasMessageContaining("expected an element");
     }
+
+    /** A list: made empty, a value put at its end, and each of its values held in a local by a loop whose block is empty. */
+    @Test
+    void aListIsMadeFilledAndGoneOver() {
+        var items = new ElementId("local:8");
+        var item = new ElementId("local:9");
+        var elements = new java.util.ArrayList<>(program().elements());
+        elements.add(element(items, Kind.LOCAL, "items", SET, new Address.Local(SET, "items", 0)));
+        elements.add(element(item, Kind.LOCAL, "item", SET, new Address.Local(SET, "item", 0)));
+        var program = new Program(elements, List.of());
+        var text = "add #{param:5} to #{local:8}\neach #{local:9} in #{local:8}";
+
+        var body = Body.parse(text, program, SET);
+
+        assertThat(body.statements()).containsExactly(
+                new Body.Add(new Body.Parameter(VALUE), new Body.Parameter(items)), new Body.Each(item, new Body.Parameter(items)));
+        assertThat(body.text()).isEqualTo(text);
+        assertThat(body.uses()).extracting(Body.Use::element).containsExactly(items, VALUE, items);
+        assertThat(Body.value("list of #{type:1}", program, SET)).isEqualTo(new Body.NewList(P));
+        assertThat(Body.listOf("list of #{type:1}")).isEqualTo(P);
+    }
 }

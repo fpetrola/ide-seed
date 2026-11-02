@@ -91,6 +91,11 @@ final class ScriptFunctions {
                     .toList());
             case "constructors" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "body" -> text(element(args, 0).fact(Fact.BODY));
+            case "after" -> { // the statements that follow one, in order, among those of what holds it
+                var statement = element(args, 0);
+                var all = graph.children(statement.parent()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList();
+                yield elems(all.subList(all.indexOf(statement) + 1, all.size()));
+            }
             case "statements" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList());
             case "types-of" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
             case "subclasses" -> elems(graph.subclasses(element(args, 0).id()));
