@@ -20,14 +20,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
 /**
  * {@code java -jar ide-ui.jar [folder]}: the project in the folder in a window that looks like IntelliJ's (Darcula,
- * Inter, JetBrains Mono); with no folder, the example project, copied to {@code ~/.ideseed/example} the first time.
+ * Inter, JetBrains Mono); with no folder, the last one opened (kept in {@code ~/.ideseed/last}), else the example
+ * project, copied to {@code ~/.ideseed/example} the first time.
  * The window shows at once, while the sources are read and compiled out of its way; if they cannot be, it says why.
  */
 public final class Main {
+
+    private static final Path HOME = Path.of(System.getProperty("user.home"), ".ideseed");
 
     private Main() {
     }
@@ -53,7 +57,7 @@ public final class Main {
             });
             frame.setSize(1400, 900);
             frame.setLocationRelativeTo(null);
-            open(frame, args.length > 0 ? Path.of(args[0]) : example());
+            open(frame, args.length > 0 ? Path.of(args[0]) : last(HOME).orElseGet(Main::example));
         });
     }
 
@@ -81,7 +85,7 @@ public final class Main {
                     var workbench = new Workbench(get(), new SwingDialogs(frame));
                     workbench.watch();
                     try {
-                        workbench.serve(Path.of(System.getProperty("user.home"), ".ideseed", "mcp"));
+                        workbench.serve(HOME.resolve("mcp"));
                         workbench.reopened(); // Claude goes on, if it was working when the IDE closed
                     } catch (java.io.IOException | RuntimeException notServed) {
                         System.err.println("agents cannot reach this IDE: " + notServed.getMessage());
@@ -93,6 +97,7 @@ public final class Main {
                     frame.setJMenuBar(workbench.menus());
                     frame.setContentPane(workbench);
                     frame.revalidate();
+                    opened(HOME, root);
                 } catch (InterruptedException | ExecutionException | RuntimeException failed) {
                     JOptionPane.showMessageDialog(frame, failure(failed, root), "IdeSeed could not open it", JOptionPane.ERROR_MESSAGE);
                     var chosen = folder(frame);
@@ -113,9 +118,31 @@ public final class Main {
         return cause.getMessage() == null ? cause.toString() : cause.getMessage();
     }
 
+    /** The folder opened last, if it is still there. */
+    static Optional<Path> last(Path home) {
+        try {
+            var file = home.resolve("last");
+            if (!Files.isRegularFile(file)) return Optional.empty();
+            var last = Path.of(Files.readString(file, StandardCharsets.UTF_8).strip());
+            return Files.isDirectory(last) ? Optional.of(last) : Optional.empty();
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
+        }
+    }
+
+    /** A folder opened: the one to open next time with no folder. Not being able to remember it changes nothing else. */
+    static void opened(Path home, Path root) {
+        try {
+            Files.createDirectories(home);
+            Files.writeString(home.resolve("last"), root.toAbsolutePath().normalize() + "\n", StandardCharsets.UTF_8);
+        } catch (IOException notKept) {
+            System.err.println("the folder opened cannot be remembered: " + notKept.getMessage());
+        }
+    }
+
     /** The example project, copied from the IDE to {@code ~/.ideseed/example} unless it is there already. */
     static Path example() {
-        var root = Path.of(System.getProperty("user.home"), ".ideseed", "example");
+        var root = HOME.resolve("example");
         return Files.isDirectory(root) ? root : example(root);
     }
 
