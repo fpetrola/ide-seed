@@ -415,7 +415,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   texto. Borrar un parámetro saca su argumento de cada llamada, y declara que los usos que ese argumento hacía se van
   a propósito (antes el verificador los tomaba por ligaduras perdidas); un argumento con efectos se rechaza
   (`delete.effects`), porque dejarían de pasar. El tipo declarado de un local se generaliza como el de un campo o un
-  parámetro; como el uso del tipo es de su método, el `Link` declara que ese uso se retargetea.
+  parámetro; como el uso del tipo es de su método, el `Link` declara que ese uso se retargetea. Un tipo creado sin
+  padre es del paquete por defecto, en un archivo propio en la raíz (extract-interface sobre una clase de ahí).
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el

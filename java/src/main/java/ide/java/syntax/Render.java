@@ -9,9 +9,9 @@ public final class Render {
     private Render() {
     }
 
-    /** A file declaring one public class or interface. */
+    /** A file declaring one public class or interface; with no package line, in the default package. */
     public static String typeFile(String pkg, String keyword, String name) {
-        return "package " + pkg + ";\n\npublic " + keyword + " " + name + " {\n}\n";
+        return (pkg.isEmpty() ? "" : "package " + pkg + ";\n\n") + "public " + keyword + " " + name + " {\n}\n";
     }
 
     /** A method that does nothing, its closing brace at {@code indent}. */

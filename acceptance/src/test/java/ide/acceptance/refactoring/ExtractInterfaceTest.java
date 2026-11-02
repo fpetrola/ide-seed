@@ -56,4 +56,23 @@ class ExtractInterfaceTest {
         assertThat(ws.source("a/Line.java")).contains("public class Line implements Priced {");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** A type of the default package: the interface is of it too, in a file of its own at the root. */
+    @Test
+    void aTypeOfTheDefaultPackageGetsItsInterfaceThere() {
+        var ws = Workspace.of(Map.of("JdbcRepository.java", """
+                public class JdbcRepository {
+                    public void init() {
+                    }
+                }
+                """));
+
+        var result = ws.invoke("extract-interface", Map.of("type", "JdbcRepository", "name", "Repository",
+                "methods", java.util.List.of("JdbcRepository#init()")));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("Repository.java")).contains("interface Repository {", "void init();");
+        assertThat(ws.source("JdbcRepository.java")).contains("public class JdbcRepository implements Repository {");
+        assertThat(ws.errors()).isEmpty();
+    }
 }

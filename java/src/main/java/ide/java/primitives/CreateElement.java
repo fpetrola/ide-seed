@@ -64,9 +64,10 @@ final class CreateElement {
             return ids.of(new Address.Package(name), Kind.PACKAGE);
         }
         Shared.requireIdentifier(name);
-        var owner = c.program().element(parent);
+        var owner = parent == null && (kind == Kind.CLASS || kind == Kind.INTERFACE) ? null : c.program().element(parent); // none: the default package
+        var pkg = owner == null ? "" : owner.qualified();
         Address address = switch (kind) {
-            case CLASS, INTERFACE -> new Address.Type(owner.qualified() + "." + name);
+            case CLASS, INTERFACE -> new Address.Type(pkg.isEmpty() ? name : pkg + "." + name);
             case FIELD -> new Address.Field(owner.id(), name);
             case METHOD -> new Address.Callable(owner.id(), name, List.of());
             case CONSTRUCTOR -> {
@@ -80,10 +81,10 @@ final class CreateElement {
         var sources = c.sources();
         switch (kind) {
             case CLASS, INTERFACE -> {
-                if (owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("types go in packages: " + owner);
-                var path = owner.qualified().replace('.', '/') + "/" + name + ".java";
+                if (owner != null && owner.kind() != Kind.PACKAGE) throw new IllegalArgumentException("types go in packages: " + owner);
+                var path = (pkg.isEmpty() ? "" : pkg.replace('.', '/') + "/") + name + ".java";
                 if (sources.has(path)) throw new PrimitiveRejected("projection.duplicate", path + " already exists");
-                sources.put(Map.of(path, Render.typeFile(owner.qualified(), kind == Kind.CLASS ? "class" : "interface", name)));
+                sources.put(Map.of(path, Render.typeFile(pkg, kind == Kind.CLASS ? "class" : "interface", name)));
             }
             case FIELD -> {
                 var type = c.declaration(owner);
