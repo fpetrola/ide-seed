@@ -296,7 +296,7 @@ final class SetAttribute {
         var edits = new EditSet();
         var local = element.kind() == Kind.LOCAL;
         if (local && variable.getInitializer().isPresent()) throw new ide.projection.PrimitiveRejected("set.initializer", element.qualified() + " has a value already");
-        var written = ide.program.Body.names(value) ? WriteBody.value(c, local ? element.parent() : id, edits, unit, value) : value; // said in no language, or in Java
+        var written = ide.program.Body.names(value) ? WriteBody.value(c, local ? element.parent() : id, edits, unit, value, element.fact(ide.program.Fact.TYPE)) : value; // said in no language, or in Java
         if (variable.getInitializer().isPresent()) edits.replace(unit, variable.getInitializer().get(), written);
         else edits.insertAfter(unit, variable.getName(), " = " + written);
         c.sources().apply(edits);

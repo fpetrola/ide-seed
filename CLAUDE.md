@@ -47,9 +47,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   statement is created said in the body language at the end of a body, moved before another or into another method
   with the uses made in it, and deleted with them; one that calls a constructor goes first), Change (produced element,
   expectations, pins: what a repair may not take back) and Body (what a method does in no language, a statement a
-  line: return, assign a field, new, a call, the type's default, a constructor called first, a new list, add to a
+  line: return, assign a field or a local of the method, new, a call, the type's default, a constructor called first, a new list, add to a
   list, each value of a list in a local (a loop made empty, which declares it; `list of #{T}` is also a local's
-  type), over elements named `#{id}`; a statement is created at the end of a body or of the one block a statement of
+  type), the type's default (`default`, also a local's or a field's start), over elements named `#{id}`; a statement is created at the end of a body or of the one block a statement of
   it holds; a parameter or local it names is a read of it; a created statement expects the uses it names Added; a body is its
   statements: there is no Set of a whole body).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit` (a null text: the file gone),
@@ -87,7 +87,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   nothing reads is deleted with its lines; a deleted parameter takes its argument from every call, whose uses go on
   purpose (one with effects is refused). The statements of each body are elements, and so are those of the blocks
   each holds (Bodies.nested); a statement moves before one of a nested block, alone on its lines, or to the end of
-  the one block a statement holds, the same way; the
+  the one block a statement holds (a block, a loop's, an if's with no else), the same way; the
   primitives that change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
   `inside` answers the innermost element, a statement or a local too. `mains` are the classes a program runs from: the first
   top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,

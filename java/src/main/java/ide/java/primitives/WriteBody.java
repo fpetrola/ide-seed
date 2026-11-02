@@ -69,9 +69,7 @@ final class WriteBody {
         com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
         var unit = declaration.unit();
         var holder = parent.equals(method.id()) ? null : c.declaration(before.element(parent)).node();
-        var block = holder == null ? ide.java.semantics.Bodies.body(callable)
-                : holder instanceof com.github.javaparser.ast.stmt.BlockStmt b ? b
-                : holder instanceof com.github.javaparser.ast.nodeTypes.NodeWithBody<?> loop && loop.getBody() instanceof com.github.javaparser.ast.stmt.BlockStmt b ? b : null;
+        var block = holder == null ? ide.java.semantics.Bodies.body(callable) : ide.java.semantics.Bodies.block(holder);
         if (block == null) throw new ide.projection.PrimitiveRejected("create.statement", before.element(parent).qualified() + " holds no one block to end");
         var edits = new EditSet();
         var type = callable instanceof MethodDeclaration m ? m.getType().asString() : "void";
@@ -117,8 +115,8 @@ final class WriteBody {
     }
 
     /** A value said in no language, as the file of {@code site} writes it: a field's start. */
-    static String value(Context c, ElementId site, EditSet edits, Unit unit, String text) {
-        return new WriteBody(c.program(), List.of(), edits, unit, "void", c.program().element(site).parent()).value(Body.value(text, c.program(), site));
+    static String value(Context c, ElementId site, EditSet edits, Unit unit, String text, String type) {
+        return new WriteBody(c.program(), List.of(), edits, unit, type, c.program().element(site).parent()).value(Body.value(text, c.program(), site));
     }
 
     private String statement(Body.Statement statement) {
@@ -127,6 +125,7 @@ final class WriteBody {
             case Body.Return r when r.value() instanceof Body.Call && type.equals("void") -> value(r.value()) + ";";
             case Body.Return r -> Render.returning(value(r.value()));
             case Body.Assign a -> Render.assignment(field(a.field()), value(a.value()));
+            case Body.Let l -> Render.assignment(program.element(l.local()).name(), value(l.value()));
             case Body.Construct made -> (program.element(made.constructor()).parent().equals(owner) ? "this" : "super")
                     + "(" + String.join(", ", made.arguments().stream().map(this::value).toList()) + ");";
             case Body.Add add -> value(add.list()) + ".add(" + value(add.value()) + ");";

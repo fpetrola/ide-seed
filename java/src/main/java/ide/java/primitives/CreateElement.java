@@ -64,6 +64,11 @@ final class CreateElement {
      */
     private static ElementId local(Context c, Program before, ElementId method, String name) {
         Shared.requireIdentifier(name);
+        var kind = before.element(method).kind();
+        if (kind != Kind.METHOD && kind != Kind.CONSTRUCTOR) {
+            throw new PrimitiveRejected("create.local", "a local is created in its method, and its statement moved where it goes: "
+                    + before.element(method).qualified() + " is a " + kind.name().toLowerCase());
+        }
         var declaration = c.declaration(before.element(method));
         com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
         if (callable instanceof com.github.javaparser.ast.body.ConstructorDeclaration) throw new PrimitiveRejected("create.local", "a local goes in a method");

@@ -449,6 +449,35 @@ refactoring introduce-local-object "Makes locals one object of an existing class
   return ${o}
 end
 
+refactoring move-out-of-loop "Moves the last statements of a loop's body after it: a local of the loop they read is declared before it and given its value in each turn; they run once, after the last turn, with what it left (its type's default if there was none)" changes meaning
+  param from : element(STATEMENT) "the first statement to move: it and those after it in its block go"
+  param locals : elements(LOCAL) "the locals of the loop they read"
+  let loop = owner(from)
+  let rest = after(from)
+  let next = first(after(loop))
+  for l in locals
+    let named = name(l)
+    out := create LOCAL ${owner(l)} ${concat(named, "Out")} facts="type=${type(l)}"
+    set ${out} initializer default
+    move ${first(statements(owner(l)))} ${owner(loop)} before=${loop}
+    let at = statement(first(refs(l)))
+    given := create STATEMENT ${loop} "" facts="body=#{out} = #{l}"
+    move ${given} ${owner(at)} before=${at}
+    for r in reversed(refs(l))
+      if ne(statement(r), given)
+        retarget ${r} ${out}
+      end
+    end
+    inline-variable ${l}
+    rename ${out} ${named}
+  end
+  move ${from} ${owner(loop)} before=${next}
+  for s in rest
+    move ${s} ${owner(loop)} before=${next}
+  end
+  return ${loop}
+end
+
 refactoring split-loop "Splits a loop in two, as Fowler's Split Loop: the first puts in a list the value each turn makes, the second does with each what came after it; it reads them all before doing anything" changes meaning
   param loop : element(STATEMENT) "the loop"
   param value : element(LOCAL) "what each turn makes, declared in the loop's block"

@@ -86,6 +86,16 @@ public final class Bodies {
     }
 
     /** Where a statement is among its body's, by what it is and not by how it looks; -1 if it is none of them. */
+    /** The one block a statement holds, where what goes at its end goes: its own, a loop's, an if's with no else; or null. */
+    public static BlockStmt block(Node holder) {
+        return switch (holder) {
+            case BlockStmt block -> block;
+            case com.github.javaparser.ast.nodeTypes.NodeWithBody<?> loop when loop.getBody() instanceof BlockStmt block -> block;
+            case com.github.javaparser.ast.stmt.IfStmt branch when branch.getElseStmt().isEmpty() && branch.getThenStmt() instanceof BlockStmt block -> block;
+            default -> null;
+        };
+    }
+
     public static int place(List<Statement> statements, Node statement) {
         for (var i = 0; i < statements.size(); i++) if (statements.get(i) == statement) return i;
         return -1;

@@ -49,6 +49,10 @@ public record Body(List<Statement> statements) {
     public record Assign(ElementId field, Expression value) implements Statement {
     }
 
+    /** Gives {@code local}, a local of the method, the value {@code value}. */
+    public record Let(ElementId local, Expression value) implements Statement {
+    }
+
     /** Puts {@code value} at the end of {@code list}. */
     public record Add(Expression value, Expression list) implements Statement {
     }
@@ -135,9 +139,9 @@ public record Body(List<Statement> statements) {
         return ((Return) statement).value();
     }
 
-    /** Whether a text says something in no language: it names elements as a body does. */
+    /** Whether a text says something in no language: it names elements as a body does, or is the type's default. */
     public static boolean names(String text) {
-        return text.contains("#{");
+        return text.contains("#{") || text.strip().equals("default");
     }
 
     /** The body as it is said: a statement a line, each element named by id. */
@@ -151,6 +155,7 @@ public record Body(List<Statement> statements) {
             case Construct c -> name(c.constructor()) + "(" + text(c.arguments()) + ")";
             case Return r -> "return " + text(r.value());
             case Assign a -> name(a.field()) + " = " + text(a.value());
+            case Let l -> name(l.local()) + " = " + text(l.value());
             case Add a -> "add " + text(a.value()) + " to " + text(a.list());
             case Each e -> "each " + name(e.local()) + " in " + text(e.list());
         };
@@ -198,6 +203,10 @@ public record Body(List<Statement> statements) {
             case Assign a -> {
                 uses.add(new Use(a.field(), Mode.WRITE));
                 uses(a.value(), uses);
+            }
+            case Let l -> {
+                uses.add(new Use(l.local(), Mode.WRITE, Reference.Receiver.NONE)); // written from the method, on nothing
+                uses(l.value(), uses);
             }
             case Add a -> {
                 uses(a.list(), uses);
@@ -260,12 +269,18 @@ public record Body(List<Statement> statements) {
                 if (!keyword("in")) throw error("'in'");
                 statement = new Each(local, expression());
             } else {
-                var element = element(Kind.FIELD, Kind.CONSTRUCTOR);
+                var element = element(Kind.FIELD, Kind.CONSTRUCTOR, Kind.LOCAL);
+                if (program.element(element).kind() == Kind.LOCAL && !method.equals(program.element(element).parent())) {
+                    throw new IllegalArgumentException("body: " + element + " is not a local of " + method + ", in: " + text);
+                }
                 if (program.element(element).kind() == Kind.CONSTRUCTOR) {
                     if (program.element(method).kind() != Kind.CONSTRUCTOR) {
                         throw new IllegalArgumentException("body: only a constructor has its object made by " + element + ", in: " + text);
                     }
                     statement = new Construct(element, ((Call) call(null, element)).arguments());
+                } else if (program.element(element).kind() == Kind.LOCAL) {
+                    expect('=');
+                    statement = new Let(element, expression());
                 } else {
                     expect('=');
                     statement = new Assign(element, expression());

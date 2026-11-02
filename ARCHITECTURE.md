@@ -1822,6 +1822,14 @@ que esto no escala solo:
    un efecto, pero lee lo que tiene su objeto: cualquier llamada con efectos entre la declaración y el uso puede
    cambiarlo (un alias), y se rechaza (`inline.changed`). Va en el driver y no en `java.rules` porque el rechazo es del
    primitivo y el driver no puede leer knowledge.
+   *move-out-of-loop (2026-11-02, a pedido de test1, para el cambio de findCustomerById que Fernando aceptó):* las últimas
+   sentencias del cuerpo de un loop pasan a después de él, y cada local del loop que leen se declara antes, con el
+   default de su tipo, y recibe su valor en cada vuelta. Corren una vez, con lo que dejó la última vuelta, o con el
+   default si no hubo ninguna: declara `changes meaning`. Para eso, el lenguaje de cuerpos aprendió a dar valor a un
+   local (`#{l} = ...`, `Body.Let`), y `default` como valor inicial dicho sin lenguaje; el único bloque de un `if` sin
+   `else` también es un lugar donde termina lo que se mueve o se crea. Y quedó arreglado lo que había anotado: borrar
+   la declaración de un local en un bloque anidado reacomoda las ids de las sentencias de ese bloque, y no olvida la
+   sentencia que lo tiene.
 
 **Cómo se sabe si funcionó.**
 

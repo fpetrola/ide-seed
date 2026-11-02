@@ -165,4 +165,15 @@ final class Shared {
         return call -> ide.java.semantics.Reads.declared(call) || ide.java.semantics.Reads.getter(call)
                 && java.util.Optional.ofNullable(c.reader().resolveMethod(call)).map(m -> before.overriders(before.element(m)).isEmpty()).orElse(false);
     }
+
+    /** The statement element written as {@code node}, among those of {@code holder} and the ones they hold; null if none. */
+    static Element statementWritten(Context c, ide.program.Program before, ElementId holder, Node node) {
+        for (var statement : before.children(holder)) {
+            if (statement.kind() != Kind.STATEMENT) continue;
+            if (c.declaration(statement).node() == node) return statement;
+            var inside = statementWritten(c, before, statement.id(), node);
+            if (inside != null) return inside;
+        }
+        return null;
+    }
 }

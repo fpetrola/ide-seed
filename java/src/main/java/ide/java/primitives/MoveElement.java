@@ -196,9 +196,7 @@ final class MoveElement {
         var nested = holder.kind() == Kind.STATEMENT; // among the statements another holds in its blocks
         var siblings = before.children(holder.id()).stream().filter(e -> e.kind() == Kind.STATEMENT).toList();
         if (anchor == null && !siblings.isEmpty() && siblings.getLast().id().equals(statement.id())) return; // at its end already
-        var block = !nested ? null : anchor != null ? null : c.declaration(holder).node() instanceof com.github.javaparser.ast.stmt.BlockStmt b ? b
-                : c.declaration(holder).node() instanceof com.github.javaparser.ast.nodeTypes.NodeWithBody<?> loop
-                && loop.getBody() instanceof com.github.javaparser.ast.stmt.BlockStmt b ? b : null;
+        var block = !nested || anchor != null ? null : Bodies.block(c.declaration(holder).node());
         if (nested && anchor == null && block == null) throw new PrimitiveRejected("move.before", holder.qualified() + " holds no one block to end");
         if (nested && anchor != null && (!(c.declaration(anchor).node().getParentNode().orElse(null) instanceof com.github.javaparser.ast.stmt.BlockStmt)
                 || !Statements.alone(c.declaration(anchor).unit(), c.declaration(anchor).node()))) {
