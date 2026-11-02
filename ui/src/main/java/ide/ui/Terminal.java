@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 /**
@@ -62,12 +63,21 @@ final class Terminal extends JPanel {
     }
 
     /**
-     * Runs a line in the shell: typed into it if it is running, or, if it has not started, run first by an interactive
-     * shell that then stays.
+     * Runs a line in the shell: typed into it if it is running, Enter a moment after (as a person types it), or, if it
+     * has not started, run first by an interactive shell that then stays.
      */
     void run(String line) throws IOException {
         if (running()) {
-            type(line + "\r");
+            type(line);
+            var enter = new javax.swing.Timer(150, event -> { // apart: a line and its Enter at once are a paste, not sent
+                try {
+                    type("\r");
+                } catch (IOException gone) {
+                    // the program ended meanwhile
+                }
+            });
+            enter.setRepeats(false);
+            enter.start();
             return;
         }
         var shell = shell().getFirst();
@@ -82,6 +92,8 @@ final class Terminal extends JPanel {
 
     void start(List<String> command) {
         var environment = new HashMap<>(System.getenv());
+        // started from inside Claude Code, the IDE would hand down its marks: a Claude here would think it is a part of that one
+        environment.keySet().removeIf(name -> name.startsWith("CLAUDECODE") || name.startsWith("CLAUDE_CODE_"));
         environment.putAll(this.environment);
         environment.put("TERM", "xterm-256color");
         environment.put("TERMINAL_EMULATOR", "IdeSeed");
@@ -99,6 +111,58 @@ final class Terminal extends JPanel {
 
     boolean running() {
         return widget.getTtyConnector() != null && widget.getTtyConnector().isConnected();
+    }
+
+    /**
+     * Whether a program of that name runs in the terminal now: the one it started or one started from it (a command
+     * the shell runs, or a script an interpreter runs), by the name of its file.
+     */
+    boolean runs(String program) {
+        if (!(widget.getTtyConnector() instanceof Connector connector) || !connector.process.isAlive()) return false;
+        return ProcessHandle.of(connector.process.pid()) // pty4j's processes give no handle of their own
+                .map(started -> java.util.stream.Stream.concat(java.util.stream.Stream.of(started), started.descendants())
+                        .anyMatch(process -> named(process, program)))
+                .orElse(false);
+    }
+
+    /**
+     * Whether a process is that program: its executable is in a folder or a file of that name (an installed program is
+     * often a link to {@code .../claude/versions/2.1.3}), it was called by that name, or it runs a script of that name.
+     */
+    private static boolean named(ProcessHandle process, String program) {
+        var info = process.info();
+        java.util.function.Predicate<String> file = path -> name(path).equals(program);
+        java.util.function.Predicate<String> along = path -> {
+            try {
+                for (var part : java.nio.file.Path.of(path)) if (part.toString().equals(program)) return true;
+                return false;
+            } catch (java.nio.file.InvalidPathException notAPath) {
+                return false;
+            }
+        };
+        return info.command().filter(along).isPresent() || info.arguments().stream().flatMap(java.util.Arrays::stream).anyMatch(file)
+                || calledAs(process).filter(file).isPresent();
+    }
+
+    private static String name(String path) {
+        try {
+            var name = java.nio.file.Path.of(path).getFileName();
+            return name == null ? "" : name.toString();
+        } catch (java.nio.file.InvalidPathException notAPath) {
+            return "";
+        }
+    }
+
+    /** The name a process was called by, where the system says it (Linux). */
+    private static Optional<String> calledAs(ProcessHandle process) {
+        try {
+            var line = java.nio.file.Files.readAllBytes(java.nio.file.Path.of("/proc", String.valueOf(process.pid()), "cmdline"));
+            var end = 0;
+            while (end < line.length && line[end] != 0) end++;
+            return end == 0 ? Optional.empty() : Optional.of(new String(line, 0, end, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException elsewhere) {
+            return Optional.empty();
+        }
     }
 
     /** Sends text as if it were typed. */

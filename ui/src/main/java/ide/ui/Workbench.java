@@ -369,8 +369,10 @@ final class Workbench extends JPanel {
         java.nio.file.Files.writeString(servedConfig, config);
         java.nio.file.Files.setPosixFilePermissions(servedConfig, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
         servedSettings = folder.resolve("ideseed-" + java.net.URI.create(served.url()).getPort() + "-settings.json");
-        java.nio.file.Files.writeString(servedSettings, Json.write(Map.of("hooks", Map.of("PostToolUse", List.of(Map.of("matcher", "*",
-                "hooks", List.of(Map.of("type", "command", "command", hook(served.url(), token)))))))));
+        java.nio.file.Files.writeString(servedSettings, Json.write(Map.of( // the IDE's own tools need no asking: each is verified and undone
+                "permissions", Map.of("allow", List.of("mcp__ideseed")),
+                "hooks", Map.of("PostToolUse", List.of(Map.of("matcher", "*",
+                        "hooks", List.of(Map.of("type", "command", "command", hook(served.url(), token)))))))));
         java.nio.file.Files.setPosixFilePermissions(servedSettings, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
         if (terminal != null) {
             terminal.environment("IDESEED_MCP_CONFIG", servedConfig.toString());
@@ -456,7 +458,6 @@ final class Workbench extends JPanel {
         }
         try {
             terminal.run("claude --mcp-config \"$IDESEED_MCP_CONFIG\" --settings \"$IDESEED_SETTINGS\"");
-            claudeListens = true;
         } catch (IOException e) {
             say("the terminal did not take it: " + e.getMessage());
         }
@@ -492,15 +493,17 @@ final class Workbench extends JPanel {
         }
     }
 
-    /** Whether Claude Code was started in the terminal and the terminal still runs: what is said to it, it reads there. */
-    private boolean claudeListens;
+    /** What Claude Code shows while it waits for an answer: what is typed then would answer it. */
+    private static final List<String> ASKING = List.of("Enter to confirm", "Do you want to", "Esc to cancel");
 
     /**
      * What the person says of a plan or a task: the IDE changes it at once; Claude is told in its terminal if it is
      * there, else it is told with the next answer it gets from the IDE.
      */
     void steer(String kind, String plan, String task, String text) {
-        var told = claudeListens && terminal != null && terminal.running();
+        var there = terminal != null && terminal.runs("claude");
+        var asking = there && ASKING.stream().anyMatch(terminal.screen()::contains);
+        var told = there && (!asking || kind.equals("stop")); // Esc answers no to what it asks, as stopping means
         var args = new LinkedHashMap<String, Object>(Map.of("kind", kind, "told", String.valueOf(told)));
         if (!plan.isEmpty()) args.put("plan", plan);
         if (!task.isEmpty()) args.put("task", task);
@@ -521,7 +524,8 @@ final class Workbench extends JPanel {
                 say("could not tell Claude in the terminal (" + e.getMessage() + "): " + message);
             }
         } else {
-            say("for Claude, at its next step: " + message);
+            say((asking ? "Claude is asking you something in the terminal; for Claude, at its next step: " : "for Claude, at its next step: ")
+                    + message);
         }
         refresh();
     }

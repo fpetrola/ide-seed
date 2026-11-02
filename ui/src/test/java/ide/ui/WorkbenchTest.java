@@ -485,6 +485,7 @@ class WorkbenchTest {
                 settings = files.filter(f -> f.toString().endsWith("-settings.json")).findFirst().orElseThrow();
             }
             assertThat(Files.getPosixFilePermissions(settings)).isEqualTo(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            assertThat(Files.readString(settings)).contains("\"allow\":[\"mcp__ideseed\"]");
             @SuppressWarnings("unchecked") var hook = (String) ((Map<String, Object>) ((List<?>) ((Map<String, Object>) ((List<?>)
                     ((Map<String, Object>) ((Map<String, Object>) ide.core.Json.read(Files.readString(settings))).get("hooks"))
                             .get("PostToolUse")).getFirst()).get("hooks")).getFirst()).get("command");

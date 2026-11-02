@@ -49,4 +49,52 @@ class TerminalTest {
 
         assertThat(terminal.running()).isFalse();
     }
+
+    @Test
+    void itKnowsWhichProgramsRunInIt() throws Exception {
+        var terminal = new Terminal(root);
+        try {
+            terminal.start(List.of("/bin/sh", "-c", "sleep 30; echo done"));
+            var until = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+            while (!terminal.runs("sleep") && System.nanoTime() < until) Thread.sleep(50);
+
+            assertThat(terminal.runs("sleep")).isTrue();
+            assertThat(terminal.runs("claude")).isFalse();
+        } finally {
+            terminal.close();
+        }
+        assertThat(terminal.runs("sleep")).isFalse();
+    }
+
+    @Test
+    void aClaudeStartedHereIsItsOwnNotAPartOfTheOneThatStartedTheIde() throws Exception {
+        var terminal = new Terminal(root);
+        terminal.environment("IDESEED_MCP_CONFIG", "kept");
+        try {
+            terminal.start(List.of("/bin/sh", "-c", "echo marks:$(env | grep -c -e ^CLAUDECODE -e ^CLAUDE_CODE_) config:$IDESEED_MCP_CONFIG"));
+
+            assertThat(terminal.await(screen -> screen.contains("config:"), Duration.ofSeconds(10))).contains("marks:0 config:kept");
+        } finally {
+            terminal.close();
+        }
+    }
+
+    @Test
+    void aLineRunInAProgramIsTypedAndThenSent() throws Exception {
+        var terminal = new Terminal(root);
+        try {
+            terminal.start(List.of("/bin/sh", "-c", "read line; echo got:$line"));
+            javax.swing.SwingUtilities.invokeAndWait(() -> {
+                try {
+                    terminal.run("hello");
+                } catch (java.io.IOException e) {
+                    throw new java.io.UncheckedIOException(e);
+                }
+            });
+
+            assertThat(terminal.await(screen -> screen.contains("got:hello"), Duration.ofSeconds(10))).contains("got:hello");
+        } finally {
+            terminal.close();
+        }
+    }
 }

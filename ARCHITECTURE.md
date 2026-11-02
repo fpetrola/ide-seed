@@ -785,6 +785,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     porque un Read grande superaría el largo máximo de un argumento. Las respuestas a `activity` no llevan las
     indicaciones de la persona, porque nadie las lee. Stop es inmediato: la ventana aprieta Esc en la terminal de
     Claude y después escribe el mensaje, separados para que no se lean como Alt+tecla.
+  - **Decisión: solo se escribe en la terminal si Claude está ahí y no está preguntando nada.** Que Claude corre se
+    sabe por los procesos de la terminal, no por haberlo lanzado: si se cerró, el mensaje irían al shell como un
+    comando. Si Claude está en un diálogo ("Enter to confirm", un permiso), el Enter del mensaje lo contestaría, así
+    que el mensaje queda esperando y viaja con la próxima respuesta del IDE. La excepción es Stop: su Esc contesta que
+    no. El Enter va aparte del texto, porque junto con él Claude Code lo toma como un pegado. La terminal saca las
+    variables `CLAUDECODE*` y `CLAUDE_CODE_*` heredadas: sin eso, un Claude lanzado desde un IDE que a su vez se abrió
+    desde Claude se cree una subsesión y no guarda la conversación. Los settings con que se lanza Claude preaprueban
+    las herramientas del IDE (`mcp__ideseed`), que se verifican y se pueden deshacer.
   - **Decisión: la atención va en los dos sentidos y también es dominio de session.** La ventana no registra
     capacidades propias (eso haría que un adaptador tuviera lógica y dependiera de otro para algo más que servir). En
     cambio, `Attention` guarda dos cosas. La primera es el último lugar al que un agente señaló, con `point`: un
