@@ -105,7 +105,12 @@ public final class Bodies {
      * too, whose type also comes from where it is written), an assignment, an increment.
      */
     public static Node effect(Expression e) {
-        return e.findFirst(Node.class, n -> n instanceof MethodCallExpr || n instanceof ObjectCreationExpr
+        return effect(e, Reads::declared);
+    }
+
+    /** The same, {@code reads} saying which calls only read. */
+    public static Node effect(Expression e, java.util.function.Predicate<MethodCallExpr> reads) {
+        return e.findFirst(Node.class, n -> n instanceof MethodCallExpr call && !reads.test(call) || n instanceof ObjectCreationExpr
                 || n instanceof ArrayCreationExpr || n instanceof ArrayInitializerExpr || n instanceof LambdaExpr
                 || n instanceof MethodReferenceExpr || n instanceof AssignExpr
                 || n instanceof UnaryExpr u && u.getOperator().name().endsWith("CREMENT")).orElse(null);
@@ -117,7 +122,7 @@ public final class Bodies {
      * block, read whatever happens (not on a branch, in a loop or a lambda), and what runs between them, in the
      * statements between and in the use's own before it, has no effects and reads only locals.
      */
-    public static Node movedPast(VariableDeclarator declaration, Expression use) {
+    public static Node movedPast(VariableDeclarator declaration, Expression use, java.util.function.Predicate<MethodCallExpr> reads) {
         var declared = declaration.getParentNode().filter(d -> d instanceof VariableDeclarationExpr v && v.getVariables().size() == 1)
                 .flatMap(Node::getParentNode).filter(ExpressionStmt.class::isInstance).orElse(null);
         if (declared == null || !(declared.getParentNode().orElse(null) instanceof BlockStmt block)) return declaration;
@@ -127,10 +132,10 @@ public final class Bodies {
         while (at.getParentNode().orElseThrow() != block) at = at.getParentNode().orElseThrow();
         var statements = block.getStatements();
         for (var i = statements.indexOf((Statement) declared) + 1; i < statements.indexOf((Statement) at); i++) {
-            var busy = busy(statements.get(i), null);
+            var busy = busy(statements.get(i), null, reads);
             if (busy != null) return busy;
         }
-        return busy(at, use);
+        return busy(at, use, reads);
     }
 
     /**
@@ -149,10 +154,10 @@ public final class Bodies {
     }
 
     /** What in {@code node}, before {@code until} if given (and not around it), does something or reads the heap, or null. */
-    private static Node busy(Node node, Node until) {
+    private static Node busy(Node node, Node until, java.util.function.Predicate<MethodCallExpr> reads) {
         for (var n : node.findAll(Node.class)) {
             if (until != null && (n.isAncestorOf(until) || n == until || !n.getEnd().orElseThrow().isBefore(until.getBegin().orElseThrow()))) continue;
-            if (n instanceof Expression e && effect(e) != null) return effect(e);
+            if (n instanceof Expression e && effect(e, reads) != null) return effect(e, reads);
             if (n instanceof FieldAccessExpr || n instanceof ArrayAccessExpr || n instanceof NameExpr name && Resolution.resolveField(name) != null) return n;
         }
         return null;
@@ -164,7 +169,7 @@ public final class Bodies {
      * object. A use in a loop that the declaration is not in is read again in the turns that follow: the rest of the
      * loop counts too.
      */
-    public static Node changedBetween(Node declaration, Expression value, Node use) {
+    public static Node changedBetween(Node declaration, Expression value, Node use, java.util.function.Predicate<MethodCallExpr> reads) {
         var start = declaration.getEnd().orElseThrow();
         var end = use.getBegin().orElseThrow();
         for (var n = use.getParentNode().orElse(null); n != null && !n.isAncestorOf(declaration); n = n.getParentNode().orElse(null)) {
@@ -174,13 +179,15 @@ public final class Bodies {
         value.findAll(NameExpr.class).forEach(n -> read.add(n.getNameAsString()));
         value.findAll(FieldAccessExpr.class).forEach(f -> read.add(f.getNameAsString()));
         var heap = !value.findAll(FieldAccessExpr.class).isEmpty() || !value.findAll(ArrayAccessExpr.class).isEmpty()
-                || value.findAll(NameExpr.class).stream().anyMatch(n -> Resolution.resolveField(n) != null);
+                || value.findAll(NameExpr.class).stream().anyMatch(n -> Resolution.resolveField(n) != null)
+                || value.findAll(MethodCallExpr.class).stream().anyMatch(reads); // what its object holds
         var stop = end;
         var callable = use.findAncestor(CallableDeclaration.class).orElseThrow();
         return callable.findFirst(Node.class, n -> n.getBegin().filter(b -> b.isAfter(start) && b.isBefore(stop)).isPresent()
                 && (n instanceof AssignExpr a && read.contains(written(a.getTarget()))
                 || n instanceof UnaryExpr u && u.getOperator().name().endsWith("CREMENT") && read.contains(written(u.getExpression()))
-                || heap && (n instanceof MethodCallExpr || n instanceof ObjectCreationExpr))).orElse(null);
+                || heap && (n instanceof MethodCallExpr call && !reads.test(call) || n instanceof ObjectCreationExpr)
+                && !n.isAncestorOf(use))).orElse(null); // what holds the read runs after it
     }
 
     /** The name a write changes: the variable, the field, or the array whose element it is. */

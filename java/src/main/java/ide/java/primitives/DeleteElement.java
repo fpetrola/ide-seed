@@ -66,7 +66,7 @@ final class DeleteElement {
         if (statement == null || !ide.java.syntax.Statements.alone(unit, statement)) {
             throw new PrimitiveRejected("delete.unsupported", local.qualified() + " is not declared alone on its lines");
         }
-        var effect = variable.getInitializer().map(Bodies::effect).orElse(null);
+        var effect = variable.getInitializer().map(value -> Bodies.effect(value, Shared.reads(c, before))).orElse(null);
         if (effect != null) throw new PrimitiveRejected("delete.effects", "'" + effect + "' would no longer run");
         var range = statement.getRange().orElseThrow();
         var gone = before.referencesFrom(local.parent()).stream().filter(r -> c.use(r.id()).getRange().filter(range::contains).isPresent())
@@ -215,7 +215,7 @@ final class DeleteElement {
         for (var call : Shared.callsTo(c, method.id())) {
             if (index < call.arguments().size()) {
                 var argument = call.arguments().get(index);
-                var effect = Bodies.effect(argument);
+                var effect = Bodies.effect(argument, Shared.reads(c, before));
                 if (effect != null) throw new PrimitiveRejected("delete.effects", "'" + effect + "' would no longer run");
                 var range = argument.getRange().orElseThrow();
                 for (var r : before.referencesFrom(call.site())) {

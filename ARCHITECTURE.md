@@ -1816,7 +1816,12 @@ que esto no escala solo:
    *Para la limpieza final de test1 (2026-11-02, con lo que eligió Fernando):* un local declarado en una lambda es un
    LOCAL del método que la tiene, como uno de un bloque anidado (`process(...)/dni`), y así se inlinea o se renombra; los
    parámetros de la lambda y sus sentencias siguen sin ser elementos. Además, ANNOTATIONS es un hecho nuevo, las
-   anotaciones como están escritas, y `set` las reemplaza, cada una en su línea e importada.
+   anotaciones como están escritas, y `set` las reemplaza, cada una en su línea e importada. Y la pregunta de `List.get`: una llamada
+   solo lee si el driver lo declara (`ide/java/reads.txt`, firmas de la biblioteca: `List.get`, `size`, `String.length`...)
+   o si es un getter del workspace (`return name;`) que nadie sobrescribe, lo que dice su cuerpo y el programa. No es
+   un efecto, pero lee lo que tiene su objeto: cualquier llamada con efectos entre la declaración y el uso puede
+   cambiarlo (un alias), y se rechaza (`inline.changed`). Va en el driver y no en `java.rules` porque el rechazo es del
+   primitivo y el driver no puede leer knowledge.
 
 **Cómo se sabe si funcionó.**
 

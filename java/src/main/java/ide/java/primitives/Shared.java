@@ -159,4 +159,10 @@ final class Shared {
                 || ide.java.semantics.Bodies.locals((com.github.javaparser.ast.body.CallableDeclaration<?>) m).stream().anyMatch(v -> v.getNameAsString().equals(name))).isPresent();
         return hidden ? instead + "." + name : name;
     }
+
+    /** The calls that only read: of a library method declared so, or of a getter of the workspace nothing overrides. */
+    static java.util.function.Predicate<MethodCallExpr> reads(Context c, ide.program.Program before) {
+        return call -> ide.java.semantics.Reads.declared(call) || ide.java.semantics.Reads.getter(call)
+                && java.util.Optional.ofNullable(c.reader().resolveMethod(call)).map(m -> before.overriders(before.element(m)).isEmpty()).orElse(false);
+    }
 }

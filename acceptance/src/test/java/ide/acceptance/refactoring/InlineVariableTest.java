@@ -163,10 +163,10 @@ class InlineVariableTest {
         assertThat(ws.errors()).isEmpty();
     }
 
-    /** What runs between would run before the value now, and it could tell. */
+    /** What runs between would run before the value now, and it could change what a declared read reads. */
     @Test
-    void aValueWithEffectsWithSomethingThatRunsBetweenStays() {
-        refused(ROWS, "a.Rows#process(List<String>)/id", "inline.effects");
+    void aValueWithSomethingThatRunsBetweenStays() {
+        refused(ROWS, "a.Rows#process(List<String>)/id", "inline.changed");
     }
 
     /** Read only on one branch, the value would not always run. */
@@ -178,8 +178,8 @@ class InlineVariableTest {
                 import java.util.List;
 
                 class A {
-                    int first(List<Integer> values, boolean any) {
-                        int v = values.get(0);
+                    Integer first(List<Integer> values, boolean any) {
+                        Integer v = values.remove(0);
                         if (any) {
                             return v;
                         }
@@ -319,5 +319,108 @@ class InlineVariableTest {
                         });
                 """);
         assertThat(ws.errors()).isEmpty();
+    }
+
+    /** A library method declared to only read (List.get) is no effect: its value is read where the local was. */
+    @Test
+    void aDeclaredReadIsInlinedWhereTheLocalWasRead() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.Arrays;
+                import java.util.List;
+
+                class Rows {
+                    void row(String line) {
+                        List<String> fields = Arrays.asList(line.split(","));
+                        String dni = fields.get(3);
+                        String name = fields.get(2);
+                        System.out.println(name + dni);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-variable", Map.of("local", "a.Rows#row(String)/dni"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("        System.out.println(name + fields.get(3));").doesNotContain("dni");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    @Test
+    void aDeclaredReadWithACallBetweenThatMayChangeWhatItReadsStays() {
+        refused("""
+                package a;
+
+                import java.util.List;
+
+                class A {
+                    void row(List<String> fields) {
+                        String first = fields.get(0);
+                        fields.set(0, "x");
+                        System.out.println(first);
+                    }
+                }
+                """, "a.A#row(List<String>)/first", "inline.changed");
+    }
+
+    /** A method of the workspace whose body only answers a field only reads too: it can be between. */
+    @Test
+    void aGetterBetweenChangesNothingADeclaredReadReads() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.List;
+
+                class Rows {
+                    String name;
+
+                    String getName() {
+                        return name;
+                    }
+
+                    void row(List<String> fields) {
+                        String street = fields.get(2);
+                        String description = "address of " + getName();
+                        System.out.println(description + street);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-variable", Map.of("local", "a.Rows#row(List<String>)/street"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("        System.out.println(description + fields.get(2));");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /** A getter something overrides may run what overrides it, which may do more. */
+    @Test
+    void anOverriddenGetterBetweenMayChangeWhatADeclaredReadReads() {
+        refused("""
+                package a;
+
+                import java.util.List;
+
+                class A {
+                    String name;
+
+                    String getName() {
+                        return name;
+                    }
+
+                    void row(List<String> fields) {
+                        String street = fields.get(2);
+                        String description = "address of " + getName();
+                        System.out.println(description + street);
+                    }
+                }
+
+                class B extends A {
+                    String getName() {
+                        return "b";
+                    }
+                }
+                """, "a.A#row(List<String>)/street", "inline.changed");
     }
 }

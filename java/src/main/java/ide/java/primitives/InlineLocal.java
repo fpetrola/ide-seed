@@ -35,18 +35,19 @@ final class InlineLocal {
         var value = variable.getInitializer().orElseThrow(() ->
                 new PrimitiveRejected("inline.no-value", local.qualified() + " is given no value where it is declared"));
         if (!(c.use(read.id()) instanceof NameExpr use)) throw new PrimitiveRejected("inline.not-a-read", read.id() + " does not read " + local.name());
-        var effect = Bodies.effect(value);
+        var reads = Shared.reads(c, before);
+        var effect = Bodies.effect(value, reads);
         var moves = effect != null; // it runs once, where it is read: it is read once, and nothing between could tell
         if (moves && before.referencesTo(local.id()).size() > 1) {
             throw new PrimitiveRejected("inline.effects", "'" + effect + "' would run where " + local.name() + " is read, each time");
         }
-        var past = moves ? Bodies.movedPast(variable, use) : null;
+        var past = moves ? Bodies.movedPast(variable, use, reads) : null;
         if (past != null) throw new PrimitiveRejected("inline.effects", "'" + effect + "' would run where " + local.name() + " is read, after or without '" + past + "'");
         var other = otherType(variable, value);
         if (other != null) throw new PrimitiveRejected("inline.type", "'" + value + "' is " + other + ", " + local.name() + " is " + variable.getType());
         var deferred = Bodies.deferred(variable, use);
         if (deferred != null) throw new PrimitiveRejected("inline.deferred", local.name() + " is read later, in '" + deferred + "'");
-        var changed = Bodies.changedBetween(variable, value, use);
+        var changed = Bodies.changedBetween(variable, value, use, reads);
         if (changed != null) throw new PrimitiveRejected("inline.changed", "'" + changed + "' may change what " + local.name() + " is given");
         var change = inline.intent(before, null);
         var range = value.getRange().orElseThrow();
