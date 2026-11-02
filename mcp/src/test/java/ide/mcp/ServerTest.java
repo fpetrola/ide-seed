@@ -53,6 +53,21 @@ class ServerTest {
         assertThat(answers.get(1)).containsEntry("id", 2L).containsEntry("result", Map.of());
     }
 
+    /** What the person said in the window and Claude was not told yet goes along with the next answer, once. */
+    @Test
+    void whatThePersonSaidGoesAlongWithTheNextAnswerOnce() {
+        var workspace = Workspace.of(Map.of("a/P.java", P));
+        workspace.capabilities().invoke("plan-new", Map.of("title", "Encapsulate P", "tasks", "Encapsulate x"));
+        workspace.capabilities().invoke("steer", Map.of("kind", "pause", "task", "t1"));
+        var call = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"ls\",\"arguments\":{}}}";
+
+        var first = exchange(workspace, call).getFirst().toString();
+        var second = exchange(workspace, call).getFirst().toString();
+
+        assertThat(first).contains("a/P.java", "From the person, in the IDE", "The person paused task t1");
+        assertThat(second).contains("a/P.java").doesNotContain("The person");
+    }
+
     /** How to work on the IDE is said when an agent arrives, as the IDE's guide says it. */
     @Test
     void itTellsAnArrivingAgentHowToWorkOnTheIde() {

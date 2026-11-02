@@ -95,10 +95,22 @@ public final class Server {
     private Map<String, Object> call(String name, Object arguments) {
         try {
             @SuppressWarnings("unchecked") var args = arguments instanceof Map<?, ?> given ? (Map<String, ?>) given : Map.<String, Object>of();
-            return Map.of("content", List.of(Map.of("type", "text", "text", workspace.capabilities().invoke(name, args))), "isError", false);
+            return Map.of("content", along(name, workspace.capabilities().invoke(name, args)), "isError", false);
         } catch (RuntimeException failed) {
-            return Map.of("content", List.of(Map.of("type", "text", "text", String.valueOf(failed.getMessage()))), "isError", true);
+            return Map.of("content", along(name, String.valueOf(failed.getMessage())), "isError", true);
         }
+    }
+
+    /** An answer, and with it what the person said in the IDE that the agent was not told yet (the IDE's steering). */
+    private List<Map<String, Object>> along(String name, String answer) {
+        var content = new java.util.ArrayList<Map<String, Object>>(List.of(Map.of("type", "text", "text", answer)));
+        if (name.equals("steering") || !workspace.capabilities().ids().contains("steering")) return content;
+        var said = (List<?>) Json.read(workspace.capabilities().invoke("steering", Map.of()));
+        if (!said.isEmpty()) {
+            content.add(Map.of("type", "text", "text", "From the person, in the IDE:\n" + String.join("\n",
+                    said.stream().map(steer -> "- " + ((Map<?, ?>) steer).get("message")).toList())));
+        }
+        return content;
     }
 
     /** A capability as a tool: its name, what it does, and its parameters as a JSON Schema. */
