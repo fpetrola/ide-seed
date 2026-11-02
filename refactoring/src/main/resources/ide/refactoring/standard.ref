@@ -128,6 +128,9 @@ refactoring copy-signature "Declares a method's signature, without a body, in an
     q := create PARAM ${d} ${name(p)}
     set ${q} type ${type(p)}
   end
+  if nonempty(attr(method, "throws"))
+    set ${d} throws ${attr(method, "throws")}
+  end
   if eq(kind(into), "CLASS")
     set ${d} visibility ${attr(method, "visibility")}
   end

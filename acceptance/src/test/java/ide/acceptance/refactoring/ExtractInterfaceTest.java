@@ -75,4 +75,33 @@ class ExtractInterfaceTest {
         assertThat(ws.source("JdbcRepository.java")).contains("public class JdbcRepository implements Repository {");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** What each method declares it throws, its signature in the interface declares too, imported there. */
+    @Test
+    void theSignaturesThrowWhatTheMethodsThrow() {
+        var ws = Workspace.of(Map.of("a/JdbcRepository.java", """
+                package a;
+
+                import java.io.IOException;
+                import java.sql.SQLException;
+
+                public class JdbcRepository {
+                    public void init() throws IOException, ClassNotFoundException, SQLException {
+                        Class.forName("x");
+                        throw new SQLException();
+                    }
+
+                    public void close() throws SQLException {
+                    }
+                }
+                """));
+
+        var result = ws.invoke("extract-interface", Map.of("type", "a.JdbcRepository", "name", "Repository",
+                "methods", java.util.List.of("a.JdbcRepository#init()", "a.JdbcRepository#close()")));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Repository.java")).contains("import java.io.IOException;", "import java.sql.SQLException;",
+                "void init() throws IOException, ClassNotFoundException, SQLException;", "void close() throws SQLException;");
+        assertThat(ws.errors()).isEmpty();
+    }
 }
