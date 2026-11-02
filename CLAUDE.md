@@ -145,7 +145,10 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with its tools (`activity`, an event as Claude Code's hooks give it) is a step of the task it started last and still
   does, said in a few words (Activity); the plan shows each task's last step. Conversation: the agent's conversation on the
   project (the session id its hooks tell), and whether it was open when the IDE closed, in `.ide/conversation.json`;
-  capabilities conversation, conversation-open. Attention: where attention is, both ways, between a person and an agent on the same
+  capabilities conversation, conversation-open, conversation-in (and where it is written). Transcript reads the
+  conversation as Claude Code writes it (JSONL), only what was added since and only the lines that can matter: what the
+  person said, what the agent answered, the tools it used; `task-talk` is what of it was said while a task was being
+  done (Plans.doing: of the tasks being done then, the one started last). Attention: where attention is, both ways, between a person and an agent on the same
   IDE: `point` (an element or lines, with a note; numbered, an event) and `pointed`; `look` (the window says where the
   person is) and `looking` (that, with the element under the caret and what it is inside); pointing at an element marks its whole
   declaration (`JavaProjection.declared`). `guide` (resource `guide.md`): how an agent works on the IDE, what MCP says

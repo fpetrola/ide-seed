@@ -112,7 +112,10 @@ final class Capabilities {
                         + "tool_name, tool_input), kept as a step of the task it is doing; answers the task and the step",
                         List.of(Param.of("event", "map")), args -> {
                     var event = args.get("event") instanceof Map<?, ?> given ? given : Map.of();
-                    if (event.get("session_id") != null) workspace.conversation().in(String.valueOf(event.get("session_id")));
+                    if (event.get("session_id") != null) {
+                        workspace.conversation().in(String.valueOf(event.get("session_id")),
+                                event.get("transcript_path") == null ? null : String.valueOf(event.get("transcript_path")));
+                    }
                     var folder = workspace.root().map(r -> r.toAbsolutePath().normalize().toString()).orElse("");
                     return Activity.step(event, folder).map(step -> workspace.plans().step(step))
                             .orElseGet(() -> entries("task", "", "step", ""));
@@ -120,6 +123,15 @@ final class Capabilities {
                 .register(Capability.of("conversation", "The agent's conversation on this project, to go on with it: its id "
                         + "(none yet: empty), and whether it was open when the IDE closed", List.of(),
                         args -> workspace.conversation().shown()))
+                .register(Capability.of("conversation-in", "Says which conversation the agent goes on with, and where it is written",
+                        List.of(Param.of("id", "text"), Param.of("transcript", "text").optional()), args -> {
+                    workspace.conversation().in(text(args, "id"), optional(args, "transcript").orElse(null));
+                    return workspace.conversation().shown();
+                }))
+                .register(Capability.of("task-talk", "What was said while a task was being done: what the person said, what the "
+                        + "agent answered and the tools it used, in order, read from the agent's conversation",
+                        List.of(Param.of("task", "text")), args -> entries("task", text(args, "task"),
+                                "messages", workspace.talk(text(args, "task")))))
                 .register(Capability.of("conversation-open", "Says whether the agent's conversation is open as the IDE closes",
                         List.of(Param.of("open", "choice", "true", "false")), args -> {
                     workspace.conversation().open(Boolean.parseBoolean(text(args, "open")));

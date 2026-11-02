@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * The agent's conversation on a project, to go on with it when the IDE is opened again: which one it is, as the
- * agent's own tools tell it with each thing they do, and whether it was still open when the IDE closed. Kept in a file
+ * The agent's conversation on a project, to go on with it when the IDE is opened again: which one it is and where it
+ * is written, as the agent's own tools tell it with each thing they do, and whether it was still open when the IDE closed. Kept in a file
  * with the project, if there is one; a new conversation is an event.
  */
 final class Conversation {
@@ -20,6 +20,7 @@ final class Conversation {
     private final Path file;
     private final Consumer<Map<String, Object>> events;
     private String id = "";
+    private String transcript = "";
     private boolean open;
 
     Conversation(Path file, Consumer<Map<String, Object>> events) {
@@ -29,6 +30,7 @@ final class Conversation {
             try {
                 var kept = (Map<?, ?>) Json.read(Files.readString(file));
                 id = String.valueOf(kept.get("id"));
+                transcript = kept.get("transcript") == null ? "" : String.valueOf(kept.get("transcript"));
                 open = Boolean.TRUE.equals(kept.get("open"));
             } catch (IOException e) {
                 throw new UncheckedIOException("cannot read the conversation in " + file, e);
@@ -37,11 +39,19 @@ final class Conversation {
     }
 
     /** The conversation the agent's tools are in; a new one from now on if it is another. */
-    void in(String id) {
-        if (id == null || id.isBlank() || id.equals(this.id)) return;
+    void in(String id, String transcript) {
+        var known = transcript == null || transcript.isBlank() ? this.transcript : transcript;
+        if (id == null || id.isBlank() || id.equals(this.id) && known.equals(this.transcript)) return;
+        var another = !id.equals(this.id);
         this.id = id;
+        this.transcript = known;
         save();
-        events.accept(Map.of("event", "conversation", "id", id));
+        if (another) events.accept(Map.of("event", "conversation", "id", id));
+    }
+
+    /** Where the agent writes the conversation, if it is known. */
+    String transcript() {
+        return transcript;
     }
 
     /** Whether it was still open (the agent running) when the IDE closed. */
@@ -53,6 +63,7 @@ final class Conversation {
     Map<String, Object> shown() {
         var shown = new LinkedHashMap<String, Object>();
         shown.put("id", id);
+        shown.put("transcript", transcript);
         shown.put("open", open);
         return shown;
     }

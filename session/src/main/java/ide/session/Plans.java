@@ -294,6 +294,34 @@ public final class Plans {
         return task.timeline.reversed().stream().filter(entry -> entry.kind().equals("step")).map(Entry::text).findFirst().orElse("");
     }
 
+    /**
+     * Which task was being done at a time: of those being done then (from a time it was said to be doing to the next
+     * time its state was said), the one started last.
+     */
+    java.util.function.Function<java.time.Instant, Optional<String>> doing() {
+        record Stretch(String task, java.time.Instant from, java.time.Instant to) {
+        }
+        var stretches = new ArrayList<Stretch>();
+        for (var task : tasks.values()) {
+            java.time.Instant from = null;
+            for (var entry : task.timeline) {
+                if (!entry.kind().equals("state") && !(entry.who().equals("person") && List.of("start", "stop", "pause").contains(entry.kind()))) {
+                    continue;
+                }
+                var at = java.time.Instant.parse(entry.at());
+                var doing = entry.kind().equals("state") ? entry.text().equals("doing") : entry.kind().equals("start");
+                if (doing && from == null) from = at;
+                if (!doing && from != null) {
+                    stretches.add(new Stretch(task.id, from, at));
+                    from = null;
+                }
+            }
+            if (from != null) stretches.add(new Stretch(task.id, from, java.time.Instant.MAX));
+        }
+        return at -> stretches.stream().filter(s -> !at.isBefore(s.from()) && at.isBefore(s.to()))
+                .max(java.util.Comparator.comparing(Stretch::from)).map(Stretch::task);
+    }
+
     /** What the person said that the agent was not told yet, now told. */
     List<Steer> take() {
         var waiting = steering.stream().filter(steer -> !steer.told()).toList();

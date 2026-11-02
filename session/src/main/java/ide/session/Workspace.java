@@ -205,6 +205,27 @@ public final class Workspace {
         return new Plans.Link(file, line, Math.max(line, end), "", "");
     }
 
+    private Transcript transcript;
+
+    /** What was said while a task was being done, read from the agent's conversation, if it is known. */
+    List<Map<String, Object>> talk(String task) {
+        plans.task(Optional.of(task)); // refused if there is no such task
+        var written = conversation.transcript();
+        if (written.isEmpty()) return List.of();
+        if (transcript == null || !transcript.file().equals(Path.of(written))) {
+            transcript = new Transcript(Path.of(written), root().map(r -> r.toAbsolutePath().normalize().toString()).orElse(""));
+        }
+        var doing = plans.doing();
+        return transcript.said().stream().filter(said -> doing.apply(said.at()).filter(task::equals).isPresent()).map(said -> {
+            var shown = new java.util.LinkedHashMap<String, Object>();
+            shown.put("at", said.at().toString());
+            shown.put("who", said.who());
+            shown.put("kind", said.kind());
+            shown.put("text", said.text());
+            return (Map<String, Object>) shown;
+        }).toList();
+    }
+
     /** The agent's conversation on this project. */
     Conversation conversation() {
         return conversation;
