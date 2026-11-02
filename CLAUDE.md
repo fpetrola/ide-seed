@@ -201,7 +201,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   from run-config-set's schema); a task's details have a Conversation tab: what was said while it was
   being done, tools used one after another as one line; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
-  a tool with a JSON Schema, list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it
+  a tool with a JSON Schema (a call that fails, even by a StackOverflowError or a LinkageError, an error result), list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it
   on stdio and Http on Streamable HTTP, 127.0.0.1 only, with a bearer token).
 
 ## Principles (do not break them; say so if an instruction does)

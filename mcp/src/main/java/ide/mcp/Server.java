@@ -91,13 +91,18 @@ public final class Server {
         };
     }
 
-    /** What a capability answers, as text; what goes wrong, as an error result the agent can read. */
+    /**
+     * What a capability answers, as text; what goes wrong, as an error result the agent can read: a failure, a recursion
+     * with no end, code that could not be loaded.
+     */
     private Map<String, Object> call(String name, Object arguments) {
         try {
             @SuppressWarnings("unchecked") var args = arguments instanceof Map<?, ?> given ? (Map<String, ?>) given : Map.<String, Object>of();
             return Map.of("content", along(name, workspace.capabilities().invoke(name, args)), "isError", false);
         } catch (RuntimeException failed) {
             return Map.of("content", along(name, String.valueOf(failed.getMessage())), "isError", true);
+        } catch (StackOverflowError | LinkageError broken) { // the IDE goes on; the connection would be cut with no answer
+            return Map.of("content", along(name, broken.getClass().getSimpleName() + ": " + broken.getMessage()), "isError", true);
         }
     }
 

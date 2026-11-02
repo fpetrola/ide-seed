@@ -123,6 +123,24 @@ class ServerTest {
         assertThat(result(answers.get(1)).get("content").toString()).contains("no element a.P#nothing");
     }
 
+    /** Not even an error of the JVM (code loaded halfway, a recursion with no end) leaves the agent with no answer. */
+    @Test
+    void aCallThatBreaksTheJvmsWayIsAnErrorResultToo() {
+        var define = Json.write(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call", "params", Map.of("name", "define",
+                "arguments", Map.of("text", """
+                        refactoring forever "Calls itself"
+                          param member : element(FIELD) "the member"
+                          forever ${member}
+                        end
+                        """))));
+
+        var answers = exchange(Workspace.of(Map.of("a/P.java", P)), define,
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"forever\",\"arguments\":{\"member\":\"a.P#x\"}}}");
+
+        assertThat(result(answers.getLast())).containsEntry("isError", true);
+        assertThat(result(answers.getLast()).get("content").toString()).contains("StackOverflowError");
+    }
+
     @Test
     void definingARefactoringChangesTheToolsAndSaysSo() {
         var define = Json.write(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call", "params", Map.of("name", "define",
