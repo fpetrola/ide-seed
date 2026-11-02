@@ -132,7 +132,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   the plan being followed, a title and tasks todo/doing/done with a note, in `.ide/plan.json`, each change an event;
   capabilities plan, plan-set, task-add, task. Attention: where attention is, both ways, between a person and an agent on the same
   IDE: `point` (an element or lines, with a note; numbered, an event) and `pointed`; `look` (the window says where the
-  person is) and `looking` (that, with the element under the caret and what it is inside).
+  person is) and `looking` (that, with the element under the caret and what it is inside); pointing at an element marks its whole
+  declaration (`JavaProjection.declared`). `guide` (resource `guide.md`): how an agent works on the IDE, what MCP says
+  as its instructions when an agent arrives (GuideTest: it names only capabilities that exist).
 - `acceptance` (session, tests only) — not a product: scenarios across every product (refactorings, quick fixes,
   completion over Java text), the samples in `acceptance/src/test/resources/samples` (case tables in
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.
@@ -146,7 +148,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   when the folder changes; Ctrl+Esc runs Claude Code in the terminal with that server; PlanView shows the plan
   beside the project, so it is seen with the terminal; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
-  a tool with a JSON Schema, list_changed after a call that changes the tools; `handle` is the protocol, `run` serves it
+  a tool with a JSON Schema, list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it
   on stdio and Http on Streamable HTTP, 127.0.0.1 only, with a bearer token).
 
 ## Principles (do not break them; say so if an instruction does)

@@ -53,6 +53,15 @@ class ServerTest {
         assertThat(answers.get(1)).containsEntry("id", 2L).containsEntry("result", Map.of());
     }
 
+    /** How to work on the IDE is said when an agent arrives, as the IDE's guide says it. */
+    @Test
+    void itTellsAnArrivingAgentHowToWorkOnTheIde() {
+        var workspace = Workspace.of(Map.of("a/P.java", P));
+        var answers = exchange(workspace, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+
+        assertThat(result(answers.getFirst())).containsEntry("instructions", ide.core.Json.read(workspace.capabilities().invoke("guide", Map.of())));
+    }
+
     @Test
     void everyCapabilityIsAToolWithItsSchema() {
         var answers = exchange(Workspace.of(Map.of("a/P.java", P)), "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}");

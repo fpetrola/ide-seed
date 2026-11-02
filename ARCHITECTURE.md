@@ -768,7 +768,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     muestra sepa que es nuevo, y es un evento del log. La segunda es dónde mira la persona: la ventana lo dice con
     `look` antes de cada llamada de un agente, y no es un evento porque cambia con cada paso del cursor. `looking` lo
     devuelve junto con el elemento bajo el cursor y aquello en lo que está. Así Claude entiende "esto" y la ventana
-    solo muestra: abre las líneas seleccionadas y dice la nota en Output.
+    solo muestra: abre seleccionadas las líneas (si es un elemento, la declaración entera) y dice la nota en Output.
+  - **Decisión: cómo trabajar sobre el IDE lo dice el IDE.** La capacidad `guide` devuelve un texto (`guide.md` en
+    session) que explica el plan, la atención y los refactorings en lugar de editar texto. El servidor MCP lo pasa
+    como `instructions` al inicializar, así que Claude lo recibe sin que nadie lo ponga en un `CLAUDE.md` del proyecto.
+    Un test verifica que cada herramienta que nombra exista.
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 

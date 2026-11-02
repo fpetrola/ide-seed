@@ -30,6 +30,8 @@ final class Capabilities {
         var refactoring = Param.of("refactoring", "text");
         var itsArgs = Param.of("args", "map");
         return registry
+                .register(Capability.of("guide", "How an agent works on this IDE with a person: the plan, where each looks, the tools to change code",
+                        List.of(), args -> guide()))
                 .register(Capability.of("ls", "Source files", List.of(), args -> workspace.files().stream().sorted().toList()))
                 .register(Capability.of("show", "Source of a file", List.of(path), args -> workspace.source(text(args, "path"))))
                 .register(Capability.of("diff", "Net diff of unsaved changes", List.of(), args -> workspace.diff()))
@@ -169,6 +171,14 @@ final class Capabilities {
                         List.of(Param.of("type", "element", "CLASS", "INTERFACE", "ENUM")), args -> workspace.hierarchy(text(args, "type"))))
                 .register(Capability.of("references", "Every use of an element",
                         List.of(Param.of("element", "element")), args -> workspace.references(text(args, "element"))));
+    }
+
+    private static String guide() {
+        try (var in = Capabilities.class.getResourceAsStream("guide.md")) {
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static String text(Map<String, ?> args, String name) {

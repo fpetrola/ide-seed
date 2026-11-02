@@ -72,9 +72,10 @@ public final class Server {
         var params = request.get("params") instanceof Map<?, ?> given ? given : Map.of();
         return switch (method) {
             case "initialize" -> List.of(result(id, Map.of(
-                    "protocolVersion", VERSIONS.contains(params.get("protocolVersion")) ? params.get("protocolVersion") : VERSIONS.getFirst(),
+                    "protocolVersion", params.get("protocolVersion") instanceof String asked && VERSIONS.contains(asked) ? asked : VERSIONS.getFirst(),
                     "capabilities", Map.of("tools", Map.of("listChanged", true)),
-                    "serverInfo", Map.of("name", "ideseed", "version", "0.1"))));
+                    "serverInfo", Map.of("name", "ideseed", "version", "0.1"),
+                    "instructions", String.valueOf(Json.read(workspace.capabilities().invoke("guide", Map.of()))))));
             case "ping" -> List.of(result(id, Map.of()));
             case "tools/list" -> List.of(result(id, Map.of("tools",
                     workspace.capabilities().ids().stream().map(name -> tool(workspace.capabilities().get(name))).toList())));
