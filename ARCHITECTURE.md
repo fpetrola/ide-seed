@@ -1437,6 +1437,78 @@ que esto no escala solo:
      `overrides(símbolo)` tapó a `overrides(m, n)` (la regla de visibilidad de un override se quedó sin caminos).
      Ahora es `overrides-one`.
    - Un método creado abstracto no responde nada: no tiene cuerpo.
+
+   **Propuesta para la segunda parte (2026-11-01, para discutir antes de escribir código): el catálogo como
+   intenciones.** Hoy un script del catálogo es una receta de pasos, y lo que los pasos rompen lo arregla el reparador
+   después. Una intención dice lo que la persona quiere que sea cierto al final, como hechos del grafo (`want`), y el
+   motor deduce los primitivos y lo que rompen en un solo plan, como ya hace con un quick fix. Lo que dice el `want`
+   queda fijo: nada del plan lo deshace, como hoy los pins.
+
+   *Ejemplo 1, pull-up-field.* Hoy:
+
+   ```
+   refactoring pull-up-field "Moves a field to the superclass of its type"
+     param field : element(FIELD) "the field to move up"
+     require nonempty(superclass(owner(field))) "${qualified(owner(field))} has no superclass"
+     move ${field} ${superclass(owner(field))}
+     return ${field}
+   end
+   ```
+
+   Como intención:
+
+   ```
+   intent pull-up-field "Moves a field to the superclass of its type"
+     param field : element(FIELD) "the field to move up"
+     want given parent(field, t) and given superclass(t, u) and parent(field, u)
+   end
+   ```
+
+   Para el `limit` de `Unset`, el motor deduce un plan: mover `limit`, abrir su visibilidad (`accessible`), y crear el
+   constructor de la superclase que lo toma y que `Unset` llama con `super(limit)` (`final-where`, `given-by-its-type`).
+   Es lo mismo que hoy hacen el script y el reparador en dos tiempos. El `require` desaparece: sin superclase, el
+   `given` no vale y no hay plan, y el rastro dice por qué.
+
+   *Ejemplo 2, extract-superclass.* Hoy son 8 pasos con un `if` y un `for`. Como intención:
+
+   ```
+   intent extract-superclass "Creates a class between a type and its superclass and pulls fields up into it"
+     param type : element(CLASS) "the type to extract from"
+     param name : text "name of the new superclass" default "Abstract${name(type)}"
+     param fields : elements(FIELD) "fields to pull up" from "fields(type)"
+     want given parent(type, p) and member(b, p, name, "class") and in-between(b, type) and superclass(type, b)
+       and each f in fields: parent(f, b)
+   end
+
+   # in java.rules: b extends what t extended, if t extended something
+   def in-between(b, t) when superclass(t, s) and superclass(b, s)
+   def in-between(b, t) when kind(t, "class") and not extends-something(t)
+   ```
+
+   *Cómo se reparte el catálogo de 32.*
+   - *Intenciones sobre la estructura* (lugar, vínculos, visibilidad, nombres): pull-up-field, pull-up-method,
+     push-down-member, move-type, rename-package, collapse-hierarchy, extract-superclass, extract-interface,
+     make-final, make-static, generalize-declared-type, rename-method-family, rename-field-with-accessors. Es lo que el
+     motor ya sabe cambiar.
+   - *Generadores* (crear miembros con lo que hacen): generate-getter, generate-setter, generate-constructor,
+     generate-delegates, copy-signature, declare-abstract-in-superclass, introduce-factory. Necesitan que el `want`
+     nombre lo que crea (`get${cap(name(field))}`) y lo que dicen sus sentencias.
+   - *Usos redirigidos*: encapsulate-field(s), redirect-uses, merge-duplicate, rename-with-delegate, pull-up-unifying,
+     safe-delete. Necesitan cuantificar sobre usos ("cada lectura de f fuera de su tipo liga el getter").
+   - *De cuerpo*: inline-method, inline-variable, extract-method, introduce-constant, introduce-field. El flujo de
+     datos es del driver (`Extract`, `Inline`), y estos siguen siendo scripts cortos sobre esos primitivos.
+
+   *Lo que hay que decidir.*
+   1. *El lenguaje del `want`.* Hechos del grafo, `given` para las condiciones y `each x in lista:` para cuantificar.
+      ¿Alcanza para los generadores y los usos redirigidos, o conviene empezar solo por los de estructura?
+   2. *El presupuesto.* Hoy un plan tiene a lo sumo 4 pasos, y una intención con 5 campos ya lo pasa. Propuesta: lo
+      que pide el `want` no cuenta, y el tope queda para lo que se deduce para arreglar.
+   3. *Varios caminos que conservan el sentido* (abrir a `protected` o a `public`, por ejemplo). Propuesta: el más
+      barato; si empatan, se le pregunta a la persona, como hace IntelliJ.
+   4. *El reparador.* Queda para lo que las reglas no previeron: un error del compilador que ninguna regla dedujo.
+      Sigue siendo el juez de todo plan.
+   5. *Por dónde empezar.* Propuesta: pull-up-field y extract-superclass. Son los dos que hoy necesitan al reparador
+      para quedar bien, y extract-superclass es el caso del `super(limit)`.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**
