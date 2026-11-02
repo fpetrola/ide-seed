@@ -1002,6 +1002,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 34 | Intenciones              | un refactoring del catálogo puede ser una intención: dice lo que tiene que valer al final (`want`, en el lenguaje de `knowledge`: hechos del grafo y `given` para las condiciones), nada de cómo. `refactoring` la guarda como texto y se la pasa al planificador de la biblioteca (`Planner`), que es el conocimiento: deduce los cambios y lo que rompen en un solo plan, sin que lo pedido cuente para el tope, y toma el más barato que conserva el sentido. El reparador queda para lo que las reglas no previeron y sigue juzgando todo plan | tomada, 2026-11-02 |
 | 35 | Usos de parámetros       | un uso de un parámetro de un método o constructor (no de una lambda) es una referencia desde el método, sin receptor, en su sentencia, como el de un local; un cuerpo dicho sin lenguaje que nombra un parámetro lo lee. Hace que introduce-parameter-object y convert-to-instance-method se compongan de primitivos | tomada, 2026-11-02 |
 | 36 | Sentencias anidadas     | una sentencia de un bloque que otra tiene (sus ramas, el cuerpo de su bucle, sus catch, las entradas de su switch; no las de una lambda ni las de una clase) es un elemento de esa sentencia, en orden (`m()[2][1]`); un uso está en la más interna, y `referencesIn` de una sentencia trae también los de las que tiene adentro. Mover una sentencia antes de otra de un bloque anidado es el mismo `move`, con la que la tiene como padre. Reemplaza en parte la 32 (solo las de primer nivel). Hace que introduce-variable declare el local en el bloque de su sentencia | tomada, 2026-11-02 |
+| 37 | El grafo como estado de trabajo | los primitivos cambian el grafo; los nombres se resuelven sobre él dentro del alcance que las reglas calculan; el texto se escribe al confirmar y ECJ compila los archivos tocados como red final; el grafo se guarda en `.ide` y los AST son transitorios (etapa 4) | propuesta, 2026-11-02 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -2160,6 +2161,114 @@ nuevo. "Rodear con try/catch" recién aparece cuando los bloques estén en el gr
 
 `refactorings.rules` no tiene nada de Java: para otro lenguaje harían falta sus propios `*.rules` y un driver, y las
 intenciones se reusan.
+
+### Etapa 4 (propuesta): el grafo como estado de trabajo
+
+Propuesta del 2026-11-02, para discutir antes de escribir código (decisión 37, propuesta). Toca `java`, `program`,
+`engine` y `knowledge`.
+
+**El diagnóstico.** Medido el 2026-11-02 con heap de 2 GB, que es lo que da la JVM por defecto en una máquina de 7 GB:
+
+| Proyecto | Fuentes | Leer y resolver | Compilar (ECJ) | Heap vivo |
+|---|---|---|---|---|
+| IdeSeed | 301 archivos, 2,3 MB | 43 s | 4,4 s | ~430 MB |
+| oozx | 395 archivos, 4,1 MB | 38 s | 4,7 s, y se cae | ~880 MB |
+| zx-lift/zx-game-run | 38 archivos, 8,6 MB | 13 s en total | | 1,4 GB |
+| zx-lift completo | 5757 archivos, 53 MB | no entra en 2 GB | | |
+
+Con IdeSeed ya leído:
+
+| Operación | Tiempo |
+|---|---|
+| Rename de un método poco usado | 1,3 s |
+| Rename de una clase poco usada | 35 s |
+| Rename de `Program#element(ElementId)`, ~300 usos, sin choque de nombres | no terminó en 15 minutos |
+
+El tercer caso quedó en `Repairer.stabilize` → `Knowledge.plans` → `Abduction.mend`, evaluando reglas sobre
+`GraphFacts`. Ahí `childrenOf` pasa por `parentOf` y termina en `Program.contains`. En oozx, ECJ 3.42 tira un
+`NullPointerException` interno (`BinaryExpression.analyseCode`). Como no está aislado por archivo, la ventana no abre
+el proyecto. `PerformanceProbe` no muestra nada de esto: mide un sample sintético chico y solo pide no empeorar.
+
+**La causa.** El programa es un grafo y el texto su proyección, pero el driver de Java trabaja al revés:
+
+- el grafo se arma desde el texto en cada apertura, resolviendo cada uso con el symbol solver de JavaParser, que está
+  hecho para consultas sueltas;
+- cada primitivo se escribe en el texto en el momento, y saber qué pasó exige volver a leer y a resolver. Cuando
+  cambia un tipo se re-resuelve todo;
+- la búsqueda de reparaciones prueba estados con snapshot y restore del texto, y consulta un grafo sin índices;
+- el mismo programa vive tres veces en memoria: los AST, el estado de ECJ y el grafo. Los AST, que son la parte grande
+  (de 90 a 160 veces el tamaño de las fuentes), no se sueltan nunca.
+
+**La dirección: el grafo como estado de trabajo, el texto al final.** La pieza que falta es una sola: **resolver
+nombres sobre el grafo**, sin pasar por el texto. Con ella:
+
+1. Los primitivos cambian solo el grafo, como ya hace `MemoryProjection`.
+2. Las reglas calculan el alcance de un cambio: las referencias que podrían cambiar de binding. Es un conjunto
+   conservador, más fácil de calcular que decidir cada caso. En un rename son los usos del elemento y los del nombre
+   nuevo, en los alcances donde se ven ambos.
+3. La resolución sobre el grafo recalcula solo ese alcance. El verificador compara bindings, acceso y dispatch en el
+   grafo, y el conocimiento repara ahí. Un intento descartado nunca toca un archivo.
+4. Al confirmar la transacción, el driver escribe el resultado en los fuentes una sola vez, como ediciones mínimas. El
+   código que hoy escribe cada primitivo se conserva, solo se difiere.
+5. ECJ compila una vez los archivos tocados, como red final. Si discrepa con el grafo, se deshace todo y la diferencia
+   queda registrada. El principio 5 sigue en pie: la verificación se dirige y se acota, pero nunca se apaga.
+6. El grafo se guarda en `.ide`, y al abrir se releen solo los archivos que cambiaron. Los AST pasan a ser
+   transitorios: se crean para leer o escribir un archivo y se descartan.
+
+Lo que no cambia: una edición a mano va del texto al grafo (parsear, resolver ese archivo, reconciliar), y la primera
+apertura de un proyecto cuesta lo que cuesta resolverlo.
+
+**Qué esperar frente a IntelliJ.** Son estimaciones razonadas, que el benchmark tiene que confirmar o corregir.
+IntelliJ también es local: busca candidatos en su índice de palabras y resuelve bajo demanda.
+
+| Caso | Frente a IntelliJ | Por qué |
+|---|---|---|
+| Refactoring sobre un nombre común (`get`, `size`, `id`) | claramente mejor | referencias exactas por id contra candidatos por texto |
+| Refactoring sobre un nombre único | parecido | los dos son locales |
+| Consultas globales, trabajo de un agente | mucho mejor | el grafo ya está resuelto; IntelliJ resuelve al preguntar |
+| Refactoring compuesto | mejor | una transacción y una verificación, no una búsqueda por paso |
+| Mientras se escribe | igual | parsear y resolver el archivo cuesta lo mismo |
+| Primera apertura | peor | resolver todo de entrada contra indexar perezoso |
+| Aperturas siguientes | parecido | grafo guardado contra índice guardado |
+
+Lo que distingue a IdeSeed no es la velocidad, sino las garantías: cada cambio se verifica, y un agente puede cambiar
+código sin cambiar su sentido. El objetivo de esta etapa es que la performance deje de ser un obstáculo y que sea
+mejor donde el grafo realmente ayuda.
+
+**Lo abierto.**
+
+- *Dónde vive la resolución sobre el grafo.* Puede ser Datalog en `java.rules`, coherente con el principio 7 pero
+  quizás lento y largo de completar (sobrecargas, genéricos, inferencia), o código del driver sobre índices del grafo.
+  La recomendación es que sea del driver, con las reglas para calcular el alcance. Las dos opciones respetan el
+  principio 1.
+- *Qué tan completa empieza.* Lo que la resolución sobre el grafo todavía no sabe decidir se resuelve con el
+  resolvedor del texto, pero solo dentro del alcance. Cada caso que pasa por ese camino queda contado.
+- *Qué falta en el grafo para escribir al final.* Las expresiones son opacas (decisión 32): escribir un `Extract` o un
+  `Inline` sin pasar por el texto puede necesitar que el fragmento se resuelva al final, cuando se escribe.
+
+**El criterio de cierre: un benchmark contra IntelliJ.** Las mismas operaciones, cronometradas en IntelliJ y en
+IdeSeed, sobre oozx y sobre IdeSeed: rename de un nombre común y de uno único, find usages, jerarquía de llamadas, un
+refactoring compuesto (extract-superclass), apertura en frío y apertura con el grafo guardado. Reemplaza a
+`PerformanceProbe` como medida, y cada fase se mide contra él. Los objetivos iniciales:
+
+- oozx abre en menos de 5 s con el grafo guardado;
+- un rename de un método con 300 usos tarda menos de 1 s;
+- zx-lift completo entra en 2 GB.
+
+**Las fases.** Cada una se mide contra el benchmark y deja todo verde.
+
+0. *Benchmark y robustez.* El benchmark escrito y medido en los dos IDE. Un error interno de ECJ es un diagnóstico de
+   su archivo y no impide abrir el proyecto. El nivel de Java se toma del pom. La búsqueda de reparaciones tiene un
+   tope y, al alcanzarlo, contesta que no pudo reparar.
+1. *Índices.* `GraphFacts` y `Program` con índices para las preguntas que hacen las reglas (hijos, usos por destino,
+   miembros por nombre). La lectura, perfilada: caché del solver y lectura en paralelo.
+2. *Alcance.* La invalidación por id y por nombre en todos los casos, incluido el cambio de un tipo: se re-resuelven
+   las referencias del alcance, no los archivos de todo el proyecto.
+3. *Resolución sobre el grafo.* Primero lo que necesitan las vistas del verificador: nombres simples, miembros por
+   tipo y herencia, tipos. Lo demás, con el resolvedor del texto dentro del alcance.
+4. *El texto al final.* Los primitivos cambian solo el grafo, el driver escribe al confirmar, y ECJ compila una vez
+   los archivos tocados. La búsqueda de reparaciones trabaja sobre estados del grafo.
+5. *Grafo persistente.* El grafo en `.ide`, con relectura solo de lo que cambió, y AST transitorios.
 
 ## 10. Glosario
 
