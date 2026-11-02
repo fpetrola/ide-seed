@@ -1734,6 +1734,22 @@ que esto no escala solo:
    - Lo que sigue para bajarlo: preguntar las violaciones solo alrededor de lo que cambió, y compartir la evaluación de
      antes entre las búsquedas de un mismo problema.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
+   **Hecho el 2026-11-02, a pedido de la sesión que siguió un plan real (test1):** introduce-variable (Extract
+   Variable) y convert-local-to-field, compuestos de primitivos, y además move-members, inline-method de sentencias,
+   los `throws` que extract-method necesita, y varios falsos positivos del verificador (borrar parámetros, sacar un
+   tipo del `throws`, llamadas que pasan a ligar lo que sobrescribían).
+
+   **Propuesta (2026-11-02, para decidir): los usos de un parámetro como referencias.** Quedan Introduce Parameter
+   Object y Convert to Instance Method, y los dos cambian los usos de un parámetro: `id` pasa a ser
+   `customer.getId()`, o el parámetro pasa a ser `this`. Hoy esos usos no son referencias del grafo (los de un local sí,
+   desde la fase 1), así que ningún primitivo los alcanza. Propuesta: que lo sean, como los de un local (sitio el
+   método, sin receptor, en su sentencia), con una obligación nueva del contrato. Con eso:
+   - introduce-parameter-object se compone: crear la clase con sus campos, constructor y getters, change-signature
+     agrega el parámetro con `new Customer(id, name, dni)` por defecto, cada uso de `id` se retargetea al getter sobre
+     el parámetro nuevo, y los viejos se quitan;
+   - convert-to-instance-method mueve el método al tipo de un parámetro, cuyos usos pasan a ser del objeto mismo, y
+     cada llamada lo hace sobre el argumento.
+   La alternativa, un primitivo nuevo que reescriba usos de parámetros, va contra el principio 3.
 
 **Cómo se sabe si funcionó.**
 
