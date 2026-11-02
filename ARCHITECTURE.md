@@ -423,7 +423,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   padre es del paquete por defecto, en un archivo propio en la raíz (extract-interface sobre una clase de ahí). Un
   miembro que se muda a otro archivo lleva los nombres simples que usa: el archivo nuevo importa los tipos como los
   importaba el viejo, o los del paquete viejo; uno estático se usa desde afuera de su tipo nuevo a través de él
-  (`Repo.init()`), con el import que haga falta. El catálogo suma move-members, el Move Members de IntelliJ.
+  (`Repo.init()`), con el import que haga falta. El catálogo suma move-members, el Move Members de IntelliJ. Inline
+  de una llamada hecha como sentencia, o como cuerpo de una lambda, a un método de sentencias pone sus sentencias en
+  su lugar (o el bloque de la lambda), cada parámetro su argumento; se rechaza un return entre ellas, un parámetro al
+  que se le da valor, un local con un nombre que ya hay donde se llama, y un argumento con efectos que no se usa una
+  vez.
 - **Abierto.** Los componentes de un record no son elementos, ni sus accesores implícitos. Todo
   el programa vive en memoria, con el árbol de cada archivo: un proyecto de 38 MB de fuentes no entra en 4 GB (un
   módulo de 280 archivos se lee y compila en unos 3,5 s). Un campo de la clase externa que una interna tapa no se escribe `Outer.this.x`: el motor rechaza el

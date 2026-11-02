@@ -98,4 +98,91 @@ class InlineMethodTest {
         assertThat(result.violations()).extracting(Violation::code).containsExactly("inline.evaluation-count");
         assertThat(ws.source("a/P.java")).isEqualTo(p);
     }
+
+    /**
+     * A method of statements called as one is replaced by its statements, each parameter by its argument; called as a
+     * lambda's body, the lambda's body becomes a block of them.
+     */
+    @Test
+    void aMethodOfStatementsCalledAsOneIsReplacedByThem() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.List;
+                import java.util.function.Consumer;
+
+                class Rows {
+                    int count;
+
+                    void process(List<String> fields) {
+                        each(fields, f -> row(f));
+                        String first = fields.get(0);
+                        row(first);
+                    }
+
+                    void each(List<String> fields, Consumer<String> action) {
+                        fields.forEach(action);
+                    }
+
+                    void row(String field) {
+                        if (field.isEmpty()) {
+                            count++;
+                        } else {
+                            System.out.println(field);
+                        }
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-method", Map.of("method", "a.Rows#row(String)"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                    void process(List<String> fields) {
+                        each(fields, f -> {
+                            if (f.isEmpty()) {
+                                count++;
+                            } else {
+                                System.out.println(f);
+                            }
+                        });
+                        String first = fields.get(0);
+                        if (first.isEmpty()) {
+                            count++;
+                        } else {
+                            System.out.println(first);
+                        }
+                    }
+                """).doesNotContain("void row(");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /** A return in the middle would leave the caller: it is refused. */
+    @Test
+    void aMethodOfStatementsThatReturnsIsRefused() {
+        var source = """
+                package a;
+
+                class Rows {
+                    void process(String field) {
+                        row(field);
+                        System.out.println("after");
+                    }
+
+                    void row(String field) {
+                        if (field.isEmpty()) {
+                            return;
+                        }
+                        System.out.println(field);
+                    }
+                }
+                """;
+        var ws = Workspace.of(Map.of("a/Rows.java", source));
+
+        var result = ws.invoke("inline-method", Map.of("method", "a.Rows#row(String)"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(result.violations()).extracting(Violation::code).containsExactly("inline.body-shape");
+        assertThat(ws.source("a/Rows.java")).isEqualTo(source);
+    }
 }

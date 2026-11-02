@@ -82,7 +82,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
   `inside` answers the innermost element, a statement or a local too. `mains` are the classes a program runs from: the first
   top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
-  parameters, reading again between rounds) and forgets what it removed. A member moved to another file takes the imports of the simple names it uses, and a static one is used
+  parameters, reading again between rounds) and forgets what it removed. Inline of a call made as a statement (or as a lambda's body) to a method of statements
+  puts them in its place, each parameter its argument (a return among them is refused). A member moved to another file takes the imports of the simple names it uses, and a static one is used
   from elsewhere through its new type. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
