@@ -79,6 +79,7 @@ public final class Main {
                 try {
                     if (frame.getContentPane() instanceof Workbench before) before.closeDown();
                     var workbench = new Workbench(get(), new SwingDialogs(frame));
+                    workbench.watch();
                     try {
                         workbench.serve(Path.of(System.getProperty("user.home"), ".ideseed", "mcp"));
                     } catch (java.io.IOException | RuntimeException notServed) {

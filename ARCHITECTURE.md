@@ -748,8 +748,14 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     el token, en `~/.ideseed/mcp/ideseed-<puerto>.json` (solo legible por el usuario; se borra al cerrar), le pasa la
     ruta a la terminal en `IDESEED_MCP_CONFIG`, y Ctrl+Esc (la tecla del plugin de Claude Code en JetBrains) corre ahí
     `claude --mcp-config "$IDESEED_MCP_CONFIG"`. Es la única dependencia entre adaptadores: mcp sigue sin conocer a
-    nadie, y la ui solo lo enciende. Lo que cambia por MCP queda en el IDE hasta que se guarda: un agente que lee los
-    archivos del disco no lo ve.
+    nadie, y la ui solo lo enciende.
+  - **Decisión: el disco y el IDE no se separan mientras trabaja un agente.** Un agente tiene sus propias herramientas
+    de archivos, además de las del IDE. Por eso, antes de cada mensaje MCP la ventana toma lo que cambió en disco
+    (`sync` de session: cada archivo es una edición a mano, que reconcilia la identidad como cualquier otra), y
+    después de cada llamada guarda. Un `Watcher` hace lo mismo cuando la carpeta cambia por cualquier otro motivo.
+    Si un archivo cambió en disco y también en el IDE, es un conflicto: se dice y no se toca. Un archivo borrado en
+    disco se informa pero no se sigue. Guardar después de una llamada de un agente guarda también lo que la persona
+    tenía sin guardar.
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 

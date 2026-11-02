@@ -316,6 +316,7 @@ class WorkbenchTest {
             assertThat(answer.body()).contains("\"isError\":false");
             assertThat(workbench.text("a/A.java")).contains("public int count;").contains("return count + p;");
             assertThat(workbench.views().output()).contains("agent: rename");
+            assertThat(Files.readString(root.resolve("a/A.java"))).contains("public int count;"); // on disk at once
 
             workbench.act("claude");
 
@@ -325,6 +326,30 @@ class WorkbenchTest {
             workbench.closeDown();
         }
         assertThat(served).isEmptyDirectory();
+    }
+
+    /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */
+    @Test
+    void whatChangesOnDiskTheWindowShows() throws Exception {
+        var workbench = workbench();
+        workbench.open("a/A.java", 4, 16);
+        workbench.watch();
+        try {
+            Files.writeString(root.resolve("a/A.java"), A.replace("int m(int p)", "int twice(int p)"));
+
+            var until = System.nanoTime() + java.time.Duration.ofSeconds(10).toNanos();
+            var shown = new String[1];
+            do {
+                Thread.sleep(50);
+                javax.swing.SwingUtilities.invokeAndWait(() -> shown[0] = workbench.text("a/A.java"));
+            } while (!shown[0].contains("twice") && System.nanoTime() < until);
+
+            assertThat(shown[0]).contains("int twice(int p)");
+            assertThat(workbench.views().output()).contains("from disk: a/A.java");
+            assertThat(workbench.views().changes()).isEmpty(); // what is on disk is what is saved
+        } finally {
+            workbench.closeDown();
+        }
     }
 
     /** In a window the size of the one Main opens, the editors take most of the height; the views below, the rest. */

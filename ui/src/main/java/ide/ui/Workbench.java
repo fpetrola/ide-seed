@@ -311,9 +311,13 @@ final class Workbench extends JPanel {
     Path serve(Path folder) throws IOException {
         var token = java.util.HexFormat.of().formatHex(random(24));
         served = ide.serve(token, work -> {
+            Runnable inTurn = () -> {
+                synced(); // what an agent wrote to disk with its own tools, before what it asks of the IDE
+                work.run();
+            };
             try {
-                if (SwingUtilities.isEventDispatchThread()) work.run();
-                else SwingUtilities.invokeAndWait(work);
+                if (SwingUtilities.isEventDispatchThread()) inTurn.run();
+                else SwingUtilities.invokeAndWait(inTurn);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (java.lang.reflect.InvocationTargetException e) {
@@ -321,6 +325,7 @@ final class Workbench extends JPanel {
             }
         }, tool -> {
             say("agent: " + tool);
+            if (!ide.text("diff", Map.of()).isEmpty()) ide.call("save", Map.of()); // what an agent changes reaches disk at once
             refresh();
         });
         java.nio.file.Files.createDirectories(folder);
@@ -340,8 +345,31 @@ final class Workbench extends JPanel {
         return seed;
     }
 
+    private Watcher watcher;
+
+    /** Follows the project's folder: what another tool or an agent writes there is taken as an edit by hand. */
+    void watch() {
+        ide.folder().ifPresent(folder -> watcher = new Watcher(folder, this::synced));
+    }
+
+    /** Takes what changed on disk; shows the program again if it took anything, and says what it left alone. */
+    void synced() {
+        if (ide.folder().isEmpty()) return;
+        @SuppressWarnings("unchecked") var sync = (Map<String, List<String>>) ide.call("sync", Map.of());
+        if (!sync.get("taken").isEmpty()) {
+            say("from disk: " + String.join(", ", sync.get("taken")));
+            refresh();
+        }
+        if (!sync.get("conflicts").isEmpty()) {
+            say("changed on disk and here, left as here: " + String.join(", ", sync.get("conflicts")) + " (saving writes them)");
+        }
+        if (!sync.get("refused").isEmpty()) say("the program did not take, from disk: " + String.join(", ", sync.get("refused")));
+        if (!sync.get("deleted").isEmpty()) say("deleted on disk, still here: " + String.join(", ", sync.get("deleted")));
+    }
+
     /** Stops serving agents and ends the terminal's program: the window is going away. */
     void closeDown() {
+        if (watcher != null) watcher.stop();
         if (served != null) {
             served.stop();
             try {
