@@ -75,6 +75,7 @@ final class Workbench extends JPanel {
     private final JTree project = new JTree(tree);
     private final Editors editors;
     private final Views views = new Views(this::openProblem, this::openResult);
+    private final PlanView plan = new PlanView();
     /** The terminal, in the project's folder; none if the IDE was not opened on a folder. */
     private final Terminal terminal;
     private final JLabel status = new JLabel(" ");
@@ -150,7 +151,10 @@ final class Workbench extends JPanel {
         center.setBorder(BorderFactory.createEmptyBorder());
         var projectScroll = new JScrollPane(project);
         projectScroll.setBorder(BorderFactory.createEmptyBorder());
-        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, projectScroll, center);
+        var left = new JSplitPane(JSplitPane.VERTICAL_SPLIT, projectScroll, plan); // the plan beside the project, seen with the terminal
+        left.setResizeWeight(0.6);
+        left.setBorder(BorderFactory.createEmptyBorder());
+        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, center);
         main.setDividerLocation(260);
         main.setBorder(BorderFactory.createEmptyBorder());
         add(main, BorderLayout.CENTER);
@@ -396,6 +400,10 @@ final class Workbench extends JPanel {
         terminal();
     }
 
+    PlanView plan() {
+        return plan;
+    }
+
     /** The terminal, if there is one. */
     java.util.Optional<Terminal> terminalView() {
         return java.util.Optional.ofNullable(terminal);
@@ -443,6 +451,8 @@ final class Workbench extends JPanel {
         }
         editors.problems(problems);
         views.problems(problems);
+        @SuppressWarnings("unchecked") var followed = (Map<String, Object>) ide.call("plan", Map.of());
+        plan.show(followed);
         views.changes(ide.text("diff", Map.of()));
     }
 

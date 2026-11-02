@@ -756,6 +756,11 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     Si un archivo cambió en disco y también en el IDE, es un conflicto: se dice y no se toca. Un archivo borrado en
     disco se informa pero no se sigue. Guardar después de una llamada de un agente guarda también lo que la persona
     tenía sin guardar.
+  - **Decisión: el plan que se sigue es dominio de session, no del agente.** `WorkPlan` (para no confundirlo con el
+    `Plan` de reparación del engine) es un título y sus tareas, cada una pendiente, en curso o hecha, con una nota. Se
+    guarda en `.ide/plan.json` y cada cambio es un evento del log. Lo leen y escriben las capacidades `plan`,
+    `plan-set`, `task-add` y `task`: lo mismo para una persona por la CLI que para Claude por MCP. La ventana lo
+    muestra en `PlanView`, debajo del proyecto, para verlo mientras la terminal trabaja. No sabe nada de programas.
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 
