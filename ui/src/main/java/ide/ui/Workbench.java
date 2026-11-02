@@ -75,7 +75,7 @@ final class Workbench extends JPanel {
     private final JTree project = new JTree(tree);
     private final Editors editors;
     private final Views views = new Views(this::openProblem, this::openResult);
-    private final PlanView plan = new PlanView();
+    private final PlansView plans;
     /** The terminal, in the project's folder; none if the IDE was not opened on a folder. */
     private final Terminal terminal;
     private final JLabel status = new JLabel(" ");
@@ -99,6 +99,22 @@ final class Workbench extends JPanel {
         this.ide = ide;
         this.dialogs = dialogs;
         this.terminal = ide.folder().map(Terminal::new).orElse(null);
+        this.plans = new PlansView(ide, new PlansView.Actions() {
+            @Override
+            public void steer(String kind, String plan, String task, String text) {
+                Workbench.this.steer(kind, plan, task, text);
+            }
+
+            @Override
+            public void open(String path, int line, int endLine) {
+                Workbench.this.show(path, line, endLine);
+            }
+
+            @Override
+            public java.util.Optional<String> ask(String title) {
+                return dialogs.line(title, "", Workbench.this.plansOnScreen());
+            }
+        });
         if (terminal != null) views.addTab("Terminal", Icons.of("TERMINAL"), terminal);
         this.editors = new Editors(Keymap.strokes(), new Editors.Help() {
             @Override
@@ -151,10 +167,11 @@ final class Workbench extends JPanel {
         center.setBorder(BorderFactory.createEmptyBorder());
         var projectScroll = new JScrollPane(project);
         projectScroll.setBorder(BorderFactory.createEmptyBorder());
-        var left = new JSplitPane(JSplitPane.VERTICAL_SPLIT, projectScroll, plan); // the plan beside the project, seen with the terminal
-        left.setResizeWeight(0.6);
-        left.setBorder(BorderFactory.createEmptyBorder());
-        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, center);
+        var withPlans = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, center, plans); // the plans beside the editors, seen with the terminal
+        withPlans.setResizeWeight(1);
+        withPlans.setBorder(BorderFactory.createEmptyBorder());
+        plans.setPreferredSize(new java.awt.Dimension(Math.round(Zoom.of(340)), 0));
+        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, projectScroll, withPlans);
         main.setDividerLocation(260);
         main.setBorder(BorderFactory.createEmptyBorder());
         add(main, BorderLayout.CENTER);
@@ -370,9 +387,7 @@ final class Workbench extends JPanel {
         var path = String.valueOf(pointed.get("path"));
         var line = ((Number) pointed.get("line")).intValue();
         var end = ((Number) pointed.get("endLine")).intValue();
-        open(path, line, 1);
-        var lines = editors.text(path).split("\n", -1);
-        editors.select(line, 1, end, Math.max(1, lines[Math.min(end, lines.length) - 1].length()));
+        show(path, line, end);
         var note = String.valueOf(pointed.get("note"));
         say("look at " + path + ":" + line + (end > line ? "-" + end : "") + (note.isEmpty() ? "" : ": " + note));
     }
@@ -422,14 +437,59 @@ final class Workbench extends JPanel {
         }
         try {
             terminal.run("claude --mcp-config \"$IDESEED_MCP_CONFIG\"");
+            claudeListens = true;
         } catch (IOException e) {
             say("the terminal did not take it: " + e.getMessage());
         }
         terminal();
     }
 
-    PlanView plan() {
-        return plan;
+    PlansView plans() {
+        return plans;
+    }
+
+    private java.awt.Point plansOnScreen() {
+        try {
+            var at = plans.getLocationOnScreen();
+            return new java.awt.Point(at.x + 20, at.y + 60);
+        } catch (java.awt.IllegalComponentStateException hidden) {
+            return new java.awt.Point(0, 0);
+        }
+    }
+
+    /** Opens lines of a file, selected. */
+    void show(String path, int line, int endLine) {
+        open(path, line, 1);
+        var lines = editors.text(path).split("\n", -1);
+        editors.select(line, 1, endLine, Math.max(1, lines[Math.min(endLine, lines.length) - 1].length()));
+    }
+
+    /** Whether Claude Code was started in the terminal and the terminal still runs: what is said to it, it reads there. */
+    private boolean claudeListens;
+
+    /**
+     * What the person says of a plan or a task: the IDE changes it at once; Claude is told in its terminal if it is
+     * there, else it is told with the next answer it gets from the IDE.
+     */
+    void steer(String kind, String plan, String task, String text) {
+        var told = claudeListens && terminal != null && terminal.running();
+        var args = new LinkedHashMap<String, Object>(Map.of("kind", kind, "told", String.valueOf(told)));
+        if (!plan.isEmpty()) args.put("plan", plan);
+        if (!task.isEmpty()) args.put("task", task);
+        if (!text.isEmpty()) args.put("text", text);
+        @SuppressWarnings("unchecked") var steer = (Map<String, Object>) ide.call("steer", args);
+        var message = String.valueOf(steer.get("message"));
+        if (told) {
+            try {
+                terminal.run(message);
+                say("told Claude: " + message);
+            } catch (IOException e) {
+                say("could not tell Claude in the terminal (" + e.getMessage() + "): " + message);
+            }
+        } else {
+            say("for Claude, at its next step: " + message);
+        }
+        refresh();
     }
 
     /** The terminal, if there is one. */
@@ -479,8 +539,7 @@ final class Workbench extends JPanel {
         }
         editors.problems(problems);
         views.problems(problems);
-        @SuppressWarnings("unchecked") var followed = (Map<String, Object>) ide.call("plan", Map.of());
-        plan.show(followed);
+        plans.refresh();
         views.changes(ide.text("diff", Map.of()));
     }
 

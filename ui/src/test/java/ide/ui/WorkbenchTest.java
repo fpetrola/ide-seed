@@ -371,23 +371,78 @@ class WorkbenchTest {
         return String.valueOf(((Map<String, Object>) ((java.util.List<?>) result.get("content")).get(0)).get("text"));
     }
 
-    /** The plan an agent (or anyone) sets and follows is shown beside the project, with how far it got. */
-    @Test
-    void thePlanBeingFollowedIsShownBesideTheProject() throws IOException {
+    private Workspace planned() throws IOException {
         Files.createDirectories(root.resolve("a"));
         Files.writeString(root.resolve("a/A.java"), A);
         var workspace = Workspace.open(root);
+        workspace.capabilities().invoke("plan-new", Map.of("title", "Encapsulate A", "description", "No public fields in A",
+                "tasks", "Find its public fields\nEncapsulate x\n  Its uses\n  Its tests"));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t1", "state", "done", "note", "only x"));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t2", "state", "doing", "description", "a getter and a setter"));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t4", "after", "t3"));
+        workspace.capabilities().invoke("task-link", Map.of("task", "t2", "element", "a.A#x", "note", "the field"));
+        return workspace;
+    }
+
+    /** The plans beside the editors: which one goes on, how far it got, and its lines of action as a tree. */
+    @Test
+    void thePlansAreATreeOfLinesOfActionBesideTheEditors() throws IOException {
+        var workbench = new Workbench(new Ide(planned()), dialogs);
+
+        assertThat(workbench.plans().lines()).containsExactly("Encapsulate A (active) 1 of 4 done",
+                "t1 [done] Find its public fields", "t2 [doing] Encapsulate x 0/2", "  t3 [todo] Its uses",
+                "  t4 [todo] Its tests (waits t3)");
+    }
+
+    /** Choosing a task shows everything it has; a link opens the code it is about. */
+    @Test
+    void aTaskIsSeenInDetailAndItsLinksOpenTheCode() throws IOException {
+        var workbench = new Workbench(new Ide(planned()), dialogs);
+
+        workbench.plans().select("t2");
+
+        assertThat(String.join("\n", workbench.plans().detail())).contains("t2 Encapsulate x", "doing", "a getter and a setter",
+                "a.A#x", "the field", "agent", "doing");
+
+        workbench.plans().follow(0);
+
+        assertThat(workbench.where()).startsWith("a/A.java:4:");
+        assertThat(workbench.editors().selectedLines()).hasValue("4-4");
+    }
+
+    /** What the person says from the window changes the plan at once and waits to be told to Claude. */
+    @Test
+    void thePersonSteersFromTheWindow() throws IOException {
+        var workspace = planned();
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+        workbench.plans().select("t3");
+
+        workbench.plans().act("pause");
+        dialogs.line("the callers are in B too");
+        workbench.plans().act("comment");
+
+        assertThat(workbench.plans().lines()).contains("  t3 [paused] Its uses");
+        assertThat(String.join("\n", workbench.plans().detail())).contains("person", "the callers are in B too");
+        assertThat(workbench.views().output()).contains("for Claude, at its next step: The person paused task t3");
+        assertThat(workspace.capabilities().invoke("steering", Map.of())).contains("paused task t3", "the callers are in B too");
+    }
+
+    /** Another plan can be the one that goes on, and the plan as a whole paused, resumed or replanned. */
+    @Test
+    void thePersonSwitchesPlans() throws IOException {
+        var workspace = planned();
+        workspace.capabilities().invoke("plan-new", Map.of("title", "Rename B", "tasks", "Rename it"));
         var workbench = new Workbench(new Ide(workspace), dialogs);
 
-        assertThat(workbench.plan().lines()).containsExactly("No plan");
+        assertThat(workbench.plans().plansListed()).containsExactly("Encapsulate A (paused) 1/4", "Rename B (active) 0/1");
 
-        workspace.capabilities().invoke("plan-new", Map.of("title", "Encapsulate A", "tasks", "Find its public fields\nEncapsulate x\n  Its uses"));
-        workspace.capabilities().invoke("task-update", Map.of("task", "t1", "state", "done", "note", "only x"));
-        workspace.capabilities().invoke("task-update", Map.of("task", "t2", "state", "doing"));
-        workbench.refresh();
+        workbench.plans().choose("p1");
+        workbench.plans().act("switch");
 
-        assertThat(workbench.plan().lines()).containsExactly("Encapsulate A (1 of 3 done)",
-                "t1 [done] Find its public fields", "t2 [doing] Encapsulate x", "  t3 [todo] Its uses");
+        assertThat(workbench.plans().plansListed()).containsExactly("Encapsulate A (active) 1/4", "Rename B (paused) 0/1");
+        dialogs.line("do its tests first");
+        workbench.plans().act("replan-plan");
+        assertThat(workspace.capabilities().invoke("steering", Map.of())).contains("switched to plan p1", "replan plan p1", "do its tests first");
     }
 
     /** What another tool writes in the project's folder is taken as an edit by hand, and the editor shows it. */
@@ -422,9 +477,10 @@ class WorkbenchTest {
         workbench.setSize(1400, 860);
         layOut(workbench);
 
-        var center = (javax.swing.JSplitPane) java.util.Arrays.stream(workbench.getComponents())
+        var withPlans = (javax.swing.JSplitPane) java.util.Arrays.stream(workbench.getComponents())
                 .filter(javax.swing.JSplitPane.class::isInstance).map(javax.swing.JSplitPane.class::cast)
                 .findFirst().orElseThrow().getRightComponent();
+        var center = (javax.swing.JSplitPane) withPlans.getLeftComponent();
         var editors = center.getTopComponent().getHeight();
         var views = center.getBottomComponent().getHeight();
 
