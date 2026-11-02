@@ -60,6 +60,19 @@ class ExtractMethodTest {
         assertThat(ws.errors()).isEmpty();
     }
 
+    /** One line is the stretch from it to itself. */
+    @Test
+    void oneLineIsTheStretchFromItToItself() {
+        var one = Workspace.of(Map.of("a/Invoice.java", INVOICE));
+        var stretch = Workspace.of(Map.of("a/Invoice.java", INVOICE));
+
+        var result = one.invoke("extract-method", Map.of("method", "a.Invoice#total(double,int)", "lines", "9", "name", "taxed"));
+        stretch.invoke("extract-method", Map.of("method", "a.Invoice#total(double,int)", "lines", "9-9", "name", "taxed"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(one.source("a/Invoice.java")).isEqualTo(stretch.source("a/Invoice.java")).contains("private double taxed(");
+    }
+
     @Test
     void extractsStatementsWithTheirInputsAsParametersAndTheirOutputAsResult() {
         var ws = Workspace.of(Map.of("a/Invoice.java", INVOICE));

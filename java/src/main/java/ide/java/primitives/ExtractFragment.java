@@ -145,11 +145,11 @@ final class ExtractFragment {
         return created(extract, c, before, source, owner, unit, name, locals, statements);
     }
 
-    /** The statements on lines {@code first-last}, whole statements of one block; none if they are not. */
+    /** The statements on lines {@code first-last}, or on one line, whole statements of one block; none if they are not. */
     private static List<Statement> lines(MethodDeclaration method, String fragment) {
         var dash = fragment.indexOf('-');
-        return Bodies.statementsWithin(method, Integer.parseInt(fragment.substring(0, dash).strip()),
-                Integer.parseInt(fragment.substring(dash + 1).strip()));
+        var first = Integer.parseInt((dash < 0 ? fragment : fragment.substring(0, dash)).strip());
+        return Bodies.statementsWithin(method, first, dash < 0 ? first : Integer.parseInt(fragment.substring(dash + 1).strip()));
     }
 
     /** The statements the fragment names by their ids: statements of the method's body that follow one another. */
