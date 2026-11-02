@@ -54,4 +54,37 @@ class MoveMembersTest {
                 .doesNotContain("Connection conn");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** The methods first, the field after: in the class they all go to, they name it as its own. */
+    @Test
+    void aFieldMovedWhereItsUsesWentIsNamedThereAsItsOwn() {
+        var ws = Workspace.of(Map.of("a/Main.java", """
+                package a;
+
+                public class Main {
+                    static int count;
+
+                    static void add() {
+                        count++;
+                    }
+
+                    public static void main(String[] args) {
+                        add();
+                    }
+                }
+                """, "a/Repo.java", """
+                package a;
+
+                public class Repo {
+                }
+                """));
+
+        assertThat(ws.invoke("move-members", Map.of("members", List.of("a.Main#add()"), "to", "a.Repo")).violations()).isEmpty();
+        assertThat(ws.source("a/Repo.java")).contains("Main.count++;");
+        var result = ws.invoke("move-members", Map.of("members", List.of("a.Main#count"), "to", "a.Repo"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Repo.java")).contains("        count++;").doesNotContain("Repo.count", "Main");
+        assertThat(ws.errors()).isEmpty();
+    }
 }

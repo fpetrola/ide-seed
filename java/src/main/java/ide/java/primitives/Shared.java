@@ -134,4 +134,29 @@ final class Shared {
         var dot = qualifiedType.lastIndexOf('.');
         return dot < 0 ? "" : qualifiedType.substring(0, dot);
     }
+
+    /** What a use of a member is made through, when it is a type: a field's {@code Type.f}, a call's {@code Type.m()}. */
+    static Node typeScope(Context c, ide.program.Program before, ide.program.Reference use) {
+        var scope = switch (c.use(use.id())) {
+            case com.github.javaparser.ast.expr.FieldAccessExpr access -> access.getScope();
+            case com.github.javaparser.ast.expr.MethodCallExpr call -> call.getScope().orElse(null);
+            default -> null;
+        };
+        if (scope == null || !(scope.isNameExpr() || scope.isFieldAccessExpr())) return null;
+        var range = scope.getRange().orElseThrow();
+        var named = before.referencesFrom(use.site()).stream().filter(r -> !r.mode().isLink() && c.use(r.id()) != null
+                && c.use(r.id()).getRange().filter(range::contains).isPresent()).toList();
+        return !named.isEmpty() && named.stream().allMatch(r -> before.element(r.target()).kind().isType()) ? scope : null;
+    }
+
+    /** The text a use made through a type is, made with none: {@code instead} before a field a name there hides. */
+    static String unscoped(Context c, ide.program.Reference use, String name, String instead) {
+        var node = c.use(use.id());
+        var unit = c.sources().unitOf(node);
+        if (node instanceof com.github.javaparser.ast.expr.MethodCallExpr call) return unit.textBetween(call.getName().getBegin().orElseThrow(), call.getEnd().orElseThrow());
+        var hidden = node.findAncestor(com.github.javaparser.ast.body.CallableDeclaration.class).filter(m -> m.getParameters().stream()
+                .anyMatch(p -> ((com.github.javaparser.ast.body.Parameter) p).getNameAsString().equals(name))
+                || ide.java.semantics.Bodies.locals((com.github.javaparser.ast.body.CallableDeclaration<?>) m).stream().anyMatch(v -> v.getNameAsString().equals(name))).isPresent();
+        return hidden ? instead + "." + name : name;
+    }
 }

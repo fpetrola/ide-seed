@@ -36,11 +36,35 @@ final class SetAttribute {
 
     static Change apply(Primitive.Set set, Context c, Program before) {
         var value = set.attribute().equals("throws") ? uncovered(c, before, set.element(), set.value()) : set.value();
-        var gone = set.attribute().equals("throws") ? untold(c, before, set.element(), value) : List.<Change.Dropped>of();
+        var gone = set.attribute().equals("throws") ? untold(c, before, set.element(), value)
+                : set.attribute().equals("static") && "false".equals(value) && before.element(set.element()).kind() == ide.program.Kind.FIELD
+                ? objects(c, before, set.element()) : List.<Change.Dropped>of();
         set(c, set.element(), set.attribute(), value);
         var change = set.intent(before, null);
         for (var dropped : gone) change = change.expect(dropped);
         return change;
+    }
+
+    /**
+     * A field made one each object has is used as the object's own where it was used through its type: {@code this.f}
+     * where a name hides it. Where there is no object, the compiler says so.
+     */
+    private static List<Change.Dropped> objects(Context c, Program before, ElementId field) {
+        var gone = new java.util.ArrayList<Change.Dropped>();
+        var edits = new ide.java.text.EditSet();
+        var name = before.element(field).name();
+        for (var use : before.referencesTo(field)) {
+            var scope = Shared.typeScope(c, before, use);
+            if (scope == null) continue;
+            var node = c.use(use.id());
+            edits.replace(c.sources().unitOf(node), node, Shared.unscoped(c, use, name, "this"));
+            var range = scope.getRange().orElseThrow();
+            for (var r : before.referencesFrom(use.site())) {
+                if (!r.mode().isLink() && c.use(r.id()).getRange().filter(range::contains).isPresent()) gone.add(new Change.Dropped(r.site(), r.target()));
+            }
+        }
+        c.sources().apply(edits);
+        return gone;
     }
 
     /**

@@ -55,9 +55,22 @@ public final class Members {
      * others moved from the member's indentation to {@code indent}.
      */
     public static String text(Unit unit, Node member, String indent) {
+        return text(unit, member, indent, java.util.Map.of());
+    }
+
+    /** The same, with nodes inside it written as {@code instead} says. */
+    public static String text(Unit unit, Node member, String indent, java.util.Map<Node, String> instead) {
         var first = firstLine(member);
         var own = unit.indentation(first);
-        var written = unit.textBetween(new Position(first, own.length() + 1), member.getEnd().orElseThrow());
+        var start = new Position(first, own.length() + 1);
+        var written = unit.textBetween(start, member.getEnd().orElseThrow());
+        var last = new java.util.ArrayList<>(instead.keySet());
+        last.sort(java.util.Comparator.comparing((Node n) -> n.getBegin().orElseThrow()).reversed()); // from the end, so places hold
+        for (var node : last) {
+            var from = unit.textBetween(start, node.getBegin().orElseThrow()).length() - 1;
+            var to = unit.textBetween(start, node.getEnd().orElseThrow()).length();
+            written = written.substring(0, from) + instead.get(node) + written.substring(to);
+        }
         var lines = written.lines().toList();
         return lines.getFirst() + lines.stream().skip(1)
                 .map(line -> "\n" + (line.startsWith(own) ? indent + line.substring(own.length()) : line))

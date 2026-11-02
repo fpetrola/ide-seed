@@ -67,12 +67,15 @@ final class MoveElement {
         var declaration = c.declaration(member);
         var destination = c.declaration(target);
         var type = destination.as(TypeDeclaration.class);
-        var text = Members.text(declaration.unit(), declaration.node(), Members.indentation(destination.unit(), type));
         var edits = new EditSet();
         if (!destination.unit().path().equals(declaration.unit().path())) {
             for (var qualified : named(c, before, declaration.unit(), declaration.node())) Imports.nameable(edits, destination.unit(), qualified);
         }
-        var gone = "true".equals(member.fact(Fact.STATIC)) ? through(c, before, member, target, edits) : List.<Change.Dropped>of();
+        var gone = new ArrayList<Change.Dropped>();
+        if ("true".equals(member.fact(Fact.STATIC))) gone.addAll(through(c, before, member, target, edits));
+        var instead = new LinkedHashMap<Node, String>();
+        gone.addAll(itsUses(c, before, member, target, edits, destination.unit(), instead));
+        var text = Members.text(declaration.unit(), declaration.node(), Members.indentation(destination.unit(), type), instead);
         Members.remove(edits, declaration.unit(), declaration.node());
         if (anchor == null) Members.append(edits, destination.unit(), type, text);
         else Members.insertBefore(edits, destination.unit(), c.declaration(anchor).node(), text);
@@ -102,15 +105,54 @@ final class MoveElement {
     }
 
     /**
+     * What a member going to {@code target} uses of the static members of its type, which stay there, it names through
+     * that type; what it named through {@code target}, it names as its own there.
+     */
+    private static List<Change.Dropped> itsUses(Context c, Program before, Element member, Element target, EditSet edits, Unit there,
+                                                java.util.Map<Node, String> instead) {
+        var gone = new ArrayList<Change.Dropped>();
+        var from = before.element(member.parent());
+        for (var use : before.referencesFrom(member.id())) {
+            if (use.mode().isLink() || use.target().equals(member.id())) continue;
+            var used = before.element(use.target());
+            if (!(used.kind() == Kind.FIELD || used.kind() == Kind.METHOD) || !"true".equals(used.fact(Fact.STATIC))) continue;
+            var node = c.use(use.id());
+            var scope = Shared.typeScope(c, before, use);
+            if (scope != null && used.parent().equals(target.id())) {
+                instead.put(node, Shared.unscoped(c, use, used.name(), target.name()));
+                gone.addAll(within(c, before, use.site(), scope));
+            } else if (used.parent().equals(from.id()) && !inside(before, target.id(), from)) {
+                var name = Imports.nameable(edits, there, from.qualified());
+                switch (node) {
+                    case com.github.javaparser.ast.expr.NameExpr read -> instead.put(read, name + "." + used.name());
+                    case com.github.javaparser.ast.expr.MethodCallExpr call when call.getScope().isEmpty() ->
+                            instead.put(call, name + "." + c.sources().unitOf(call).textOf(call));
+                    default -> {
+                    }
+                }
+            }
+        }
+        return gone;
+    }
+
+    /**
      * The uses of a static member made outside the type it goes to name it through that type; what the type they named
-     * it through used is used no more.
+     * it through used is used no more. Those made in it through a type are made as its own.
      */
     private static List<Change.Dropped> through(Context c, Program before, Element member, Element target, EditSet edits) {
         var gone = new ArrayList<Change.Dropped>();
         for (var use : before.referencesTo(member.id())) {
-            if (before.within(use.site(), member.id()) || inside(before, use.site(), target)) continue;
+            if (before.within(use.site(), member.id())) continue;
             var node = c.use(use.id());
             var unit = c.sources().unitOf(node);
+            if (inside(before, use.site(), target)) {
+                var scope = Shared.typeScope(c, before, use);
+                if (scope != null) {
+                    edits.replace(unit, node, Shared.unscoped(c, use, member.name(), target.name()));
+                    gone.addAll(within(c, before, use.site(), scope));
+                }
+                continue;
+            }
             var name = Imports.nameable(edits, unit, target.qualified());
             switch (node) {
                 case com.github.javaparser.ast.expr.NameExpr read -> edits.replace(unit, read, name + "." + member.name());

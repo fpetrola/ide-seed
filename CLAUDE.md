@@ -97,7 +97,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   puts them in its place, each parameter its argument (a return among them is refused; a local of theirs named as one of the caller's, or of a lambda the call is in,
   takes a free name, `name2`); a method reference (through its type, static, or through `this`) is first the lambda that
   calls it. A member moved to another file takes the imports of the simple names it uses, and a static one is used
-  from elsewhere through its new type. A new type's file, created or moved, goes in a source root (a file's folder without its
+  from elsewhere through its new type; it names the static members of its old type through it, and in its new one what
+  was named through that type is named as its own (so is a field made one each object has). A new type's file, created or moved, goes in a source root (a file's folder without its
   package's) with files of its package, else in the one with most files. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through

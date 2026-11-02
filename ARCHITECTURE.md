@@ -1809,7 +1809,10 @@ que esto no escala solo:
    *make-field-instance (2026-11-02, lo pidió Fernando para lo que test1 necesitaba):* un campo static pasa a ser de cada
    objeto. Si se crea más de un objeto, el valor ya no se comparte, y eso no lo ve ningún verificador; por eso declara
    `changes meaning`, como split-loop. Es un `set static false` con nombre. Si un método static lo usa, el reparador lo
-   hace de instancia cuando nadie lo llama sin un objeto; si alguien sí lo llama así, se rechaza.
+   hace de instancia cuando nadie lo llama sin un objeto; si alguien sí lo llama así, se rechaza. Un uso hecho a través del tipo
+   (`Repo.count`) pasa a ser del objeto (`count`, o `this.count` si un nombre lo oculta). Por lo mismo, move-members
+   nombra a través del tipo viejo los static que el miembro usaba de él, y en el tipo destino deja sin calificar lo
+   que se nombraba a través de ese tipo, en el orden que sea que se muevan.
 
 **Cómo se sabe si funcionó.**
 

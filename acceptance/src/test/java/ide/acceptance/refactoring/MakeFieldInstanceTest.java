@@ -69,4 +69,38 @@ class MakeFieldInstanceTest {
 
         assertThat(result.violations()).isNotEmpty();
     }
+
+    /** Named through its type where an object uses it, it is named as the object's own. */
+    @Test
+    void aUseThroughItsTypeBecomesTheObjects() {
+        var ws = Workspace.of(Map.of("a/Repo.java", REPO.replace("        count++;", "        Repo.count++;")
+                .replace("return count;", "int count = 1;\n        return count + Repo.count;")));
+
+        var result = ws.invoke("make-field-instance", Map.of("field", "a.Repo#count"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Repo.java")).contains("        count++;", "return count + this.count;").doesNotContain("Repo.count");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    @Test
+    void aFieldDeclaredAfterItsUsesToo() {
+        var ws = Workspace.of(Map.of("a/Repo.java", """
+                package a;
+
+                public class Repo {
+                    void add() {
+                        Repo.count += 2;
+                    }
+
+                    private static int count;
+                }
+                """));
+
+        var result = ws.invoke("make-field-instance", Map.of("field", "a.Repo#count"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Repo.java")).contains("        count += 2;", "    private int count;");
+        assertThat(ws.errors()).isEmpty();
+    }
 }
