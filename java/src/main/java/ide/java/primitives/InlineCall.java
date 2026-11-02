@@ -158,7 +158,11 @@ final class InlineCall {
         var there = new java.util.HashSet<String>();
         Bodies.locals(caller).forEach(v -> there.add(v.getNameAsString()));
         ((com.github.javaparser.ast.body.CallableDeclaration<?>) caller).getParameters().forEach(p -> there.add(p.getNameAsString()));
-        call.findAncestor(com.github.javaparser.ast.expr.LambdaExpr.class).ifPresent(l -> l.getParameters().forEach(p -> there.add(p.getNameAsString())));
+        for (var l = call.findAncestor(com.github.javaparser.ast.expr.LambdaExpr.class); l.isPresent(); // the lambdas it is in, and theirs
+             l = l.get().findAncestor(com.github.javaparser.ast.expr.LambdaExpr.class)) {
+            l.get().getParameters().forEach(p -> there.add(p.getNameAsString()));
+            l.get().getBody().findAll(com.github.javaparser.ast.body.VariableDeclarator.class).forEach(v -> there.add(v.getNameAsString()));
+        }
         var copy = body.clone();
         var theirs = new java.util.HashSet<String>();
         copy.findAll(com.github.javaparser.ast.body.VariableDeclarator.class).forEach(v -> theirs.add(v.getNameAsString()));

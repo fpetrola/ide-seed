@@ -288,4 +288,38 @@ class InlineMethodTest {
                 """).doesNotContain("void row(");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** A local of the body named as one of a lambda the call is made in takes a free name too. */
+    @Test
+    void aLocalNamedAsOneOfTheLambdaTheCallIsInTakesAFreeName() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
+                package a;
+
+                import java.util.List;
+
+                class Rows {
+                    void process(List<String> lines) {
+                        lines.forEach(line -> {
+                            String id = line.trim();
+                            row(line, id);
+                        });
+                    }
+
+                    void row(String line, String name) {
+                        String id = line.substring(1);
+                        System.out.println(id + name);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("inline-method", Map.of("method", "a.Rows#row(String,String)"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                            String id = line.trim();
+                            String id2 = line.substring(1);
+                            System.out.println(id2 + id);
+                """).doesNotContain("void row(");
+        assertThat(ws.errors()).isEmpty();
+    }
 }

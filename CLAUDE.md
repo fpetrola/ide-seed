@@ -94,7 +94,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   getter's type there, and so is a call on the object itself retargeted to a method of another type; a call
   retargeted to a local is computed where the local is given its value: one on a branch, in a loop
   or a nested block the local is declared outside of is refused. Inline of a call made as a statement (or as a lambda's body) to a method of statements
-  puts them in its place, each parameter its argument (a return among them is refused; a local of theirs named as one of the caller's
+  puts them in its place, each parameter its argument (a return among them is refused; a local of theirs named as one of the caller's, or of a lambda the call is in,
   takes a free name, `name2`); a method reference (through its type, static, or through `this`) is first the lambda that
   calls it. A member moved to another file takes the imports of the simple names it uses, and a static one is used
   from elsewhere through its new type. A new type's file, created or moved, goes in a source root (a file's folder without its
