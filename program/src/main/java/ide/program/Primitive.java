@@ -84,11 +84,13 @@ public sealed interface Primitive {
     /** A field's start said in no language: its uses take the place of the old start's. */
     private static Change initializer(Program before, ElementId field, String text) {
         var change = Change.NONE;
-        for (var use : before.referencesFrom(field)) {
+        var local = before.element(field).kind() == Kind.LOCAL; // given a value it had not: its uses are its method's
+        var site = local ? before.element(field).parent() : field;
+        for (var use : local ? List.<Reference>of() : before.referencesFrom(field)) {
             if (!use.mode().isLink()) change = change.expect(new Change.Dropped(field, use.target()));
         }
-        for (var use : Body.uses(Body.value(text, before, field))) {
-            change = change.expect(new Change.Added(field, use.element(), before.element(use.element()).name(), use.mode()));
+        for (var use : Body.uses(Body.value(text, before, site))) {
+            change = change.expect(new Change.Added(site, use.element(), before.element(use.element()).name(), use.mode()));
         }
         return change;
     }

@@ -75,8 +75,14 @@ final class MoveElement {
         var unit = declaration.unit();
         var node = declaration.node();
         if (!Statements.alone(unit, node)) throw new PrimitiveRejected("move.unsupported", statement.qualified() + " shares its lines");
-        if (!node.findAll(com.github.javaparser.ast.expr.VariableDeclarationExpr.class).isEmpty()) {
+        var declared = node.findAll(com.github.javaparser.ast.expr.VariableDeclarationExpr.class);
+        if (!declared.isEmpty() && !method.id().equals(statement.parent())) {
             throw new PrimitiveRejected("move.unsupported", statement.qualified() + " declares locals, which would have to go with it");
+        }
+        if (!declared.isEmpty()) { // within its method its locals stay its method's: each keeps its number while none of its name is passed
+            var names = declared.stream().flatMap(d -> d.getVariables().stream()).map(v -> v.getNameAsString()).toList();
+            var same = before.children(method.id()).stream().filter(e -> e.kind() == Kind.LOCAL && names.contains(e.name())).count();
+            if (same > names.size()) throw new PrimitiveRejected("move.unsupported", statement.qualified() + " declares a local named as another of its method");
         }
         var destination = c.declaration(method);
         CallableDeclaration<?> callable = destination.as(CallableDeclaration.class);

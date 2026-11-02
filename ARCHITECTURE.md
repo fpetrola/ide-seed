@@ -546,7 +546,13 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   spec faltan annotate, use-supertype-where-possible,
   extract-interface-and-use, fold-constructors y delete-tree; y lo que trabaja sobre locales (extract variable,
   inline variable, introduce parameter desde una expresión), que el grafo no tiene. Introduce field se haría como
-  introduce-constant, con el campo de instancia; así se hizo introduce-field.
+  introduce-constant, con el campo de instancia; así se hizo introduce-field. introduce-variable (2026-11-02, el Introduce Variable de IntelliJ)
+  se compone igual: extract de la expresión a un método, un local nuevo (Java lo declara al empezar el cuerpo, sin
+  valor) movido justo antes de la sentencia de la llamada, el retarget de la llamada al local (sus argumentos, que
+  solo leen, se van), el valor `#{m}(#{passed})` dicho sin lenguaje (`passed` son las variables del método con los
+  nombres de los parámetros de `m`: función `variables`), el inline de esa llamada y el delete de `m`. Para eso: una
+  sentencia que declara locales se mueve dentro de su método, un local recibe un valor que no tenía, un cuerpo nombra
+  locales de su método como valores, y la función `statement(r)` da la sentencia de un uso.
 
 ### 5.7 `knowledge`: planificador por metas
 

@@ -52,7 +52,7 @@ public record Body(List<Statement> statements) {
     public record Field(ElementId field) implements Expression {
     }
 
-    /** The value of one of the method's parameters. */
+    /** The value of one of the method's parameters, or of one of its locals: a value of the method, not a use. */
     public record Parameter(ElementId parameter) implements Expression {
     }
 
@@ -252,14 +252,14 @@ public record Body(List<Statement> statements) {
                 }
                 return new New(constructor, arguments);
             }
-            var element = element(Kind.FIELD, Kind.PARAM, Kind.METHOD);
+            var element = element(Kind.FIELD, Kind.PARAM, Kind.LOCAL, Kind.METHOD);
             if (program.element(element).kind() == Kind.METHOD) return call(null, element);
             Expression value;
             if (program.element(element).kind() == Kind.FIELD) {
                 value = new Field(element);
             } else {
                 if (!method.equals(program.element(element).parent())) {
-                    throw new IllegalArgumentException("body: " + element + " is not a parameter of " + method + ", in: " + text);
+                    throw new IllegalArgumentException("body: " + element + " is not a parameter or a local of " + method + ", in: " + text);
                 }
                 value = new Parameter(element);
             }

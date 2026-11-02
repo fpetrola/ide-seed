@@ -350,6 +350,27 @@ refactoring introduce-constant "Moves an expression into a constant, a static fi
   return ${f}
 end
 
+refactoring introduce-variable "Moves an expression into a local declared right before its statement, which reads it, as IntelliJ's Introduce Variable"
+  param method : element(METHOD) "the method the expression is in"
+  param lines : lines "the expression's stretch"
+  param name : text "name of the local" default "value"
+  m := extract ${method} ${lines} ${concat("compute", cap(name))}
+  let at = statement(first(refs(m)))
+  let passed = variables(method, params(m))
+  v := create LOCAL ${method} ${name}
+  set ${v} type ${type(m)}
+  move ${first(statements(method))} ${method} before=${at}
+  for r in refs(m)
+    retarget ${r} ${v}
+  end
+  set ${v} initializer "#{m}(#{passed})"
+  for r in refs(m)
+    inline ${r}
+  end
+  delete ${m}
+  return ${v}
+end
+
 refactoring introduce-field "Moves an expression into a field that starts with it and that the place reads, as IntelliJ's Introduce Field"
   param method : element(METHOD) "the method the expression is in"
   param lines : lines "the expression's stretch"

@@ -38,6 +38,7 @@ final class RetargetUse {
         var ref = before.reference(retarget.reference());
         var target = before.element(retarget.target());
         var signature = Signature.of(c, before.element(ref.site())); // read before the text changes
+        var dropped = new java.util.ArrayList<Change.Dropped>();
         var node = c.use(ref.id());
         var unit = c.sources().unitOf(node);
         var edits = new EditSet();
@@ -46,9 +47,17 @@ final class RetargetUse {
             if (!Imports.names(unit, target.qualified())) Imports.add(edits, unit, target.qualified());
         } else if (target.kind() == before.element(ref.target()).kind()) {
             Shared.renameUse(c, edits, node, target.name());
-        } else if (ref.mode() == Mode.CALL && target.kind() == Kind.FIELD) { // a call of nothing but a value: the value
+        } else if (ref.mode() == Mode.CALL && (target.kind() == Kind.FIELD || target.kind() == Kind.LOCAL)) { // a call of nothing but a value: the value
             var call = (com.github.javaparser.ast.expr.MethodCallExpr) node;
-            if (!call.getArguments().isEmpty()) throw new PrimitiveRejected("retarget.call", call + " passes arguments a field cannot take");
+            var reads = target.kind() == Kind.LOCAL && call.getArguments().stream().allMatch(Expression::isNameExpr); // a local's value takes them
+            if (!call.getArguments().isEmpty() && !reads) throw new PrimitiveRejected("retarget.call", call + " passes arguments a value cannot take");
+            if (target.kind() == Kind.LOCAL && call.getScope().isPresent()) throw new PrimitiveRejected("retarget.call", call + " is made on something a local is not of");
+            for (var argument : call.getArguments()) { // what they read is read no more here
+                var range = argument.getRange().orElseThrow();
+                for (var r : before.referencesFrom(ref.site())) {
+                    if (c.use(r.id()).getRange().filter(range::contains).isPresent()) dropped.add(new Change.Dropped(r.site(), r.target()));
+                }
+            }
             edits.replace(unit, call, call.getScope().map(scope -> unit.textOf(scope) + ".").orElse("") + target.name());
         } else {
             if (target.kind() != Kind.METHOD) throw new IllegalArgumentException("can only retarget to methods: " + target);
@@ -79,7 +88,9 @@ final class RetargetUse {
         }
         c.sources().apply(edits);
         signature.follow(c);
-        return retarget.intent(before, null);
+        var change = retarget.intent(before, null);
+        for (var gone : dropped) change = change.expect(gone);
+        return change;
     }
 
     /**

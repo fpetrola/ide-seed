@@ -183,10 +183,13 @@ final class SetAttribute {
         var element = c.program().element(id);
         var declaration = c.declaration(element);
         var unit = declaration.unit();
-        var variable = declaration.as(FieldDeclaration.class).getVariables().stream()
+        var variable = declaration.node() instanceof com.github.javaparser.ast.body.VariableDeclarator local ? local // a local's
+                : declaration.as(FieldDeclaration.class).getVariables().stream()
                 .filter(v -> v.getNameAsString().equals(element.name())).findFirst().orElseThrow();
         var edits = new EditSet();
-        var written = ide.program.Body.names(value) ? WriteBody.value(c, id, edits, unit, value) : value; // said in no language, or in Java
+        var local = element.kind() == Kind.LOCAL;
+        if (local && variable.getInitializer().isPresent()) throw new ide.projection.PrimitiveRejected("set.initializer", element.qualified() + " has a value already");
+        var written = ide.program.Body.names(value) ? WriteBody.value(c, local ? element.parent() : id, edits, unit, value) : value; // said in no language, or in Java
         if (variable.getInitializer().isPresent()) edits.replace(unit, variable.getInitializer().get(), written);
         else edits.insertAfter(unit, variable.getName(), " = " + written);
         c.sources().apply(edits);

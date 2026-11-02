@@ -30,9 +30,49 @@ final class CreateElement {
 
     static Change apply(Primitive.Create create, Context c, Program before) {
         if (create.kind() == Kind.STATEMENT) return create.intent(before, statement(c, before, create.parent(), create.facts().get(ide.program.Fact.BODY)));
+        if (create.kind() == Kind.LOCAL) {
+            var created = local(c, before, create.parent(), create.name());
+            create.facts().forEach((fact, value) -> SetAttribute.set(c, created, fact.label(), value));
+            return create.intent(before, created);
+        }
         var created = create(c, create.kind(), create.parent(), create.name(), create.argument());
         create.facts().forEach((fact, value) -> SetAttribute.set(c, created, fact.label(), value));
         return create.intent(before, created);
+    }
+
+    /**
+     * A local of a method, declared with no value in a statement of its own at the start of its body (where a move puts
+     * it after), first among the locals of its name.
+     */
+    private static ElementId local(Context c, Program before, ElementId method, String name) {
+        Shared.requireIdentifier(name);
+        var declaration = c.declaration(before.element(method));
+        com.github.javaparser.ast.body.CallableDeclaration<?> callable = declaration.as(com.github.javaparser.ast.body.CallableDeclaration.class);
+        if (callable instanceof com.github.javaparser.ast.body.ConstructorDeclaration) throw new PrimitiveRejected("create.local", "a local goes in a method");
+        var unit = declaration.unit();
+        var statements = ide.java.semantics.Bodies.statements(callable);
+        var own = before.children(method).stream().filter(e -> e.kind() == Kind.STATEMENT).map(ide.program.Element::id).toList();
+        var others = new java.util.LinkedHashMap<ElementId, String>();
+        for (var other : ide.java.semantics.Bodies.locals(callable)) others.put(c.reader().local(other), other.getNameAsString());
+        var edits = new EditSet();
+        var text = "Object " + name + ";";
+        if (statements.isEmpty()) {
+            var indent = unit.indentation(callable.getBegin().orElseThrow().line) + "    ";
+            ide.java.syntax.Statements.append(edits, unit, ide.java.semantics.Bodies.body(callable), indent, text);
+        } else {
+            ide.java.syntax.Statements.insertBefore(edits, unit, statements.getFirst(), text);
+        }
+        c.sources().apply(edits);
+        var made = c.ids().of(new Address.Local(method, name, Integer.MAX_VALUE), Kind.LOCAL); // its place comes next
+        var written = new java.util.LinkedHashMap<ElementId, String>();
+        written.put(made, name);
+        written.putAll(others);
+        c.ids().placeLocals(method, written);
+        var placed = new ArrayList<ElementId>();
+        placed.add(null);
+        placed.addAll(own);
+        c.ids().placeStatements(method, placed);
+        return made;
     }
 
     /** A statement at the end of a body (a constructor called, at its start), said in no language, written in Java. */

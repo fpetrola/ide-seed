@@ -85,6 +85,10 @@ final class ScriptFunctions {
             case "fields" -> elems(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("FIELD")).toList());
             case "methods" -> elems(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("METHOD")).toList());
             case "params" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList());
+            case "variables" -> elems(Value.items(args.get(1)).stream().map(item -> graph.children(element(args, 0).id()).stream() // of a callable, named as the items are
+                    .filter(e -> (e.kind().name().equals("PARAM") || e.kind().name().equals("LOCAL")) && e.name().equals(element(item).name()))
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException("no variable " + element(item).name() + " in " + element(args, 0).qualified())))
+                    .toList());
             case "constructors" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "body" -> text(element(args, 0).fact(Fact.BODY));
             case "statements" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList());
@@ -96,6 +100,7 @@ final class ScriptFunctions {
             case "mode" -> text(reference(args.getFirst()).mode().label());
             case "site" -> elem(graph.unresolved(ref(args.getFirst())).map(Unresolved::site).orElseGet(() -> reference(args.getFirst()).site()));
             case "target" -> elem(reference(args.getFirst()).target());
+            case "statement" -> elem(reference(args.getFirst()).statement()); // the statement of its body a use is in
             // text and logic
             case "cap" -> text(cap(text(args, 0)));
             case "decap" -> text(text(args, 0).isEmpty() ? "" : Character.toLowerCase(text(args, 0).charAt(0)) + text(args, 0).substring(1));

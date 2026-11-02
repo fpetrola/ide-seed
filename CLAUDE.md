@@ -46,7 +46,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with the uses made in it, and deleted with them; one that calls a constructor goes first), Change (produced element,
   expectations, pins: what a repair may not take back) and Body (what a method does in no language, a statement a
   line: return, assign a field, new, a call, the type's default, a constructor called first, over elements named
-  `#{id}`; its parameters are values, not uses; a created statement expects the uses it names Added; a body is its
+  `#{id}`; its parameters and locals are values, not uses; a created statement expects the uses it names Added; a body is its
   statements: there is no Set of a whole body).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element

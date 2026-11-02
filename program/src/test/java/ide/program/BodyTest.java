@@ -86,7 +86,7 @@ class BodyTest {
         assertThatThrownBy(() -> Body.parse("return #{field:2}.#{field:2}()", program, SET)).hasMessageContaining("field:2 is a FIELD");
         assertThatThrownBy(() -> Body.parse("#{param:5} = #{field:2}", program, SET)).hasMessageContaining("param:5 is a PARAM");
         assertThatThrownBy(() -> Body.parse("return new #{field:2}()", program, SET)).hasMessageContaining("field:2 is a FIELD");
-        assertThatThrownBy(() -> Body.parse("return #{param:7}", program, SET)).hasMessageContaining("param:7 is not a parameter of method:4");
+        assertThatThrownBy(() -> Body.parse("return #{param:7}", program, SET)).hasMessageContaining("param:7 is not a parameter or a local of method:4");
     }
 
     @Test
