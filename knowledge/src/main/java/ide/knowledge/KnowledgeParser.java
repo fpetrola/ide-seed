@@ -22,7 +22,8 @@ import java.util.List;
  *   and s(y) and given t(x)                                         constant, _ any value; it goes on in "and" lines;
  *                                                                   a given literal is a condition, never changed)
  * order name "low" "high" ...      (facts: name-value(v), and name-at-least(a, b) for each a not below b)
- * say [not] relation for p "title with ${element}, ${was} and ${value}"   (how a change made for p is said)
+ * say [not] relation for p "title with ${element}, ${was} and ${value}"   (how a change made for p is said; one
+ *                                  that creates says ${kind}, ${named}, and by name ${in} and ${type}, what it is in)
  * rule name "what the language says"     (a constraint: where it does not hold, violates-name(vars) does)
  *   for v, w where q(v, w) and not r(w)
  *   must s(v) or not t(w)

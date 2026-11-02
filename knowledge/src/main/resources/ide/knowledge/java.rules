@@ -80,7 +80,7 @@ say target for resolves "import ${qualified(value)}"
 def constructed-explicitly(t) when kind(t, "class") and constructor(k, t)
 def constructed-explicitly(t) when kind(t, "enum") and constructor(k, t)
 
-say constructor for constructed-explicitly "create constructor ${name(value)}()"
+say constructor for constructed-explicitly "create constructor ${in}()"
 
 # What needs an object (JLS 8.4.3.2, 15.12.3): a static method or field uses an instance member of its own object
 # only through an object, and what is used through a type is static.
@@ -110,9 +110,11 @@ say not static for through-type "make ${called} not static"
 def may-assign(s, f) when kind(s, "constructor") and parent(s, t) and given parent(f, t)
 def may-assign(s, f) when kind(s, "class") and given parent(f, s) and kind(f, "field")
 
+# A constructor of another type may instead hand the value to a constructor of the field's type, which it calls first
+# and which gives it (given-by-its-type, below): that is how a final field that went up keeps getting its value.
 rule final-where "a final field is given its value only by its own type's constructors and initializers"
   for s, f where writes(s, f) and final(f)
-  must may-assign(s, f)
+  must may-assign(s, f) or given-by-its-type(f, s)
 end
 
 # A final field's value never changes once the object is made.
@@ -192,7 +194,7 @@ problem ecj.UninitializedBlankFinalField is final-once(field-in(path, first(argu
 say not final for final-once "make ${called} not final"
 say initialized for final-once "initialize ${called} in its declaration"
 say parameter for given-by "initialize ${named} in the constructors"
-say constructor for given-by "create constructor ${name(value)}()"
+say constructor for given-by "create constructor ${in}()"
 
 # A constructor may not give a final field of its superclass its value (JLS 8.3.1.2): it hands the value to a
 # constructor of the superclass, which it calls first (JLS 8.8.7.1), one that takes nothing else; that constructor
@@ -203,8 +205,8 @@ def given-by-its-type(f, s) when kind(s, "constructor") and assigns(s, f) and pa
   and start-value(ty, v) and parameter(p, k, n, v) and type(p, ty) and stores(p, k, f) and passes(p, s, f)
 def takes-parameters(k) when parameter(x, k, y, z)
 
-say constructor for given-by-its-type "create constructor ${name(value)}()"
-say parameter for given-by-its-type "pass ${named} to the constructor of ${name(type)}"
+say constructor for given-by-its-type "create constructor ${in}()"
+say parameter for given-by-its-type "pass ${named} to the constructor of ${type}"
 
 # What a field starts with, where it is declared, is the person's to say: the language's start for its type proposed.
 def start-of(f, v) when type(f, t) and start-value(t, v)
@@ -217,8 +219,8 @@ def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "v
 def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "value") and site(u, m)
   and kind(m, "method") and expected(u, ty) and start-value(ty, v) and parameter(p, m, symbol, v) and type(p, ty)
 
-say member for resolves "create ${kind} ${named} in ${name(owner)}"
-say parameter for resolves "create parameter ${named} in ${name(owner)}()"
+say member for resolves "create ${kind} ${named} in ${in}"
+say parameter for resolves "create parameter ${named} in ${in}()"
 
 # A name misspelled (JLS 6.5.6.1, 15.12.1): a member the type it is looked up in has whose name is almost it, one or
 # two letters away as a typo is, the nearest first; changing the use to it writes its name.
@@ -244,7 +246,7 @@ def overrides-one(symbol) when known("path", path) and declared(m, path, symbol)
   and superclass(t, u) and not library(u) and type(m, ty) and visibility(m, vis) and member(n, u, symbol, "method")
   and type(n, ty) and visibility(n, vis) and same-parameters(n, m) and abstract(n)
 
-say member for overrides-one "declare ${named}() in ${name(owner)}"
+say member for overrides-one "declare ${named}() in ${in}"
 
 # What only the person knows of what is created: asked, with what the rules deduce proposed.
 ask type "type of the new field" for type of new field
@@ -265,7 +267,7 @@ ask type "return type of the new method" for type of new method
 def constructs(symbol) when known("path", path) and unresolved(u, path, symbol, "new") and scope(u, t)
   and not library(t) and constructor-for(k, t, u) and takes-arguments(k, u)
 
-say constructor-for for constructs "create constructor in ${name(owner)}"
+say constructor-for for constructs "create constructor in ${in}"
 
 # A type written that no type of the program is (JLS 6.5.5): the file's package declares one, a class or an interface.
 def resolves(symbol) when known("path", path) and unresolved(u, path, symbol, "type") and not named(_, symbol)

@@ -173,6 +173,9 @@ class ExtractSuperclassTest {
         var result = ws.invoke("extract-superclass", Map.of("type", "a.Unset", "name", "AbstractUnset", "fields", List.of("a.Unset#limit")));
 
         assertThat(result.violations()).isEmpty();
+        assertThat(result.repairs()).isEmpty(); // the rules saw it all: one plan, deduced before anything ran
+        assertThat(result.search().lines()).contains("  ! extract-superclass, then open-visibility a.Unset#limit private -> package, "
+                + "then create constructor AbstractUnset(), then pass limit to the constructor of AbstractUnset");
         assertThat(ws.errors()).isEmpty();
         assertThat(ws.source("a/AbstractUnset.java")).contains("final int limit;", """
                     AbstractUnset(int limit) {

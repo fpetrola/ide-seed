@@ -519,12 +519,17 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
 
     /** A value a change gives as a title says it: an element the plan creates, by the name it will have. */
     private static Value named(String value, Map<String, Abduction.Change> creations, Projection projection) {
-        var creation = creations.get(value);
-        if (creation == null) return value(value, projection);
-        return new Value.Text(switch (creation.relation()) {
+        return creations.containsKey(value) ? new Value.Text(nameOf(value, creations, projection)) : value(value, projection);
+    }
+
+    /** The name an element has, or the one an element the plan creates will have: a constructor, its type's. */
+    private static String nameOf(String element, Map<String, Abduction.Change> creations, Projection projection) {
+        var creation = creations.get(element);
+        if (creation == null) return projection.program().element(new ElementId(element)).name();
+        return switch (creation.relation()) {
             case "member", "parameter" -> creation.added().get(2);
-            default -> projection.program().element(new ElementId(creation.added().get(1))).name();
-        });
+            default -> nameOf(creation.added().get(1), creations, projection);
+        };
     }
 
     /**
@@ -545,7 +550,7 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
         };
         var named = switch (creation.relation()) {
             case "member", "parameter" -> values.get(2);
-            default -> projection.program().element(owner).name();
+            default -> nameOf(owner.value(), creations, projection); // a constructor is named as its type
         };
         var asks = new ArrayList<Plan.Ask>();
         var sets = new ArrayList<Setting>();
@@ -607,7 +612,8 @@ public final class Knowledge implements Remedy, QuickFix, Planner {
         variables.put("named", new Value.Text(named));
         variables.put("owner", named(owner.value(), creations, projection));
         variables.put("value", named(owner.value(), creations, projection));
-        variables.put("type", named(typeOf(values.get(1), creations, projection), creations, projection));
+        variables.put("in", new Value.Text(nameOf(owner.value(), creations, projection))); // by name: it may be created too
+        variables.put("type", new Value.Text(nameOf(typeOf(values.get(1), creations, projection), creations, projection)));
         var title = title(creation.relation(), creation.forWhat(), variables, projection, wanted);
         var method = kind.equals("method");
         var passed = group.stream().anyMatch(change -> change.relation().equals("passes"));

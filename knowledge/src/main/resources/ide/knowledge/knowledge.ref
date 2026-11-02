@@ -27,8 +27,7 @@ goal ecj.UndefinedMethod needs resolves(symbol)
 # and how each constructor takes the value and gives it.
 
 # A constructor may not give a final field of its superclass its value: java.rules says how the superclass's
-# constructor takes it instead, which keeps meaning, so it also repairs a refactoring (a field pulled up).
-goal ecj.FinalFieldAssignment needs given-by-its-type(element-at(path, line, column), inside(path, line, column))
+# constructor takes it instead (final-where), which keeps meaning, so a refactoring that pulls a field up plans it.
 
 # A class that does not implement what its supertypes leave abstract: it implements each, or it is abstract too
 # (java.rules says both, and when it may be abstract).

@@ -1621,12 +1621,29 @@ que esto no escala solo:
      `X extract-superclass, then open-visibility a.Unset#limit private -> package, then make limit not final: promise
      final of a.Unset#limit: ...`. Subir `limit` rompe `final-where`, y las reglas solo lo reparan sacando el `final`,
      que es una promesa. Unir esa regla con `given-by-its-type` es el ciclo 5.
+
+   **Ciclo 5 hecho el 2026-11-02**: el `super(limit)` de `Unset` sale en el mismo plan de extract-superclass, sin
+   reparador.
+   - `final-where` dice que un `final` lo da su propio tipo, o lo recibe de un constructor suyo al que el de otro tipo
+     se lo pasa primero: `must may-assign(s, f) or given-by-its-type(f, s)`. Una regla rota se cumple haciendo valer
+     una de sus alternativas, así que el camino de `given-by-its-type` repara lo que rompe subir `limit`. En un
+     estado real esa alternativa nunca vale, porque `passes` solo se hace, así que la regla no deja pasar nada que
+     antes no pasara.
+   - La meta de `ecj.FinalFieldAssignment` se fue de `knowledge.ref`: el problema ya es `final-where` roto, y los dos
+     fixes salen de sus alternativas ("make limit not final" y "create constructor Base(), then pass limit to the
+     constructor of Base").
+   - El rastro dice el plan entero: `extract-superclass, then open-visibility a.Unset#limit private -> package, then
+     create constructor AbstractUnset(), then pass limit to the constructor of AbstractUnset`. Es el ejemplo del
+     apéndice, deducido.
+   - Un paso de creación da por nombre dónde se crea (`${in}`) y en qué tipo (`${type}`), para decir lo que se crea
+     dentro de algo que también se crea. Las plantillas ya no llaman a `name(...)` sobre lo que todavía no existe.
 5. *Refactorings nuevos sin Java.* Extract Variable, Introduce Parameter, Introduce Field desde un local.
 
 **Cómo se sabe si funcionó.**
 
 - `knowledge.ref` no tiene efectos, y el catálogo no tiene pasos: cada refactoring es una intención.
-- El `super(limit)` sale de las reglas de final, alcance y construcción, sin nada escrito para ese caso.
+- El `super(limit)` sale de las reglas de final, alcance y construcción, sin nada escrito para ese caso. *Desde el
+  ciclo 5 de la segunda parte de la fase 4, en el mismo plan que extract-superclass.*
 - La fase 4 baja la cantidad de funciones de `ScriptFunctions`.
 - Las fases 4 y 5 no tocan ningún archivo de los drivers.
 - Ahora sí se aceptan `this.limit = limit * 2` y cualquier otra sentencia que no se pueda decir: se mueve entera,
