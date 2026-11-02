@@ -213,7 +213,9 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
       cuerpos, al final del cuerpo, y hace los usos que nombra.
     - `Delete(element, into)`: sin `into`, borra lo que nada usa; con `into`, fusiona: un campo en un campo, un
       método en un método, un local en el campo de su nombre (su declaración le da al campo el valor que daba, ahí:
-      convert-local-to-field), y los usos del borrado pasan al otro.
+      convert-local-to-field), un parámetro en el tipo de su método, de ese tipo (pasa a ser el objeto mismo: sus usos
+      son `this` y cada llamada se hace sobre lo que le pasaba: convert-to-instance-method), y los usos del borrado
+      pasan al otro.
     - `Move(element, parent, before)`: también reordena parámetros, y lleva una sentencia antes de otra o al final de
       un cuerpo, en su método o en otro; entre métodos, los usos hechos en ella pasan a ser del otro.
     - `Rename(element, name)`.
@@ -1759,6 +1761,8 @@ que esto no escala solo:
    constructor y sus getters, un parámetro nuevo cuyas llamadas pasan `new #{k}(#{params})` (un argumento dicho sin
    lenguaje sobre los parámetros del método: en cada llamada, lo que les pasa), el retarget de cada lectura de un
    parámetro viejo a su getter (sobre la única variable del método de ese tipo), y el delete de los viejos.
+   convert-to-instance-method también: move del método estático al tipo del parámetro, `set static false`, y el
+   parámetro fusionado en ese tipo. Mover un estático declara que se van los usos del tipo por el que se lo nombraba.
 
 **Cómo se sabe si funcionó.**
 

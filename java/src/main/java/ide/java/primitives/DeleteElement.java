@@ -44,6 +44,7 @@ final class DeleteElement {
         if (element.kind() == Kind.LOCAL && delete.into() != null) for (var gone : mergeLocal(c, before, element)) change = change.expect(gone);
         else if (element.kind() == Kind.LOCAL) for (var gone : deleteLocal(c, before, element)) change = change.expect(gone);
         else if (element.kind() == Kind.STATEMENT) deleteStatement(c, before, element);
+        else if (element.kind() == Kind.PARAM && delete.into() != null) for (var gone : thisParam(c, before, element, delete.into())) change = change.expect(gone);
         else if (element.kind() == Kind.PARAM) for (var gone : deleteParam(c, before, element)) change = change.expect(gone);
         else if (element.kind().isType()) deleteType(c, before, element);
         else deleteMember(c, before, element, delete.into() == null ? null : before.element(delete.into()));
@@ -222,6 +223,45 @@ final class DeleteElement {
                 }
             }
             without(edits, c.sources().unitOf(call.node()), call.arguments(), index);
+        }
+        names.remove(index);
+        c.sources().apply(edits);
+        c.ids().forget(param.id());
+        Shared.resign(c, method, declaration.unit().path(), names);
+        return gone;
+    }
+
+    /**
+     * A parameter that becomes the object itself: its method's uses of it are {@code this}, and each call is made on
+     * what it passed for it (a method reference cannot be).
+     */
+    private static List<Change.Dropped> thisParam(Context c, Program before, Element param, ElementId into) {
+        var method = before.element(param.parent());
+        if ("true".equals(method.fact(ide.program.Fact.STATIC))) throw new PrimitiveRejected("delete.into", method.qualified() + " is static: it has no object");
+        var declaration = c.declaration(method);
+        CallableDeclaration<?> node = declaration.as(CallableDeclaration.class);
+        var names = new ArrayList<>(Shared.parameterNames(node));
+        var index = names.indexOf(param.name());
+        var edits = new EditSet();
+        var gone = new ArrayList<Change.Dropped>();
+        for (var use : before.referencesTo(param.id())) {
+            edits.replace(declaration.unit(), c.use(use.id()), "this");
+            gone.add(new Change.Dropped(use.site(), into)); // merged, it was taken to bind the type: it binds nothing, it is this
+        }
+        var declared = node.getParameters().get(index).getRange().orElseThrow(); // the type it was declared with is named no more
+        for (var r : before.referencesFrom(method.id())) {
+            if (c.use(r.id()).getRange().filter(declared::contains).isPresent()) gone.add(new Change.Dropped(r.site(), r.target()));
+        }
+        without(edits, declaration.unit(), node.getParameters(), index);
+        for (var call : Shared.callsTo(c, method.id())) {
+            if (!(call.node() instanceof com.github.javaparser.ast.expr.MethodCallExpr made)) throw new PrimitiveRejected("delete.into", call.node() + " cannot be made on an object");
+            var unit = c.sources().unitOf(made);
+            var object = made.getArguments().get(index);
+            var others = new ArrayList<String>();
+            for (var i = 0; i < made.getArguments().size(); i++) if (i != index) others.add(unit.textOf(made.getArguments().get(i)));
+            var receiver = object.isNameExpr() || object.isFieldAccessExpr() || object.isMethodCallExpr() || object.isObjectCreationExpr() || object.isThisExpr()
+                    ? unit.textOf(object) : "(" + unit.textOf(object) + ")";
+            edits.replace(unit, made, receiver + "." + made.getNameAsString() + "(" + String.join(", ", others) + ")");
         }
         names.remove(index);
         c.sources().apply(edits);

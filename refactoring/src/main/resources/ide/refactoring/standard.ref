@@ -359,6 +359,17 @@ refactoring introduce-constant "Moves an expression into a constant, a static fi
   return ${f}
 end
 
+refactoring convert-to-instance-method "Makes a static method an instance method of a parameter's class, as IntelliJ's Convert to Instance Method"
+  param method : element(METHOD) "the static method"
+  param parameter : element(PARAM) "the parameter that becomes the object" from "params(method)"
+  let to = declared-type(parameter)
+  require nonempty(to) "${name(parameter)} is not of a class of the workspace"
+  move ${method} ${to}
+  set ${method} static false
+  delete ${parameter} into=${to}
+  return ${method}
+end
+
 refactoring introduce-parameter-object "Groups parameters of a method into a class it takes instead, as IntelliJ's Introduce Parameter Object"
   param method : element(METHOD) "the method"
   param params : elements(PARAM) "the parameters it groups" from "params(method)"

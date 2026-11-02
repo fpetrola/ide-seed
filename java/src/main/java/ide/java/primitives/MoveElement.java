@@ -47,7 +47,11 @@ final class MoveElement {
         if (target.kind() == Kind.PACKAGE) moveType(c, before, element, target);
         else if (element.kind() == Kind.PARAM) moveParam(c, element, target, anchor);
         else if (element.kind() == Kind.STATEMENT) moveStatement(c, before, element, target, anchor);
-        else moveMember(c, before, element, target, anchor);
+        else {
+            var change = move.intent(before, null);
+            for (var gone : moveMember(c, before, element, target, anchor)) change = change.expect(gone);
+            return change;
+        }
         return move.intent(before, null);
     }
 
@@ -56,7 +60,7 @@ final class MoveElement {
      * (imported as its file imports them, or from its package); a static one is used from elsewhere through its new
      * type, written as each file can name it.
      */
-    private static void moveMember(Context c, Program before, Element member, Element target, Element anchor) {
+    private static List<Change.Dropped> moveMember(Context c, Program before, Element member, Element target, Element anchor) {
         var moved = c.ids().address(member.id()).withOwner(target.id());
         if (c.ids().has(moved)) throw new PrimitiveRejected("projection.duplicate", c.ids().render(moved) + " already exists");
         var declaration = c.declaration(member);
@@ -67,12 +71,13 @@ final class MoveElement {
         if (!destination.unit().path().equals(declaration.unit().path())) {
             for (var qualified : named(c, before, declaration.unit(), declaration.node())) Imports.nameable(edits, destination.unit(), qualified);
         }
-        if ("true".equals(member.fact(Fact.STATIC))) through(c, before, member, target, edits);
+        var gone = "true".equals(member.fact(Fact.STATIC)) ? through(c, before, member, target, edits) : List.<Change.Dropped>of();
         Members.remove(edits, declaration.unit(), declaration.node());
         if (anchor == null) Members.append(edits, destination.unit(), type, text);
         else Members.insertBefore(edits, destination.unit(), c.declaration(anchor).node(), text);
         c.sources().apply(edits);
         c.ids().move(member.id(), target.id());
+        return gone;
     }
 
     /** The types a declaration names by a simple name its file can name them by: imported, or of its package. */
@@ -95,8 +100,12 @@ final class MoveElement {
         return named;
     }
 
-    /** The uses of a static member made outside the type it goes to name it through that type. */
-    private static void through(Context c, Program before, Element member, Element target, EditSet edits) {
+    /**
+     * The uses of a static member made outside the type it goes to name it through that type; what the type they named
+     * it through used is used no more.
+     */
+    private static List<Change.Dropped> through(Context c, Program before, Element member, Element target, EditSet edits) {
+        var gone = new ArrayList<Change.Dropped>();
         for (var use : before.referencesTo(member.id())) {
             if (before.within(use.site(), member.id()) || inside(before, use.site(), target)) continue;
             var node = c.use(use.id());
@@ -105,13 +114,27 @@ final class MoveElement {
             switch (node) {
                 case com.github.javaparser.ast.expr.NameExpr read -> edits.replace(unit, read, name + "." + member.name());
                 case com.github.javaparser.ast.expr.MethodCallExpr call when call.getScope().isEmpty() -> edits.replace(unit, call.getName(), name + "." + member.name());
-                case com.github.javaparser.ast.expr.MethodCallExpr call -> edits.replace(unit, call.getScope().orElseThrow(), name);
-                case com.github.javaparser.ast.expr.FieldAccessExpr access -> edits.replace(unit, access.getScope(), name);
+                case com.github.javaparser.ast.expr.MethodCallExpr call -> {
+                    edits.replace(unit, call.getScope().orElseThrow(), name);
+                    gone.addAll(within(c, before, use.site(), call.getScope().orElseThrow()));
+                }
+                case com.github.javaparser.ast.expr.FieldAccessExpr access -> {
+                    edits.replace(unit, access.getScope(), name);
+                    gone.addAll(within(c, before, use.site(), access.getScope()));
+                }
                 default -> {
                     // a method reference, or what names it otherwise, stays as written: the verifier sees what it binds
                 }
             }
         }
+        return gone;
+    }
+
+    /** The uses {@code site} makes inside {@code node}: they go with it. */
+    private static List<Change.Dropped> within(Context c, Program before, ide.program.ElementId site, Node node) {
+        var range = node.getRange().orElseThrow();
+        return before.referencesFrom(site).stream().filter(r -> c.use(r.id()).getRange().filter(range::contains).isPresent())
+                .map(r -> new Change.Dropped(r.site(), r.target())).toList();
     }
 
     /** Whether an element is in {@code type}, or in a type inside it. */
