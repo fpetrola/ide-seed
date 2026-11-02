@@ -121,6 +121,11 @@ poms are the dependency map:
 The design reference, with a sheet per module, the decisions taken and the plan, is
 [ARCHITECTURE.md](ARCHITECTURE.md) (in Spanish). [CLAUDE.md](CLAUDE.md) is a map of the code as it is today.
 
+## Extending it
+
+Tutorials for adding refactorings, intents, rules and quick fixes, and capabilities are in
+[docs/extending](docs/extending/README.md).
+
 ## How it is developed
 
 Strict TDD: a failing acceptance test that runs a real refactoring or quick fix over inline sources, the minimal
