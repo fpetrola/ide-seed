@@ -50,7 +50,7 @@ public final class SaidBody {
             if (program.contains(reference.target()) && program.element(reference.target()).kind() == Kind.FIELD) fields.add(reference.target());
         }
         var parameters = new java.util.HashMap<String, ElementId>();
-        program.children(program.element(element).parent()).stream().filter(e -> e.kind() == Kind.PARAM).forEach(p -> parameters.put(p.name(), p.id()));
+        program.children(program.memberOf(element).id()).stream().filter(e -> e.kind() == Kind.PARAM).forEach(p -> parameters.put(p.name(), p.id()));
         return Optional.ofNullable(new SaidBody(targets, fields, parameters).statement((Statement) reading.declaration(element).node()));
     }
 

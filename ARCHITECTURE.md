@@ -1786,6 +1786,13 @@ que esto no escala solo:
    crea al final del bloque que tiene otra sentencia, y una se mueve a ese final. El orden del script importa: el
    bucle nuevo se crea primero dentro del viejo, para que lo que entra en él lea el valor hasta que lea el suyo (un
    nombre que un momento no liga nada deja de ser un uso y corre la numeración de los demás), y recién después sale.
+   Antes de partirlo hace falta el valor de la vuelta, y para eso está introduce-local-object, el Introduce Parameter
+   Object de los locales: con un constructor de una clase que ya existe, cada lectura de un local pasa al getter del
+   campo al que el constructor le da ese valor, y los valores van al constructor en el orden en que corrían (se
+   inlinean del último al primero, así nada queda entre cada uno y el objeto). Qué getter es cada uno lo dice el
+   lenguaje de cuerpos (la sentencia del constructor que asigna el parámetro y el método que responde ese campo), con
+   una función nueva de los scripts, `getter-of`; va contra la idea de reducir `ScriptFunctions`, y es candidata a
+   pasar al conocimiento (`stores` ya está en `GraphFacts`).
    *Otro, también de test1:* un proyecto abierto desde su carpeta tiene las fuentes en `src/main/java`, y un tipo creado
    o movido iba a la carpeta del paquete contada desde la raíz del proyecto. Ahora va al source root que tiene archivos
    de su paquete, y si ninguno tiene, al que tiene más archivos. El source root de un archivo es su carpeta sin las

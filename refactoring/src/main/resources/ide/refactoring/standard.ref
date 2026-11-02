@@ -415,6 +415,28 @@ refactoring introduce-variable "Moves an expression into a local declared right 
   return ${v}
 end
 
+refactoring introduce-local-object "Makes locals one object of an existing class, with one of its constructors, as Introduce Parameter Object does with parameters: each read of one reads the getter of the field the constructor gives it to"
+  param constructor : element(CONSTRUCTOR) "the constructor that makes the object"
+  param locals : elements(LOCAL) "the locals, declared in the order the constructor takes them"
+  param name : text "name of the object" default "${decap(name(owner(constructor)))}"
+  require eq(count(locals), count(params(constructor))) "${qualified(constructor)} takes ${count(params(constructor))} values"
+  let at = statement(first(refs(first(locals))))
+  o := create LOCAL ${owner(first(locals))} ${name} facts="type=${qualified(owner(constructor))}"
+  move ${first(statements(owner(first(locals))))} ${owner(at)} before=${at}
+  # the last first: a read made a getter's call on the object renumbers the uses after it
+  for l in reversed(locals)
+    for r in reversed(refs(l))
+      retarget ${r} ${getter-of(constructor, locals, l)}
+    end
+  end
+  set ${o} initializer "new #{constructor}(#{locals})"
+  # the last first: its value has nothing between it and the object's
+  for l in reversed(locals)
+    inline-variable ${l}
+  end
+  return ${o}
+end
+
 refactoring split-loop "Splits a loop in two, as Fowler's Split Loop: the first puts in a list the value each turn makes, the second does with each what came after it; it reads them all before doing anything" changes meaning
   param loop : element(STATEMENT) "the loop"
   param value : element(LOCAL) "what each turn makes, declared in the loop's block"

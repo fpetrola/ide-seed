@@ -91,6 +91,7 @@ final class ScriptFunctions {
                     .toList());
             case "constructors" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("CONSTRUCTOR")).toList());
             case "body" -> text(element(args, 0).fact(Fact.BODY));
+            case "getter-of" -> getterOf(element(args, 0), Value.items(args.get(1)).stream().map(this::element).toList(), element(args, 2));
             case "after" -> { // the statements that follow one, in order, among those of what holds it
                 var statement = element(args, 0);
                 var all = graph.children(statement.parent()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList();
@@ -237,5 +238,28 @@ final class ScriptFunctions {
 
     private static String cap(String s) {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    /**
+     * What reads, through an object a constructor makes, the value given in {@code item}'s place among {@code items}: the
+     * method whose body answers the field the constructor's body gives that parameter, as said in no language.
+     */
+    private Value getterOf(Element constructor, List<Element> items, Element item) {
+        var params = graph.children(constructor.id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList();
+        var at = items.indexOf(item);
+        if (at < 0 || at >= params.size()) throw new IllegalArgumentException(item.qualified() + " has no parameter of " + constructor.qualified());
+        var param = params.get(at).id();
+        var field = graph.children(constructor.id()).stream().filter(e -> e.kind().name().equals("STATEMENT"))
+                .flatMap(s -> projection.said(s.id()).stream().flatMap(text -> ide.program.Body.parse(text, graph, constructor.id()).statements().stream()))
+                .filter(s -> s instanceof ide.program.Body.Assign a && a.value() instanceof ide.program.Body.Parameter p && p.parameter().equals(param))
+                .map(s -> ((ide.program.Body.Assign) s).field()).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(constructor.qualified() + " gives " + params.get(at).name() + " to no field"));
+        var read = "return " + ide.program.Body.name(field);
+        return graph.members(constructor.parent()).stream().filter(m -> m.kind().name().equals("METHOD"))
+                .filter(m -> { // its body is that one statement
+                    var own = graph.children(m.id()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList();
+                    return own.size() == 1 && projection.said(own.getFirst().id()).filter(read::equals).isPresent();
+                }).findFirst().map(m -> elem(m.id()))
+                .orElseThrow(() -> new IllegalArgumentException("no method of " + graph.element(constructor.parent()).qualified() + " answers " + graph.element(field).qualified()));
     }
 }
