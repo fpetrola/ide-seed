@@ -1806,6 +1806,10 @@ que esto no escala solo:
    un local que no cambia como lectura pura, para que inline-variable pueda reordenar. Hoy cualquier llamada cuenta
    como efecto; hacerlo es saber qué métodos de la biblioteca no hacen nada, un conocimiento que el principio 5 manda
    declarar y no suponer.
+   *make-field-instance (2026-11-02, lo pidió Fernando para lo que test1 necesitaba):* un campo static pasa a ser de cada
+   objeto. Si se crea más de un objeto, el valor ya no se comparte, y eso no lo ve ningún verificador; por eso declara
+   `changes meaning`, como split-loop. Es un `set static false` con nombre. Si un método static lo usa, el reparador lo
+   hace de instancia cuando nadie lo llama sin un objeto; si alguien sí lo llama así, se rechaza.
 
 **Cómo se sabe si funcionó.**
 

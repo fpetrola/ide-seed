@@ -56,7 +56,7 @@ end
 - **Kinds** for `element(...)`: `PACKAGE`, `CLASS`, `INTERFACE`, `ENUM`, `FIELD`, `CONSTRUCTOR`, `METHOD`, `PARAM`,
   `LOCAL`, `STATEMENT`.
 - **`default "template"`** may use `${...}`: `default "create${name(owner(constructor))}"`.
-- **`changes meaning`** in the header marks a refactoring that changes behavior on purpose (e.g. `split-loop`).
+- **`changes meaning`** in the header marks a refactoring that changes behavior on purpose (e.g. `split-loop`, `make-field-instance`).
   The verifier still judges it, but the repairer never picks it up by itself.
 - `# ` starts a comment line.
 

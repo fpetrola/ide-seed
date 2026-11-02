@@ -372,6 +372,13 @@ refactoring convert-to-instance-method "Makes a static method an instance method
   return ${method}
 end
 
+refactoring make-field-instance "Makes a static field one each object has; its value is no longer shared, which matters when more than one object is made" changes meaning
+  param field : element(FIELD) "the static field"
+  require eq(attr(field, "static"), "true") "${name(field)} is not static"
+  set ${field} static false
+  return ${field}
+end
+
 refactoring introduce-parameter-object "Groups parameters of a method into a class it takes instead, as IntelliJ's Introduce Parameter Object"
   param method : element(METHOD) "the method"
   param params : elements(PARAM) "the parameters it groups" from "params(method)"
