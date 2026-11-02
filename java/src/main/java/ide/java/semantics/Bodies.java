@@ -66,6 +66,25 @@ public final class Bodies {
                 : ((com.github.javaparser.ast.body.ConstructorDeclaration) callable).getBody();
     }
 
+    /**
+     * The statements a statement holds in its blocks, in order (its branches, its loop's body, its catches, its switch's
+     * entries): what they hold is theirs, and a lambda's or a class's are not statements of the body.
+     */
+    public static List<Statement> nested(Statement holder) {
+        var found = new java.util.ArrayList<Statement>();
+        for (var child : holder.getChildNodes()) collect(child, found);
+        found.sort(java.util.Comparator.comparing(s -> s.getBegin().orElseThrow()));
+        return found;
+    }
+
+    private static void collect(Node node, List<Statement> found) {
+        if (node instanceof BlockStmt || node instanceof com.github.javaparser.ast.stmt.SwitchEntry || node instanceof com.github.javaparser.ast.stmt.CatchClause) {
+            for (var child : node.getChildNodes()) collect(child, found);
+        } else if (node instanceof Statement statement) {
+            found.add(statement);
+        }
+    }
+
     /** Where a statement is among its body's, by what it is and not by how it looks; -1 if it is none of them. */
     public static int place(List<Statement> statements, Node statement) {
         for (var i = 0; i < statements.size(); i++) if (statements.get(i) == statement) return i;

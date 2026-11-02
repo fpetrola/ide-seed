@@ -51,8 +51,9 @@ public sealed interface Primitive {
             case Move m -> {
                 var change = Change.NONE.pin(m.element(), Change.Aspect.PARENT);
                 var moved = before.element(m.element());
-                if (moved.kind() == Kind.STATEMENT && !m.parent().equals(moved.parent())) { // the uses made in it are the other method's
-                    for (var use : before.referencesIn(m.element())) change = change.expect(new Change.Resited(use.target(), use.site(), m.parent()));
+                var to = moved.kind() == Kind.STATEMENT ? before.memberOf(m.parent()).id() : null; // into a block of a statement: its method
+                if (to != null && !to.equals(before.memberOf(moved.id()).id())) { // the uses made in it are the other method's
+                    for (var use : before.referencesIn(m.element())) change = change.expect(new Change.Resited(use.target(), use.site(), to));
                 }
                 yield change;
             }

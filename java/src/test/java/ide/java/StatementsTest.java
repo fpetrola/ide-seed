@@ -115,5 +115,36 @@ class StatementsTest {
                 """);
         assertThat(statements(projection.program(), "a.B#k(int)")).hasSize(2);
     }
-}
 
+    /**
+     * A statement of a block another holds (a branch, a loop's body) is an element of that statement, in order; a use is
+     * in the innermost, and in those that hold it.
+     */
+    @Test
+    void theStatementsOfABlockAreElementsOfTheStatementThatHoldsIt() {
+        var projection = JavaProjection.of(Map.of("a/A.java", """
+                package a;
+
+                class A {
+                    int n;
+
+                    void count(boolean up) {
+                        if (up) {
+                            n++;
+                        } else {
+                            n--;
+                            n--;
+                        }
+                    }
+                }
+                """));
+        var p = projection.program();
+
+        var branch = p.find("a.A#count(boolean)[1]").orElseThrow().id();
+        assertThat(statements(p, "a.A#count(boolean)[1]")).hasSize(3);
+        var down = p.find("a.A#count(boolean)[1][3]").orElseThrow().id();
+        assertThat(p.referencesIn(down)).extracting(r -> r.statement()).containsExactly(down);
+        assertThat(p.referencesIn(branch)).hasSize(4); // its condition's and its branches'
+        assertThat(p.memberOf(down).qualified()).isEqualTo("a.A#count(boolean)");
+    }
+}

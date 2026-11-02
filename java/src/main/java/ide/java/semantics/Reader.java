@@ -18,6 +18,7 @@ import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.expr.TypeExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
@@ -495,13 +496,21 @@ public final class Reader {
         }
     }
 
-    /** The statements of a body, in order: what one holds, a block too, is part of it. A statement has no name. */
+    /**
+     * The statements of a body, in order, and those each holds in its blocks, its own elements ({@link Bodies#nested}).
+     * A statement has no name.
+     */
     private void addStatements(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, CallableDeclaration<?> callable,
                                ElementId owner) {
-        var statements = Bodies.statements(callable);
+        addStatements(elements, declarations, unit, Bodies.statements(callable), owner);
+    }
+
+    private void addStatements(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, List<Statement> statements,
+                               ElementId owner) {
         for (var i = 0; i < statements.size(); i++) {
             var id = add(elements, new Address.Statement(owner, i), Kind.STATEMENT, "", owner, Map.of());
             declarations.put(id, new Decl(unit, statements.get(i)));
+            addStatements(elements, declarations, unit, Bodies.nested(statements.get(i)), id);
         }
     }
 
@@ -632,14 +641,21 @@ public final class Reader {
         return new Place(field.map(v -> ids.get(new Address.Field(owner, v.getNameAsString()))).orElse(owner), null);
     }
 
-    /** The statement of a callable's body a node is in, or null: in its signature, or in no statement of it. */
+    /** The innermost statement of a callable's body a node is in, or null: in its signature, or in no statement of it. */
     private ElementId statementOf(Node node, CallableDeclaration<?> method, ElementId callable) {
-        var statements = Bodies.statements(method);
-        for (var n = node; n != null && n != method; n = n.getParentNode().orElse(null)) {
-            var place = Bodies.place(statements, n);
-            if (place >= 0) return ids.get(new Address.Statement(callable, place));
+        List<Statement> statements = Bodies.statements(method);
+        ElementId statement = null;
+        while (true) {
+            var place = -1;
+            for (var i = 0; i < statements.size() && place < 0; i++) {
+                if (statements.get(i) == node || statements.get(i).isAncestorOf(node)) place = i;
+            }
+            if (place < 0) return statement;
+            var held = ids.get(new Address.Statement(statement == null ? callable : statement, place));
+            if (held == null) return statement;
+            statement = held;
+            statements = Bodies.nested(statements.get(place));
         }
-        return null;
     }
 
     static String nameOf(CallableDeclaration<?> callable) {

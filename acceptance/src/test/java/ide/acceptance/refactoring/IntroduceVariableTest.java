@@ -96,13 +96,10 @@ class IntroduceVariableTest {
         assertThat(ws.errors()).isEmpty();
     }
 
-    /**
-     * An expression in a loop would be computed once, before it, by a local declared before the loop (a body's
-     * statements are its top-level ones): refused, the code as it was.
-     */
+    /** An expression in a loop and a branch: the local is declared right before its statement there, in the same block. */
     @Test
-    void anExpressionInALoopIsRefusedRatherThanComputedOnce() {
-        var source = """
+    void inALoopTheLocalIsDeclaredInTheBlockOfItsStatement() {
+        var ws = Workspace.of(Map.of("a/Rows.java", """
                 package a;
 
                 import java.util.List;
@@ -111,17 +108,43 @@ class IntroduceVariableTest {
                     void print(List<String> lines) {
                         for (String line : lines) {
                             List<String> fields = List.of(line.split(","));
-                            System.out.println("dni " + fields.get(3) + ".");
+                            if (fields.get(0).startsWith("C")) {
+                                System.out.println("dni " + fields.get(3) + ".");
+                            }
                         }
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#print(List<String>)", "lines", "10:45-10:57", "name", "dni"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Rows.java")).contains("""
+                            if (fields.get(0).startsWith("C")) {
+                                String dni = fields.get(3);
+                                System.out.println("dni " + dni + ".");
+                            }
+                """).doesNotContain("computeDni");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    /** A statement of a branch that is no block: there is no place before it for a local, refused as it was. */
+    @Test
+    void aBranchThatIsNoBlockIsRefused() {
+        var source = """
+                package a;
+
+                class Rows {
+                    void print(String line) {
+                        if (line.isEmpty()) System.out.println("dni " + line.trim());
                     }
                 }
                 """;
         var ws = Workspace.of(Map.of("a/Rows.java", source));
 
-        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#print(List<String>)", "lines", "9:41-9:53", "name", "dni"));
+        var result = ws.invoke("introduce-variable", Map.of("method", "a.Rows#print(String)", "lines", "5:57-5:67", "name", "dni"));
 
         assertThat(result.applied()).isFalse();
-        assertThat(result.toString()).contains("retarget.evaluation");
         assertThat(ws.source("a/Rows.java")).isEqualTo(source);
     }
 

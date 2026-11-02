@@ -1001,6 +1001,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 33 | Motor de reglas          | un producto propio, `rules`, que no depende de nada: Datalog con negación estratificada (seguro y estratificado al armarse), hechos como vistas pedidas por patrón y suponer un cambio como operación del contrato; el motor estándar evalúa a demanda. Uno maduro entra como otra implementación de `Engine`, con un adaptador y los mismos tests de contrato. El lenguaje de superficie (`def`, `say`) y el planificador quedan en `knowledge` | tomada, 2026-11-01 |
 | 34 | Intenciones              | un refactoring del catálogo puede ser una intención: dice lo que tiene que valer al final (`want`, en el lenguaje de `knowledge`: hechos del grafo y `given` para las condiciones), nada de cómo. `refactoring` la guarda como texto y se la pasa al planificador de la biblioteca (`Planner`), que es el conocimiento: deduce los cambios y lo que rompen en un solo plan, sin que lo pedido cuente para el tope, y toma el más barato que conserva el sentido. El reparador queda para lo que las reglas no previeron y sigue juzgando todo plan | tomada, 2026-11-02 |
 | 35 | Usos de parámetros       | un uso de un parámetro de un método o constructor (no de una lambda) es una referencia desde el método, sin receptor, en su sentencia, como el de un local; un cuerpo dicho sin lenguaje que nombra un parámetro lo lee. Hace que introduce-parameter-object y convert-to-instance-method se compongan de primitivos | tomada, 2026-11-02 |
+| 36 | Sentencias anidadas     | una sentencia de un bloque que otra tiene (sus ramas, el cuerpo de su bucle, sus catch, las entradas de su switch; no las de una lambda ni las de una clase) es un elemento de esa sentencia, en orden (`m()[2][1]`); un uso está en la más interna, y `referencesIn` de una sentencia trae también los de las que tiene adentro. Mover una sentencia antes de otra de un bloque anidado es el mismo `move`, con la que la tiene como padre. Reemplaza en parte la 32 (solo las de primer nivel). Hace que introduce-variable declare el local en el bloque de su sentencia | tomada, 2026-11-02 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -1770,8 +1771,11 @@ que esto no escala solo:
    de introduce-variable se declara antes de la sentencia entera; una expresión dentro de un `while` o de un `if` se
    calcularía una sola vez, antes. Ahora el driver rechaza el retarget de una llamada a un local cuando la llamada corre
    en una rama, un bucle o un bloque anidado que el local no tiene adentro (`retarget.evaluation`). Para hacerlo bien
-   hace falta poder nombrar una sentencia anidada como lugar: queda para decidir si las sentencias de bloques anidados
-   pasan a ser elementos (cambia la decisión de que un bloque anidado es parte de su sentencia).
+   hace falta poder nombrar una sentencia anidada como lugar. *Hecho el mismo día (decisión 36, a pedido de
+   Fernando):* las sentencias de los bloques anidados son elementos de la sentencia que los tiene, y el `move` de
+   introduce-variable lleva el local antes de la sentencia más interna, en su bloque (`${owner(at)}`). Una rama que no
+   es un bloque (`if (c) x();`) no tiene dónde, y se rechaza. El rechazo de `retarget.evaluation` queda como guarda.
+   Por ahora es del driver de Java: la proyección en memoria no tiene bloques, y el contrato todavía no lo pide.
    *Otro, también de test1:* un proyecto abierto desde su carpeta tiene las fuentes en `src/main/java`, y un tipo creado
    o movido iba a la carpeta del paquete contada desde la raíz del proyecto. Ahora va al source root que tiene archivos
    de su paquete, y si ninguno tiene, al que tiene más archivos. El source root de un archivo es su carpeta sin las

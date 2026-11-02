@@ -33,7 +33,8 @@ import static ide.java.semantics.Resolution.resolveType;
  * Moves an element, keeping its identity: a member into another type (with its comment, just before another member
  * or at the end), a parameter within its method (the calls' arguments follow), a top-level type to another package
  * (a new file, and the imports that follow), a statement before another of a body or at its end, in its method or
- * another one (one that declares locals stays: they would have to go with it).
+ * another one (one that declares locals stays: they would have to go with it), or before one of a block another
+ * statement holds.
  */
 final class MoveElement {
 
@@ -145,17 +146,23 @@ final class MoveElement {
         }
     }
 
-    private static void moveStatement(Context c, Program before, Element statement, Element method, Element anchor) {
-        if (anchor != null && !method.id().equals(anchor.parent())) {
-            throw new PrimitiveRejected("move.before", anchor.qualified() + " is not a statement of " + method.qualified());
+    private static void moveStatement(Context c, Program before, Element statement, Element holder, Element anchor) {
+        if (anchor != null && !holder.id().equals(anchor.parent())) {
+            throw new PrimitiveRejected("move.before", anchor.qualified() + " is not a statement of " + holder.qualified());
         }
         if (anchor != null && anchor.id().equals(statement.id())) return;
+        var nested = holder.kind() == Kind.STATEMENT; // among the statements another holds in its blocks
+        if (nested && (anchor == null || !(c.declaration(anchor).node().getParentNode().orElse(null) instanceof com.github.javaparser.ast.stmt.BlockStmt)
+                || !Statements.alone(c.declaration(anchor).unit(), c.declaration(anchor).node()))) {
+            throw new PrimitiveRejected("move.before", "a statement goes into another's block only before one of it alone on its lines");
+        }
+        var method = nested ? before.memberOf(holder.id()) : holder;
         var declaration = c.declaration(statement);
         var unit = declaration.unit();
         var node = declaration.node();
         if (!Statements.alone(unit, node)) throw new PrimitiveRejected("move.unsupported", statement.qualified() + " shares its lines");
         var declared = node.findAll(com.github.javaparser.ast.expr.VariableDeclarationExpr.class);
-        if (!declared.isEmpty() && !method.id().equals(statement.parent())) {
+        if (!declared.isEmpty() && !method.id().equals(before.memberOf(statement.id()).id())) {
             throw new PrimitiveRejected("move.unsupported", statement.qualified() + " declares locals, which would have to go with it");
         }
         if (!declared.isEmpty()) { // within its method its locals stay its method's: each keeps its number while none of its name is passed
@@ -167,7 +174,8 @@ final class MoveElement {
         CallableDeclaration<?> callable = destination.as(CallableDeclaration.class);
         var statements = Bodies.statements(callable);
         var at = destination.unit();
-        var indent = statements.isEmpty() ? at.indentation(callable.getBegin().orElseThrow().line) + "    "
+        var indent = nested ? at.indentation(c.declaration(anchor).node().getBegin().orElseThrow().line)
+                : statements.isEmpty() ? at.indentation(callable.getBegin().orElseThrow().line) + "    "
                 : at.indentation(statements.getFirst().getBegin().orElseThrow().line);
         var text = Members.text(unit, node, indent);
         var edits = new EditSet();
@@ -177,12 +185,12 @@ final class MoveElement {
         var source = statement.parent();
         var left = before.children(source).stream().filter(e -> e.kind() == Kind.STATEMENT && !e.id().equals(statement.id()))
                 .map(Element::id).toList();
-        var placed = new ArrayList<>(source.equals(method.id()) ? left : before.children(method.id()).stream()
+        var placed = new ArrayList<>(source.equals(holder.id()) ? left : before.children(holder.id()).stream()
                 .filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList());
         placed.add(anchor == null ? placed.size() : placed.indexOf(anchor.id()), statement.id());
         c.sources().apply(edits);
-        c.ids().placeStatements(method.id(), placed);
-        if (!source.equals(method.id())) c.ids().placeStatements(source, left);
+        c.ids().placeStatements(holder.id(), placed);
+        if (!source.equals(holder.id())) c.ids().placeStatements(source, left);
     }
 
     private static void moveParam(Context c, Element param, Element method, Element anchor) {

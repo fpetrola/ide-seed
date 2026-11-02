@@ -403,7 +403,7 @@ refactoring introduce-variable "Moves an expression into a local declared right 
   let passed = variables(method, params(m))
   v := create LOCAL ${method} ${name}
   set ${v} type ${type(m)}
-  move ${first(statements(method))} ${method} before=${at}
+  move ${first(statements(method))} ${owner(at)} before=${at}
   for r in refs(m)
     retarget ${r} ${v}
   end

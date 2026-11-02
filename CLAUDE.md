@@ -24,13 +24,14 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `core` — Capability, CapabilityRegistry, Param, Json (written and read), EventLog (JSONL), TextDiff (also what two
   sequences share in order). Knows nothing else.
 - `program` (core) — the graph: Element/ElementId/Kind (what a body is made of, `inBody`: LOCAL and STATEMENT, the
-  top-level statements of a body, in order; nested blocks are part of theirs), Fact (typed facts; LIBRARY marks a library type the
+  statements of a body, in order, and those of the blocks a statement holds, its own, in order: `m()[2][1]`;
+  a lambda's or a class's are theirs), Fact (typed facts; LIBRARY marks a library type the
   workspace names: never changed, its name is its id, out of the workspace hierarchy; INITIALIZED a field given its
   value where it is declared; THROWS what a callable declares it throws, as written), Unresolved (a use that binds
   nothing, same id space as references, with the type a member is looked up in; a Retarget binds it),
   Reconciliation (after an edit by hand, pairs what changed address with what it was, only when the structure leaves
-  no doubt), Reference (id `site@ordinal`; site is the member that makes the use, `statement` the statement of the
-  body it is in, if any; `referencesIn(statement)`; Mode:
+  no doubt), Reference (id `site@ordinal`; site is the member that makes the use, `statement` the innermost
+  statement of the body it is in, if any; `referencesIn(statement)`, those nested in it too; Mode:
   uses read|write|update|call|new|type and links extends|implements|declared; Receiver: what a use is made on, the
   object itself, a type or another object, none for links, types and news), Program (indexed queries, diff,
   `expecting(Change)`, `outline()`), Address (typed: types by qualified name, members by owner id, callables by
@@ -80,8 +81,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   binding (another value later, effects unless read once with nothing between that could tell, when the value
   moves there, another type, what it reads changed between, a read in a lambda); a local
   nothing reads is deleted with its lines; a deleted parameter takes its argument from every call, whose uses go on
-  purpose (one with effects is refused). The top-level statements of each body are elements; the primitives that
-  change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
+  purpose (one with effects is refused). The statements of each body are elements, and so are those of the blocks
+  each holds (Bodies.nested); a statement moves before one of a nested block, alone on its lines, the same way; the
+  primitives that change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
   `inside` answers the innermost element, a statement or a local too. `mains` are the classes a program runs from: the first
   top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. A new parameter's argument may be said in no language over the method's parameters (each call passes

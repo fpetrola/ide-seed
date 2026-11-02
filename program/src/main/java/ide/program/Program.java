@@ -52,7 +52,9 @@ public final class Program {
         for (var r : this.references) {
             from.computeIfAbsent(r.site(), k -> new ArrayList<>()).add(r);
             to.computeIfAbsent(r.target(), k -> new ArrayList<>()).add(r);
-            if (r.statement() != null) in.computeIfAbsent(r.statement(), k -> new ArrayList<>()).add(r);
+            for (var s = r.statement(); s != null && this.elements.containsKey(s) && this.elements.get(s).kind() == Kind.STATEMENT; s = this.elements.get(s).parent()) {
+                in.computeIfAbsent(s, k -> new ArrayList<>()).add(r); // in the statements that hold its own too
+            }
             byReferenceId.putIfAbsent(r.id(), r);
         }
         this.unresolved = List.copyOf(unresolved);
@@ -152,7 +154,7 @@ public final class Program {
         return from.getOrDefault(site, List.of());
     }
 
-    /** The uses made in a statement of a body, in order. */
+    /** The uses made in a statement of a body, in order, those of the statements nested in it too. */
     public List<Reference> referencesIn(ElementId statement) {
         return in.getOrDefault(statement, List.of());
     }
