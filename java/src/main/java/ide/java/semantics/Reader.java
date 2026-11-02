@@ -341,7 +341,8 @@ public final class Reader {
                 }
                 default -> {
                     var field = resolveField((Expression) use);
-                    var local = field == null && use instanceof NameExpr name && resolveLocal(name) instanceof VariableDeclarator declarator ? local(declarator) : null;
+                    var local = field == null && use instanceof NameExpr name && resolveLocal(name) instanceof VariableDeclarator declarator ? local(declarator)
+                            : field == null && use instanceof NameExpr name && Resolution.resolveParameter(name) instanceof com.github.javaparser.ast.body.Parameter parameter ? param(parameter) : null;
                     var type = field == null && local == null && use instanceof NameExpr name ? resolveTypeDeclaration(name) : null;
                     typeName = type != null;
                     target = field != null ? field(field) : local != null ? local : named(type, named);
@@ -361,7 +362,8 @@ public final class Reader {
             var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
             nodes.put(id, use);
             var mode = typeName ? Mode.TYPE : modeOf(use);
-            var receiver = target != null && target.value().startsWith(Kind.LOCAL.prefix()) ? Reference.Receiver.NONE : receiver(use, mode);
+            var receiver = target != null && (target.value().startsWith(Kind.LOCAL.prefix()) || target.value().startsWith(Kind.PARAM.prefix()))
+                    ? Reference.Receiver.NONE : receiver(use, mode);
             if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use), place.statement()));
             else references.add(new Reference(id, site, target, name, mode, receiver, place.statement()));
         }
@@ -513,6 +515,17 @@ public final class Reader {
         var owner = ids.get(new Address.Type(qualifiedOf(declared)));
         var method = owner == null ? null : ids.get(new Address.Callable(owner, nameOf(callable), keys.of(callable)));
         return method == null ? null : ids.get(new Address.Local(method, declarator.getNameAsString(), ordinal));
+    }
+
+    /** The parameter of a method or constructor a declaration is (not a lambda's), or null. */
+    public ElementId param(com.github.javaparser.ast.body.Parameter parameter) {
+        var callable = parameter.getParentNode().filter(CallableDeclaration.class::isInstance).map(CallableDeclaration.class::cast).orElse(null);
+        if (callable == null) return null;
+        var type = callable.findAncestor(TypeDeclaration.class).orElse(null);
+        if (!(type instanceof TypeDeclaration<?> declared) || declared.getFullyQualifiedName().isEmpty()) return null;
+        var owner = ids.get(new Address.Type(qualifiedOf(declared)));
+        var method = owner == null ? null : ids.get(new Address.Callable(owner, nameOf(callable), keys.of(callable)));
+        return method == null ? null : ids.get(new Address.Param(method, parameter.getNameAsString()));
     }
 
     private void addParams(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit, CallableDeclaration<?> callable,

@@ -53,8 +53,8 @@ class CatalogTest {
 
         var p = projection.program();
         assertThat(uses(p, getter)).containsExactly("a.A#x read");
-        assertThat(uses(p, setter)).containsExactly("a.A#x write");
-        assertThat(uses(p, staticSetter)).containsExactly("a.A#n write");
+        assertThat(uses(p, setter)).containsExactly("a.A#x write", "a.A#setX(int)/x read");
+        assertThat(uses(p, staticSetter)).containsExactly("a.A#n write", "a.A#setN(int)/n read");
         assertThat(catalog()).doesNotContain("leak");
     }
 }

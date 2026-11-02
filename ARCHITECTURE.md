@@ -325,7 +325,8 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
   campos, parámetros, llamadas y objetos nuevos); si algo no se puede (un local, un literal), no dice nada.
   La proyección en memoria guarda un cuerpo como su texto y hace los usos que nombra. La obligación 13 (etapa 3,
   fase 1): un local es un elemento de su método, con su tipo, y cada uso suyo es una referencia desde el método,
-  sin receptor. La obligación 14 (fase 2): las sentencias de un cuerpo son elementos de su método, en orden, y un uso
+  sin receptor; desde el 2026-11-02 (decisión 35) también cada uso de un parámetro, y un cuerpo dicho sin lenguaje
+  que nombra un parámetro lo lee. La obligación 14 (fase 2): las sentencias de un cuerpo son elementos de su método, en orden, y un uso
   hecho en una dice en cuál está; un cuerpo que conserva lo que el método hace agrega sentencias después de las
   suyas, que siguen siendo quienes eran, y uno que lo reemplaza trae sentencias nuevas. El ítem 5 suma al fixture una
   clase anidada sin usos (`b.C.Note`) y tres escenarios: borrarla, fusionar un método en otro, y retargetear el tipo
@@ -994,6 +995,7 @@ nuevos de `engine` fijan comportamiento que ya existía: no lo condujeron, lo hi
 | 32 | Sentencias y locales     | las sentencias de primer nivel de un cuerpo y las variables locales son elementos del grafo (`STATEMENT`, `LOCAL`), sitio de sus usos; las expresiones siguen opacas; los nueve primitivos alcanzan; `Body` dice una sentencia. El conocimiento pasa a ser reglas generales del lenguaje, sin transformaciones escritas: el motor las deduce de lo que se rompe, y un refactoring es solo una intención. Reemplaza en parte la 7 (cuerpos fuera del grafo). Sección 9, etapa 3 y su apéndice | propuesta, 2026-11-01 |
 | 33 | Motor de reglas          | un producto propio, `rules`, que no depende de nada: Datalog con negación estratificada (seguro y estratificado al armarse), hechos como vistas pedidas por patrón y suponer un cambio como operación del contrato; el motor estándar evalúa a demanda. Uno maduro entra como otra implementación de `Engine`, con un adaptador y los mismos tests de contrato. El lenguaje de superficie (`def`, `say`) y el planificador quedan en `knowledge` | tomada, 2026-11-01 |
 | 34 | Intenciones              | un refactoring del catálogo puede ser una intención: dice lo que tiene que valer al final (`want`, en el lenguaje de `knowledge`: hechos del grafo y `given` para las condiciones), nada de cómo. `refactoring` la guarda como texto y se la pasa al planificador de la biblioteca (`Planner`), que es el conocimiento: deduce los cambios y lo que rompen en un solo plan, sin que lo pedido cuente para el tope, y toma el más barato que conserva el sentido. El reparador queda para lo que las reglas no previeron y sigue juzgando todo plan | tomada, 2026-11-02 |
+| 35 | Usos de parámetros       | un uso de un parámetro de un método o constructor (no de una lambda) es una referencia desde el método, sin receptor, en su sentencia, como el de un local; un cuerpo dicho sin lenguaje que nombra un parámetro lo lee. Hace que introduce-parameter-object y convert-to-instance-method se compongan de primitivos | tomada, 2026-11-02 |
 
 Una decisión "propuesta" se aplica salvo objeción; al aplicarse pasa a "tomada" con la fecha y el commit.
 
@@ -1750,6 +1752,9 @@ que esto no escala solo:
    - convert-to-instance-method mueve el método al tipo de un parámetro, cuyos usos pasan a ser del objeto mismo, y
      cada llamada lo hace sobre el argumento.
    La alternativa, un primitivo nuevo que reescriba usos de parámetros, va contra el principio 3.
+   *Decidida el 2026-11-02 como se propuso (decisión 35), en la noche autónoma que Fernando pidió.* Los dos drivers
+   cumplen la obligación 13 también para parámetros; extract declara que los usos del fragmento de un parámetro del
+   método se van (el nuevo tiene los suyos), y `said` dice la lectura de un parámetro.
 
 **Cómo se sabe si funcionó.**
 

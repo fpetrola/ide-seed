@@ -203,7 +203,8 @@ final class ExtractFragment {
             }
             var gone = new ArrayList<Change.Expectation>();
             for (var use : before.referencesFrom(source)) {
-                if (before.element(use.target()).kind() == Kind.LOCAL && !moving.containsKey(use.target())
+                var kind = before.element(use.target()).kind(); // a parameter of the method too: the new one has its own
+                if ((kind == Kind.LOCAL || kind == Kind.PARAM) && !moving.containsKey(use.target())
                         && c.use(use.id()).getRange().filter(fragment::contains).isPresent()) {
                     gone.add(new Change.Dropped(source, use.target()));
                 }

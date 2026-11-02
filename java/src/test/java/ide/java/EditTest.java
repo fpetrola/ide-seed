@@ -44,7 +44,7 @@ class EditTest {
         assertThat(id(after, "a.P#total(long)")).isEqualTo(id(before, "a.P#get(int)"));
         assertThat(id(after, "a.P#total(long)/factor")).isEqualTo(id(before, "a.P#get(int)/scale"));
         assertThat(after.referencesFrom(id(after, "a.P#total(long)"))).extracting(Reference::target)
-                .containsExactly(id(before, "a.P#x"));
+                .containsExactly(id(before, "a.P#x"), id(before, "a.P#get(int)/scale"));
     }
 
     @Test

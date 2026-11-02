@@ -160,6 +160,16 @@ public final class Resolution {
         }
     }
 
+    /** The parameter a name resolves to, of a method, a constructor or a lambda, or null. */
+    public static com.github.javaparser.ast.body.Parameter resolveParameter(NameExpr name) {
+        try {
+            return name.resolve() instanceof com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration parameter
+                    ? parameter.getWrappedNode() : null;
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
     /** The method a method reference ({@code Book::code}) resolves to, or null. */
     public static ResolvedMethodDeclaration resolveMethodReference(MethodReferenceExpr reference) {
         try {

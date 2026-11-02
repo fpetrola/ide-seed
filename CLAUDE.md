@@ -46,7 +46,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with the uses made in it, and deleted with them; one that calls a constructor goes first), Change (produced element,
   expectations, pins: what a repair may not take back) and Body (what a method does in no language, a statement a
   line: return, assign a field, new, a call, the type's default, a constructor called first, over elements named
-  `#{id}`; its parameters and locals are values, not uses; a created statement expects the uses it names Added; a body is its
+  `#{id}`; a parameter or local it names is a read of it; a created statement expects the uses it names Added; a body is its
   statements: there is no Set of a whole body).
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit`,
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
@@ -70,7 +70,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   binding one writes the name and imports it. A field or call that surely binds nothing (for a call: no method of that
   name where it is looked up) is an unresolved use too; binding it renames the use. What one needs (expected type,
   arguments) is asked of the projection (semantics.UseNeeds). The locals of a method or constructor (not of a lambda or
-  a class inside it) are its elements and their uses references from it; JavaRules reaches a local only from inside
+  a class inside it) are its elements and their uses references from it, and so are the uses of its parameters (on
+  nothing, in their statement); JavaRules reaches a local only from inside
   its method. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the
   others are gone (they are the new method's parameters, or its own local). A renamed local may take the name of one
   in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline

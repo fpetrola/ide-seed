@@ -56,7 +56,7 @@ class PositionsTest {
 
         assertThat(projection.elementAt("a/A.java", 7, 16)).contains(id(p, "a.A#x")); // return x + p
         assertThat(projection.elementAt("a/B.java", 5, 18)).contains(id(p, "a.A#m(int)")); // a.m(1): on m
-        assertThat(projection.elementAt("a/B.java", 5, 16)).isEmpty(); // a.m(1): on a, a parameter, used in its body
+        assertThat(projection.elementAt("a/B.java", 5, 16)).contains(id(p, "a.B#n(A)/a")); // a.m(1): on a, a parameter it reads
         assertThat(projection.elementAt("a/B.java", 4, 9)).contains(id(p, "a.B#n(A)")); // its name
         assertThat(projection.elementAt("a/B.java", 4, 11)).contains(id(p, "a.A")); // the type of its parameter
         assertThat(projection.elementAt("a/B.java", 4, 13)).contains(id(p, "a.B#n(A)/a")); // the parameter

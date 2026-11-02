@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The fixture is this program (its outline is checked first, so both sides agree on it):
  * <pre>
  * package a
- *   public class A           int x; int m(int p) reads x; int k(int p); int total() reads x into its local sum,
+ *   public class A           int x; int m(int p) reads x and p; int k(int p); int total() reads x into its local sum,
  *                            adds what m answers to it, and answers it
  *   public class B extends A int n() calls m, then reads x
  *   public interface I
@@ -56,14 +56,15 @@ public abstract class ProjectionContract {
             "STATEMENT a.A#k(int)[1]", "STATEMENT a.A#m(int)[1]",
             "STATEMENT a.A#total()[1]", "STATEMENT a.A#total()[2]", "STATEMENT a.A#total()[3]",
             "STATEMENT a.B#n()[1]", "STATEMENT b.C#use(A)[1]",
-            "a.A#m(int) -> a.A#x (read) in [1]",
+            "a.A#k(int) -> a.A#k(int)/p (read) in [1]",
+            "a.A#m(int) -> a.A#m(int)/p (read) in [1]", "a.A#m(int) -> a.A#x (read) in [1]",
             "a.A#total() -> a.A#m(int) (call) in [2]", "a.A#total() -> a.A#total()/sum (read) in [2]",
             "a.A#total() -> a.A#total()/sum (read) in [3]", "a.A#total() -> a.A#total()/sum (write) in [2]",
             "a.A#total() -> a.A#x (read) in [1]",
             "a.B -> a.A (extends)",
             "a.B#n() -> a.A#m(int) (call) in [1]", "a.B#n() -> a.A#x (read) in [1]",
             "b.C#a -> a.A (declared)", "b.C#label -> java.lang.String (declared)", "b.C#price -> ? Money (declared)",
-            "b.C#use(A) -> ? weigh (call) in [1]",
+            "b.C#use(A) -> ? weigh (call) in [1]", "b.C#use(A) -> b.C#use(A)/other (read) in [1]",
             "b.C#use(A)/other -> a.A (declared)");
 
     /** A projection holding the fixture. */
@@ -168,7 +169,7 @@ public abstract class ProjectionContract {
 
         var after = projection.program();
         assertThat(after.referencesFrom(k)).extracting(r -> after.element(r.target()).qualified() + " " + r.mode().label())
-                .containsExactly("a.A#x write", "a.A#x read");
+                .containsExactly("a.A#k(int)/p read", "a.A#x write", "a.A#k(int)/p read", "a.A#x read");
         assertThat(after.outline()).containsExactlyElementsOf(reread(projection).program().outline());
     }
 

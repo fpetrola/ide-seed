@@ -65,16 +65,17 @@ class BodyTest {
         assertThat(body.statements()).containsExactly(
                 new Body.Return(new Body.Call(null, OTHER, List.of(new Body.Parameter(VALUE)))),
                 new Body.Return(new Body.Call(new Body.Field(X), OTHER, List.of(new Body.Field(X)))));
-        assertThat(body.uses()).containsExactly(new Body.Use(OTHER, Mode.CALL), new Body.Use(X, Mode.READ),
-                new Body.Use(OTHER, Mode.CALL, Reference.Receiver.OTHER), new Body.Use(X, Mode.READ));
+        assertThat(body.uses()).containsExactly(new Body.Use(OTHER, Mode.CALL), new Body.Use(VALUE, Mode.READ, Reference.Receiver.NONE),
+                new Body.Use(X, Mode.READ), new Body.Use(OTHER, Mode.CALL, Reference.Receiver.OTHER), new Body.Use(X, Mode.READ));
     }
 
     @Test
-    void itsUsesAreOfWhatIsOutsideItsMethodInTheOrderTheyAreWritten() {
+    void itsUsesAreWhatItNamesInTheOrderTheyAreWritten() {
         var body = Body.parse("#{field:2} = #{param:5}\nreturn new #{constructor:3}(#{field:2})", program(), SET);
 
         assertThat(body.uses()).containsExactly(
-                new Body.Use(X, Mode.WRITE), new Body.Use(NEW, Mode.NEW), new Body.Use(X, Mode.READ));
+                new Body.Use(X, Mode.WRITE), new Body.Use(VALUE, Mode.READ, Reference.Receiver.NONE), new Body.Use(NEW, Mode.NEW),
+                new Body.Use(X, Mode.READ));
     }
 
     @Test
@@ -100,7 +101,8 @@ class BodyTest {
         var body = Body.parse("#{constructor:3}(); #{field:2} = #{param:9}", program, made);
 
         assertThat(body.statements()).containsExactly(new Body.Construct(NEW, List.of()), new Body.Assign(X, new Body.Parameter(new ElementId("param:9"))));
-        assertThat(body.uses()).containsExactly(new Body.Use(NEW, Mode.CALL), new Body.Use(X, Mode.WRITE));
+        assertThat(body.uses()).containsExactly(new Body.Use(NEW, Mode.CALL), new Body.Use(X, Mode.WRITE),
+                new Body.Use(new ElementId("param:9"), Mode.READ, Reference.Receiver.NONE));
         assertThatThrownBy(() -> Body.parse("#{field:2} = #{param:9}; #{constructor:3}()", program, made)).hasMessageContaining("comes first");
         assertThatThrownBy(() -> Body.parse("#{constructor:3}()", program, SET)).hasMessageContaining("only a constructor");
     }

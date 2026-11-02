@@ -84,7 +84,7 @@ class ConstructorCallsTest {
         assertThat(p.referencesFrom(id(p, "a.R#new()"))).extracting(r -> p.element(r.target()).qualified() + " " + r.mode().label())
                 .containsExactly("a.R#new(int) call");
         assertThat(p.referencesFrom(id(p, "a.R#new(int)"))).extracting(r -> p.element(r.target()).qualified() + " " + r.mode().label())
-                .containsExactly("a.Q#new(int) call");
+                .containsExactly("a.Q#new(int) call", "a.R#new(int)/a read");
 
         projection.apply(new Primitive.Create(Kind.PARAM, id(p, "a.Q#new(int)"), "b", Map.of(Fact.TYPE, "long"), "0L"));
 

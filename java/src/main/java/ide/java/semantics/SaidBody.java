@@ -82,8 +82,8 @@ public final class SaidBody {
     }
 
     private String value(Expression expression) {
-        if (expression instanceof NameExpr name && !targets.containsKey(name)) {
-            var parameter = parameters.get(name.getNameAsString());
+        if (expression instanceof NameExpr name && (!targets.containsKey(name) || parameters.containsValue(targets.get(name)))) {
+            var parameter = targets.containsKey(name) ? targets.get(name) : parameters.get(name.getNameAsString()); // a read of it
             return parameter == null ? null : Body.name(parameter);
         }
         var field = field(expression);

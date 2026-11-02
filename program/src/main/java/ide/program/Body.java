@@ -52,7 +52,7 @@ public record Body(List<Statement> statements) {
     public record Field(ElementId field) implements Expression {
     }
 
-    /** The value of one of the method's parameters, or of one of its locals: a value of the method, not a use. */
+    /** The value of one of the method's parameters, or of one of its locals: a read of it, from the method. */
     public record Parameter(ElementId parameter) implements Expression {
     }
 
@@ -181,9 +181,7 @@ public record Body(List<Statement> statements) {
     private static void uses(Expression expression, List<Use> uses) {
         switch (expression) {
             case Field f -> uses.add(new Use(f.field(), Mode.READ));
-            case Parameter p -> {
-                // a value of the body itself
-            }
+            case Parameter p -> uses.add(new Use(p.parameter(), Mode.READ, Reference.Receiver.NONE)); // read from the method, on nothing
             case Default d -> {
                 // no element at all
             }
