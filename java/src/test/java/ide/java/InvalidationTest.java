@@ -111,4 +111,19 @@ class InvalidationTest {
 
         assertThat(projection.resolvedLastTime()).containsExactly("a/B.java", "a/Base.java", "a/C.java", "a/D.java");
     }
+
+    /** An import changes what the declarations of its file name: their uses elsewhere are resolved again. */
+    @Test
+    void anImportAddedResolvesTheUsesOfTheMembersOfItsFile() {
+        var f = "package a;\n\ninterface F {\n    void run() throws SQLException;\n}\n";
+        var projection = JavaProjection.of(Map.of("a/F.java", f,
+                "a/U.java", "package a;\n\nimport java.sql.SQLException;\n\nclass U {\n    static void run() throws SQLException {\n    }\n\n    static void take(F f) {\n    }\n\n    static void use() {\n        take(U::run);\n    }\n}\n"));
+        projection.program();
+
+        projection.edit("a/F.java", f.replace("package a;\n", "package a;\n\nimport java.sql.SQLException;\n"));
+        var after = projection.program();
+
+        assertThat(after.referencesTo(id(after, "a.U#run()"))).extracting(r -> after.element(r.site()).qualified())
+                .containsExactly("a.U#use()");
+    }
 }

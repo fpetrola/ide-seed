@@ -20,13 +20,14 @@ import java.util.Set;
 /**
  * What a file declares that other files can see: its types, each with its header as written (annotations, modifiers,
  * name, type parameters, supertypes), and their members as written up to their bodies (modifiers, types, names,
- * parameters, what they throw). Two versions of a file with the same shape differ only inside bodies and
- * initializers, where nothing outside the file looks. It is read off the text, which is already there.
+ * parameters, what they throw), and its imports, which say what those name. Two versions of a file with the same
+ * shape differ only inside bodies and initializers, where nothing outside the file looks. It is read off the text,
+ * which is already there.
  */
-public record Shape(Map<String, String> types, Map<String, String> members) {
+public record Shape(Map<String, String> types, Map<String, String> members, java.util.List<String> imports) {
 
     /** The shape of no file: what a file added or removed is compared with. */
-    public static final Shape NONE = new Shape(Map.of(), Map.of());
+    public static final Shape NONE = new Shape(Map.of(), Map.of(), java.util.List.of());
 
     /** A member whose declaration changed: its type, by qualified name, and its simple name. */
     public record Member(String owner, String name) {
@@ -59,18 +60,21 @@ public record Shape(Map<String, String> types, Map<String, String> members) {
                 enumeration.getEntries().forEach(constant -> members.put(owner + constant.getNameAsString(), "constant"));
             }
         }
-        return new Shape(Map.copyOf(types), Map.copyOf(members));
+        var imports = unit.tree().getImports().stream().map(i -> unit.textOf(i)).sorted().toList();
+        return new Shape(Map.copyOf(types), Map.copyOf(members), imports);
     }
 
     /**
-     * The members whose declarations differ in {@code after}, those added and removed included; null when a type
-     * itself differs, since then any name anywhere may resolve differently.
+     * The members whose declarations differ in {@code after}, those added and removed included, and every member
+     * when the imports differ (what they name may be another type); null when a type itself differs, since then any
+     * name anywhere may resolve differently.
      */
     public Set<Member> changedMembers(Shape after) {
         if (!types.equals(after.types)) return null;
         var changed = new HashSet<Member>();
+        var renamed = !imports.equals(after.imports);
         for (var key : union(members.keySet(), after.members.keySet())) {
-            if (!Objects.equals(members.get(key), after.members.get(key))) {
+            if (renamed || !Objects.equals(members.get(key), after.members.get(key))) {
                 changed.add(new Member(key.substring(0, key.indexOf('#')), simpleName(key)));
             }
         }
