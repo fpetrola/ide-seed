@@ -21,25 +21,39 @@ import java.util.Map;
  * The files of a step side by side, as the IDE aligned them (replay-step's rows): before on the left, after on the
  * right, row by row, highlighted as Java. Under the highlighting, what went is red, what came green, a changed line
  * amber on both sides, moved lines blue on both, and the lines the step takes yellow where they stayed, marked ▌ in
- * the margin. A new file has nothing on the left.
+ * the margin. A new file has nothing on the left. It is as wide as the view: each side half of it, scrolled sideways
+ * on its own when a line is longer, both sides together; up and down, both together too. Ctrl+wheel zooms.
  */
-final class SideBySidePane extends JPanel {
+final class SideBySidePane extends JPanel implements javax.swing.Scrollable {
 
     private static final Color BACKGROUND = new Color(0x2B2B2B);
 
     private final Map<String, RSyntaxTextArea> lefts = new LinkedHashMap<>();
     private final List<String> lines = new ArrayList<>();
+    private final List<RSyntaxTextArea> areas = new ArrayList<>();
+    private List<Map<String, Object>> shown = List.of();
+    private float size = Zoom.code(13).getSize2D();
 
     SideBySidePane() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBackground(BACKGROUND);
+        addMouseWheelListener(event -> {
+            if (!event.isControlDown()) {
+                getParent().dispatchEvent(javax.swing.SwingUtilities.convertMouseEvent(this, event, getParent()));
+                return;
+            }
+            size = Math.max(8, Math.min(32, size - (float) event.getPreciseWheelRotation()));
+            show(shown);
+        });
     }
 
     @SuppressWarnings("unchecked")
     void show(List<Map<String, Object>> changes) {
+        shown = changes;
         removeAll();
         lefts.clear();
         lines.clear();
+        areas.clear();
         for (var change : changes) {
             var path = String.valueOf(change.get("path"));
             var status = String.valueOf(change.get("status"));
@@ -61,21 +75,28 @@ final class SideBySidePane extends JPanel {
                 rightText.append(row.get("right")).append('\n');
                 lines.add(path + " " + row.get("leftKind") + (zone ? "*" : "") + ":" + row.get("left") + " | " + row.get("rightKind") + ":" + row.get("right"));
             }
-            var left = Code.area();
+            var left = sized(Code.area());
             left.setText(leftText.toString());
-            var right = Code.area();
+            var right = sized(Code.area());
             right.setText(rightText.toString());
             for (var i = 0; i < rows.size(); i++) {
                 var row = rows.get(i);
                 mark(left, i, String.valueOf(row.get("leftKind")), Boolean.TRUE.equals(row.get("zone")));
                 mark(right, i, String.valueOf(row.get("rightKind")), false);
             }
+            var leftSide = side(left);
+            var rightSide = side(right);
+            // sideways, both sides as far: one model, and the narrower one as wide as the wider
+            var widest = Math.max(left.getPreferredSize().width, right.getPreferredSize().width);
+            left.setPreferredSize(new java.awt.Dimension(widest, left.getPreferredSize().height));
+            right.setPreferredSize(new java.awt.Dimension(widest, right.getPreferredSize().height));
+            rightSide.getHorizontalScrollBar().setModel(leftSide.getHorizontalScrollBar().getModel());
             var columns = new JPanel(new GridBagLayout());
             columns.setBackground(BACKGROUND);
-            columns.add(numbers(leftNumbers.toString()), constraints(0, 0));
-            columns.add(left, constraints(1, 1));
-            columns.add(numbers(rightNumbers.toString()), constraints(2, 0));
-            columns.add(right, constraints(3, 1));
+            columns.add(sized(numbers(leftNumbers.toString())), constraints(0, 0));
+            columns.add(leftSide, constraints(1, 0.5));
+            columns.add(sized(numbers(rightNumbers.toString())), constraints(2, 0));
+            columns.add(rightSide, constraints(3, 0.5));
             columns.setAlignmentX(Component.LEFT_ALIGNMENT);
             columns.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, columns.getPreferredSize().height));
             add(columns);
@@ -84,6 +105,43 @@ final class SideBySidePane extends JPanel {
         add(javax.swing.Box.createVerticalGlue()); // the files from the top, the rest empty
         revalidate();
         repaint();
+    }
+
+    /** A side: as wide as it is given, a line longer than that scrolled to sideways; as high as all its lines. */
+    private static javax.swing.JScrollPane side(RSyntaxTextArea area) {
+        var side = new javax.swing.JScrollPane(area, javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
+                javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+        side.setBorder(BorderFactory.createEmptyBorder());
+        side.getViewport().setBackground(BACKGROUND);
+        side.setPreferredSize(new java.awt.Dimension(10, area.getPreferredSize().height + side.getHorizontalScrollBar().getPreferredSize().height));
+        side.setMinimumSize(new java.awt.Dimension(10, side.getPreferredSize().height));
+        side.setWheelScrollingEnabled(false); // up and down is the whole pane's
+        return side;
+    }
+
+    @Override
+    public java.awt.Dimension getPreferredScrollableViewportSize() {
+        return getPreferredSize();
+    }
+
+    @Override
+    public int getScrollableUnitIncrement(Rectangle visible, int orientation, int direction) {
+        return 16;
+    }
+
+    @Override
+    public int getScrollableBlockIncrement(Rectangle visible, int orientation, int direction) {
+        return visible.height - 32;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+        return true;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportHeight() {
+        return false;
     }
 
     /** Scrolls to a row of a file. */
@@ -96,6 +154,14 @@ final class SideBySidePane extends JPanel {
         } catch (javax.swing.text.BadLocationException | RuntimeException nowhere) {
             // a row that is not there: stay
         }
+    }
+
+    /** At the size zoomed to; the wheel over it scrolls the pane, Ctrl+wheel zooms. */
+    private RSyntaxTextArea sized(RSyntaxTextArea area) {
+        area.setFont(area.getFont().deriveFont(size));
+        area.addMouseWheelListener(event -> dispatchEvent(javax.swing.SwingUtilities.convertMouseEvent(area, event, this)));
+        areas.add(area);
+        return area;
     }
 
     private static void mark(RSyntaxTextArea area, int row, String kind, boolean zone) {
