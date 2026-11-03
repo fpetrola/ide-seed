@@ -432,25 +432,34 @@ refactoring introduce-variable "Moves an expression into a local declared right 
   return ${v}
 end
 
-refactoring introduce-local-object "Makes locals one object of an existing class, with one of its constructors, as Introduce Parameter Object does with parameters: each read of one reads the getter of the field the constructor gives it to"
+refactoring introduce-local-object "Makes locals one object of an existing class, with one of its constructors, as Introduce Parameter Object does with parameters: each read of one reads the getter of the field the constructor gives it to; a parameter no local gives takes a value"
   param constructor : element(CONSTRUCTOR) "the constructor that makes the object"
   param locals : elements(LOCAL) "the locals, declared in the order the constructor takes them"
   param name : text "name of the object" default "${decap(name(owner(constructor)))}"
-  require eq(count(locals), count(params(constructor))) "${qualified(constructor)} takes ${count(params(constructor))} values"
+  param values : text "what the constructor's parameters no local gives take, as name = value, ..." default ""
   require nonempty(refs(locals)) "none of the locals is read"
   # before the first use of any of them: one may be read nowhere
   let at = statement(first(refs(locals)))
+  # a value is a local of its own there, named as its parameter, inlined with the others
+  let made = list()
+  for v in valued(values)
+    l := create LOCAL ${owner(first(locals))} ${v} facts="type=${type(param-named(constructor, v))}"
+    move ${first(statements(owner(first(locals))))} ${owner(at)} before=${at}
+    set ${l} initializer ${value-of(values, v)}
+    let made = list(made, l)
+  end
+  let all = in-order(constructor, locals, valued(values), made)
   o := create LOCAL ${owner(first(locals))} ${name} facts="type=${qualified(owner(constructor))}"
   move ${first(statements(owner(first(locals))))} ${owner(at)} before=${at}
   # the last first: a read made a getter's call on the object renumbers the uses after it
-  for l in reversed(locals)
+  for l in reversed(all)
     for r in reversed(refs(l))
-      retarget ${r} ${getter-of(constructor, locals, l)}
+      retarget ${r} ${getter-of(constructor, all, l)}
     end
   end
-  set ${o} initializer "new #{constructor}(#{locals})"
+  set ${o} initializer "new #{constructor}(#{all})"
   # the last first: its value has nothing between it and the object's
-  for l in reversed(locals)
+  for l in reversed(all)
     inline-variable ${l}
   end
   return ${o}

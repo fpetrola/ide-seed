@@ -106,7 +106,7 @@ public final class ChangeSignature implements Refactoring {
      * The items of a spec: split at the commas outside brackets and quotes, and before a default value, outside the
      * {@code <>} of a type (in a value, {@code <} compares).
      */
-    private static List<String> split(String spec) {
+    public static List<String> split(String spec) {
         var parts = new ArrayList<String>();
         var depth = 0;
         var types = 0;

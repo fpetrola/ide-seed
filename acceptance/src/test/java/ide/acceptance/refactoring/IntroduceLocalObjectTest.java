@@ -120,4 +120,57 @@ class IntroduceLocalObjectTest {
                 }
             }
             """;
+
+    /** A parameter no local gives takes a value, as a new parameter's calls do in change-signature. */
+    @Test
+    void aParameterNoLocalGivesTakesAValue() {
+        var ws = Workspace.of(Map.of("a/Address.java", ADDRESS, "a/Report.java", """
+                package a;
+
+                import java.sql.ResultSet;
+                import java.sql.SQLException;
+                import java.util.List;
+
+                class Report {
+                    void print(ResultSet rs, List<String> fields) throws SQLException {
+                        while (rs.next()) {
+                            String street = rs.getString("street");
+                            System.out.println(street);
+                        }
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-local-object", Map.of("constructor", "a.Address#new(String,String)",
+                "locals", List.of("a.Report#print(ResultSet,List<String>)/street"), "name", "address", "values", "id = fields.get(4)"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Report.java")).contains("""
+                        while (rs.next()) {
+                            Address address = new Address(fields.get(4), rs.getString("street"));
+                            System.out.println(address.getStreet());
+                        }
+                """);
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    @Test
+    void everyParameterIsGivenOnce() {
+        var ws = Workspace.of(Map.of("a/Address.java", ADDRESS, "a/Report.java", """
+                package a;
+
+                class Report {
+                    void print(String id, String street) {
+                        String s = street;
+                        System.out.println(s);
+                    }
+                }
+                """));
+
+        var result = ws.invoke("introduce-local-object", Map.of("constructor", "a.Address#new(String,String)",
+                "locals", List.of("a.Report#print(String,String)/s"), "name", "address", "values", "street = id"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(ws.source("a/Report.java")).contains("String s = street;");
+    }
 }

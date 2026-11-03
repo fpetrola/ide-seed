@@ -87,6 +87,13 @@ final class ScriptFunctions {
             case "fields" -> elems(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("FIELD")).toList());
             case "methods" -> elems(graph.members(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("METHOD")).toList());
             case "params" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList());
+            case "param-named" -> graph.children(element(args, 0).id()).stream() // a callable's parameter by its name
+                    .filter(e -> e.kind().name().equals("PARAM") && e.name().equals(text(args, 1))).findFirst()
+                    .map(e -> elem(e.id())).orElseThrow(() -> new IllegalArgumentException(element(args, 0).qualified() + " has no parameter " + text(args, 1)));
+            case "valued" -> new Value.Items(assigned(args.get(0)).keySet().stream().<Value>map(Value.Text::new).toList()); // the names of name = value, ...
+            case "value-of" -> text(assigned(args.get(0)).get(text(args, 1))); // the value a name is given in name = value, ...
+            case "in-order" -> inOrder(element(args, 0), Value.items(args.get(1)).stream().map(this::element).toList(),
+                    Value.items(args.get(2)).stream().map(Value::asText).toList(), Value.items(args.get(3)));
             case "variables" -> elems(Value.items(args.get(1)).stream().map(item -> graph.children(element(args, 0).id()).stream() // of a callable, named as the items are
                     .filter(e -> (e.kind().name().equals("PARAM") || e.kind().name().equals("LOCAL")) && e.name().equals(element(item).name()))
                     .findFirst().orElseThrow(() -> new IllegalArgumentException("no variable " + element(item).name() + " in " + element(args, 0).qualified())))
@@ -124,6 +131,7 @@ final class ScriptFunctions {
             case "count" -> text(String.valueOf(Value.items(args.get(0)).size())); // numbers are text; eq compares them so
             case "first" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getFirst();
             case "last" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getLast();
+            case "list" -> new Value.Items(args.stream().flatMap(a -> Value.items(a).stream()).toList()); // its arguments, lists flattened
             case "reversed" -> new Value.Items(Value.items(args.get(0)).reversed());
             default -> throw new IllegalArgumentException("unknown script function: " + name);
         };
@@ -159,6 +167,37 @@ final class ScriptFunctions {
         var text = Value.asText(value);
         if (graph.contains(new ElementId(text))) return elem(new ElementId(text));
         return graph.find(text).map(e -> elem(e.id())).orElse(null);
+    }
+
+    /** {@code name = value, ...}, in the order written; the commas inside a value's brackets or quotes are its own. */
+    private static java.util.Map<String, String> assigned(Value spec) {
+        var assigned = new java.util.LinkedHashMap<String, String>();
+        for (var item : ide.refactoring.ChangeSignature.split(spec == null ? "" : Value.asText(spec))) {
+            var eq = item.indexOf('=');
+            if (eq < 0) throw new IllegalArgumentException("not name = value: " + item);
+            assigned.put(item.substring(0, eq).strip(), item.substring(eq + 1).strip());
+        }
+        return assigned;
+    }
+
+    /**
+     * What a constructor is given, in the order it takes it: a parameter named in {@code named} the value made for it
+     * (in {@code made}, as they are named), each other the next of {@code items}; each parameter given once.
+     */
+    private Value inOrder(Element constructor, List<Element> items, List<String> named, List<Value> made) {
+        var params = graph.children(constructor.id()).stream().filter(e -> e.kind().name().equals("PARAM")).toList();
+        var given = new java.util.ArrayList<Value>();
+        var next = items.iterator();
+        for (var param : params) {
+            var at = named.indexOf(param.name());
+            if (at >= 0) given.add(made.get(at));
+            else if (next.hasNext()) given.add(new Value.Elem(next.next().id()));
+            else throw new ide.projection.PrimitiveRejected("refactoring.precondition", constructor.qualified() + " is given no " + param.name());
+        }
+        if (next.hasNext() || named.stream().anyMatch(n -> params.stream().noneMatch(p -> p.name().equals(n)))) {
+            throw new ide.projection.PrimitiveRejected("refactoring.precondition", constructor.qualified() + " takes " + params.size() + " values");
+        }
+        return new Value.Items(given);
     }
 
     /** The uses of an element; of several, those of each, in the order each site makes them. */
