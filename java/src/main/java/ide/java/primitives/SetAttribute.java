@@ -193,7 +193,7 @@ final class SetAttribute {
         var edits = new EditSet();
         var listOf = ide.program.Body.listOf(type);
         var written = listOf != null ? WriteBody.listType(c, id, edits, unit, listOf) // said in no language
-                : type.contains(".") && c.ids().has(new Address.Type(type)) ? Imports.nameable(edits, unit, type) : type;
+                : type.contains(".") && c.ids().has(new Address.Type(type)) ? Imports.nameable(edits, unit, type) : imported(c, edits, unit, type);
         switch (declaration.node()) {
             case FieldDeclaration field -> field.getVariables().forEach(v -> edits.replace(unit, v.getType(), written));
             case MethodDeclaration m -> edits.replace(unit, m.getType(), written);
@@ -208,6 +208,28 @@ final class SetAttribute {
         }
         c.sources().apply(edits);
         if (method != null) Shared.resign(c, method, unit.path(), names);
+    }
+
+    /**
+     * A type as written, each simple name in it the file cannot name yet imported when the program knows one type of
+     * that name, of the workspace or a library one it names (java.lang's need none); of two, or none, it stays as it
+     * is, a use that binds nothing.
+     */
+    private static String imported(Context c, EditSet edits, Unit unit, String type) {
+        var names = new java.util.LinkedHashSet<String>();
+        var token = java.util.regex.Pattern.compile("[A-Za-z_$][\\w$]*").matcher(type);
+        while (token.find()) {
+            var start = token.start();
+            if (start > 0 && type.charAt(start - 1) == '.') continue; // part of a qualified name
+            names.add(token.group());
+        }
+        for (var name : names) {
+            var known = c.program().elements().stream().filter(e -> e.kind().isType() && e.name().equals(name)
+                    && (e.inLibrary() || e.parent() == null || c.program().element(e.parent()).kind() == Kind.PACKAGE)).map(e -> e.qualified()).distinct().toList();
+            if (known.isEmpty() || known.stream().anyMatch(q -> q.equals("java.lang." + name) || Imports.names(unit, q))) continue;
+            if (known.size() == 1 && known.getFirst().contains(".")) Imports.add(edits, unit, known.getFirst());
+        }
+        return type;
     }
 
     /**
