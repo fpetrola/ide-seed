@@ -178,6 +178,7 @@ final class Editors extends JTabbedPane {
             editor = new Editor(path, text);
             var area = editor.area;
             area.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVA);
+            Code.sideways(area); // a touchpad's sideways swipe
             area.setCodeFoldingEnabled(true);
             area.setAntiAliasingEnabled(true);
             area.setMarkOccurrences(true);

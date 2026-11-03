@@ -16,6 +16,7 @@ final class DiffPane extends RSyntaxTextArea {
         setLineWrap(false);
         setHighlightCurrentLine(false);
         setCodeFoldingEnabled(false);
+        Code.sideways(this);
     }
 
     void show(String diff) {

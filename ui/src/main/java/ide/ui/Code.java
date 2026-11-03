@@ -36,7 +36,7 @@ final class Code {
         area.setHighlightCurrentLine(false);
         area.setCodeFoldingEnabled(false);
         area.setAntiAliasingEnabled(true);
-        return area;
+        return sideways(area);
     }
 
     static void theme(RSyntaxTextArea area) {
@@ -46,6 +46,29 @@ final class Code {
             throw new UncheckedIOException(e);
         }
     }
+
+    /**
+     * A touchpad's sideways swipe scrolls what shows the code sideways. On X11 (XToolkit, Java 25) it does not come as
+     * a wheel but as presses of buttons 4 (left) and 5 (right), the X server's 6 and 7, Shift held or not; a wheel and
+     * Shift+wheel come as wheels, which the scroll pane takes.
+     */
+    static <T extends javax.swing.JComponent> T sideways(T code) {
+        code.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent event) {
+                if (event.getButton() != 4 && event.getButton() != 5) return;
+                var pane = (javax.swing.JScrollPane) javax.swing.SwingUtilities.getAncestorOfClass(javax.swing.JScrollPane.class, code);
+                if (pane == null) return;
+                var bar = pane.getHorizontalScrollBar();
+                bar.setValue(bar.getValue() + (event.getButton() == 4 ? -SWIPE : SWIPE));
+                event.consume();
+            }
+        });
+        return code;
+    }
+
+    /** How far a swipe event goes sideways, in pixels. */
+    static final int SWIPE = 24;
 
     /** Marks a line (from 0) with a color under its text. */
     static void mark(RSyntaxTextArea area, int line, Color color) {
