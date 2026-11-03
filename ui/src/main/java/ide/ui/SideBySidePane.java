@@ -22,7 +22,7 @@ import java.util.Map;
  * right, row by row, highlighted as Java. Under the highlighting, what went is red, what came green, a changed line
  * amber on both sides, moved lines blue on both, and the lines the step takes yellow where they stayed, marked ▌ in
  * the margin. A new file has nothing on the left. It is as wide as the view: each side half of it, scrolled sideways
- * on its own when a line is longer, both sides together; up and down, both together too. Ctrl+wheel zooms.
+ * on its own when a line is longer, both sides together (its bar, or Shift+wheel); up and down, both together too. Ctrl+wheel zooms.
  */
 final class SideBySidePane extends JPanel implements javax.swing.Scrollable {
 
@@ -156,10 +156,18 @@ final class SideBySidePane extends JPanel implements javax.swing.Scrollable {
         }
     }
 
-    /** At the size zoomed to; the wheel over it scrolls the pane, Ctrl+wheel zooms. */
+    /** At the size zoomed to; the wheel over it scrolls the pane, Shift+wheel sideways (both sides), Ctrl+wheel zooms. */
     private RSyntaxTextArea sized(RSyntaxTextArea area) {
         area.setFont(area.getFont().deriveFont(size));
-        area.addMouseWheelListener(event -> dispatchEvent(javax.swing.SwingUtilities.convertMouseEvent(area, event, this)));
+        area.addMouseWheelListener(event -> {
+            var side = (javax.swing.JScrollPane) javax.swing.SwingUtilities.getAncestorOfClass(javax.swing.JScrollPane.class, area);
+            if (event.isShiftDown() && side != null && javax.swing.SwingUtilities.isDescendingFrom(side, this)) { // sideways, both sides
+                var bar = side.getHorizontalScrollBar();
+                bar.setValue(bar.getValue() + (int) Math.round(event.getPreciseWheelRotation() * 48));
+                return;
+            }
+            dispatchEvent(javax.swing.SwingUtilities.convertMouseEvent(area, event, this));
+        });
         areas.add(area);
         return area;
     }
