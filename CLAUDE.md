@@ -55,7 +55,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - `projection` (program) — the language driver contract: Projection (`program`, `apply(Primitive)` → Change, `edit` (a null text: the file gone),
   typed `snapshot`/`restore`, `rules`, `diagnostics`, `completionContext`, `locate` and `elementAt`: where an element
   is declared and what the name at a line and column means, `needs`: what a use that binds nothing needs, asked for
-  one use, `said`: a statement, or a whole body, in no language when all of it can be said so), LanguageRules (access, visibilities, how
+  one use, `said`: a statement, or a whole body, in no language when all of it can be said so; `ordered`: what keeps two
+  statements of a body in their order, nothing when they can run in either, what cannot be told keeps them), LanguageRules (access, visibilities, how
   the language writes a field's default value), Diagnostic,
   CompletionContext, PrimitiveRejected (and the rules every driver applies: nothing changes a library element; a
   field merges only into a field, a method into a method, a local into a field of its name, a parameter into its method's type, of that type: the object itself).
@@ -79,7 +80,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   its method. An expression extracted may be operands of a String concatenation next
   to each other, from inside a literal: it is split and they are grouped, when the value stays the same. Extract moves the locals declared only in its fragment, identity and all, and says which uses of the
   others are gone (they are the new method's parameters, or its own local). A renamed local may take the name of one
-  in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Inline
+  in a block beside it (its method's locals are numbered anew); a capture is the verifier's binding.rebound. Two statements run in either order (semantics.Order) when neither gives a value the other names,
+  neither leaves the body, and what one does cannot change what the other reads or does; a new object of a class that
+  only keeps what it is given does nothing but be made. Inline
   replaces a read of a local by its value (InlineLocal) and refuses what would change behavior without changing a
   binding (another value later, effects unless read once with nothing between that could tell (a call only reads when
   `reads.txt` declares its library method so, or it is a getter of the workspace nothing overrides: semantics.Reads), when the value

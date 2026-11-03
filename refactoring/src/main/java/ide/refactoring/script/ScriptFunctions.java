@@ -107,6 +107,15 @@ final class ScriptFunctions {
                 var all = graph.children(statement.parent()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList();
                 yield elems(all.subList(all.indexOf(statement) + 1, all.size()));
             }
+            case "ordered" -> projection.ordered(element(args, 0).id(), element(args, 1).id()).map(ScriptFunctions::text).orElse(null); // what keeps two statements in order, none if nothing
+            case "passed" -> { // the statements of its block a statement passes going before another
+                var statement = element(args, 0);
+                var all = graph.children(statement.parent()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList();
+                var from = all.indexOf(statement);
+                var to = all.indexOf(element(args, 1));
+                if (to < 0) throw new IllegalArgumentException(element(args, 1).qualified() + " is not of the block of " + statement.qualified());
+                yield elems(from < to ? all.subList(from + 1, to) : all.subList(to, from));
+            }
             case "statements" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().name().equals("STATEMENT")).toList());
             case "types-of" -> elems(graph.children(element(args, 0).id()).stream().filter(e -> e.kind().isType()).toList());
             case "subclasses" -> elems(graph.subclasses(element(args, 0).id()));

@@ -465,6 +465,16 @@ refactoring introduce-local-object "Makes locals one object of an existing class
   return ${o}
 end
 
+refactoring move-statement "Moves a statement before another of its block, as IntelliJ's Move Statement Up and Down, only past statements it can run in either order with"
+  param statement : element(STATEMENT) "the statement to move"
+  param before : element(STATEMENT) "the statement of its block it goes before"
+  for s in passed(statement, before)
+    require empty(ordered(statement, s)) "${ordered(statement, s)}"
+  end
+  move ${statement} ${owner(before)} before=${before}
+  return ${statement}
+end
+
 refactoring move-out-of-loop "Moves the last statements of a loop's body after it: a local of the loop they read is declared before it and given its value in each turn; they run once, after the last turn, with what it left (its type's default if there was none)" changes meaning
   param from : element(STATEMENT) "the first statement to move: it and those after it in its block go"
   param locals : elements(LOCAL) "the locals of the loop they read"

@@ -261,6 +261,11 @@ class ViewsTest {
             public Optional<String> said(ide.program.ElementId callable) {
                 return Optional.empty();
             }
+
+            @Override
+            public Optional<String> ordered(ide.program.ElementId statement, ide.program.ElementId other) {
+                return Optional.of("cannot be told");
+            }
         };
     }
 }

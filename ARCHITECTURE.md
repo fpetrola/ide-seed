@@ -307,6 +307,10 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
      dice (`elementAt`). Una proyección sin texto no ubica nada.
   10. Un uso de un miembro que no liga nada dice en qué tipo se busca, y la proyección dice, si se le pregunta, qué
       necesita (`needs`); de cualquier otra cosa, nada.
+  15. Qué mantiene a dos sentencias de un cuerpo en su orden (`ordered`, 2026-11-03): una da un valor que la otra
+      usa, una sale del cuerpo, o lo que hace una puede cambiar lo que la otra lee o hace. Nada cuando pueden
+      correr en cualquier orden; lo que una proyección no puede decir las deja en orden (la de memoria, siempre).
+      Lo usa move-statement, el Move Statement de IntelliJ verificado. El primitivo move no lo pregunta.
 - **El kit, `projection-kit`.** `ProjectionContract` son las obligaciones como tests: cada driver lo extiende y da
   el mismo programa de ejemplo en su lenguaje. `MemoryProjection` es una proyección sin lenguaje sobre un grafo
   mutable: aplica los primitivos al grafo y declara los mismos `Change`. Es la implementación de referencia y lo

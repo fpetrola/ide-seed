@@ -13,6 +13,15 @@ public final class JavaPrimitives {
     private JavaPrimitives() {
     }
 
+    /** What keeps two statements of a body in their order, as written, or nothing (semantics.Order). */
+    public static java.util.Optional<String> ordered(ide.program.ElementId statement, ide.program.ElementId other, Context context) {
+        var program = context.program();
+        var a = (com.github.javaparser.ast.stmt.Statement) context.declaration(program.element(statement)).node();
+        var b = (com.github.javaparser.ast.stmt.Statement) context.declaration(program.element(other)).node();
+        var keeps = ide.java.semantics.Order.between(a, b, Shared.reads(context, program));
+        return java.util.Optional.ofNullable(keeps).map(n -> "'" + n + "' keeps them in order");
+    }
+
     public static Change apply(Primitive primitive, Context context) {
         var before = context.program();
         PrimitiveRejected.unlessInWorkspace(before, primitive);

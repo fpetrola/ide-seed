@@ -256,4 +256,9 @@ public final class Transaction implements Projection {
     public Optional<String> said(ElementId callable) {
         return projection.said(callable);
     }
+
+    @Override
+    public Optional<String> ordered(ElementId statement, ElementId other) {
+        return projection.ordered(statement, other);
+    }
 }

@@ -158,6 +158,12 @@ public final class MemoryProjection implements Projection {
     }
 
     /** A body here is its text in no language: one that was set, as it was set. */
+    /** With no language, nothing tells what a statement does: every two stay in order. */
+    @Override
+    public Optional<String> ordered(ElementId statement, ElementId other) {
+        return Optional.of("a projection with no language cannot tell");
+    }
+
     @Override
     public Optional<String> said(ElementId element) {
         var program = program();

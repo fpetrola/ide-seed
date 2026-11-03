@@ -357,6 +357,15 @@ public final class JavaProjection implements Projection {
     }
 
     @Override
+    public Optional<String> ordered(ElementId statement, ElementId other) {
+        var program = program();
+        for (var id : List.of(statement, other)) {
+            if (!program.contains(id) || program.element(id).kind() != ide.program.Kind.STATEMENT) return Optional.of(id.value() + " is no statement");
+        }
+        return ide.java.primitives.JavaPrimitives.ordered(statement, other, context);
+    }
+
+    @Override
     public Optional<String> said(ElementId element) {
         return SaidBody.of(reading(), element);
     }

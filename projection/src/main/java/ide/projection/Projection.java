@@ -68,6 +68,13 @@ public interface Projection {
      */
     Optional<String> said(ElementId element);
 
+    /**
+     * What keeps two statements of a body in the order they run, as the language writes it: one gives a value the
+     * other uses, one leaves the body, or what one does may change what the other reads or does. Nothing when they can
+     * run in either order; what a projection cannot tell keeps them in order.
+     */
+    Optional<String> ordered(ElementId statement, ElementId other);
+
     /** A projection's saved state; only the projection that took it can restore it. */
     interface Snapshot {
     }
