@@ -64,4 +64,20 @@ class SideBySideTest {
 
         assertThat(rows(compared)).containsExactly("none||added|class C {", "none||added|}");
     }
+
+    @Test
+    void whatCameWhereTheZoneIsIsInIt() {
+        var compared = SideBySide.of("a\nb\nc\n", "a\nb\nB2\nc\n", Set.of(2, 3));
+
+        assertThat(compared.rows()).filteredOn(r -> r.rightKind().equals("added")).extracting(SideBySide.Row::zone).containsExactly(true);
+        assertThat(compared.also()).isEmpty();
+    }
+
+    /** Extracted at the same indentation: what the step takes is what moved, not what stayed beside it. */
+    @Test
+    void whatAStepTakesIsWhatMovesWhenItCouldAlignEitherWay() {
+        var compared = SideBySide.of("a\nb\nc\nd\ne\nf\ng\nh\nx\ny\nreturn\n}\n", "a\nb\nc\nd\ne\nf\ng\nh\ncall\nreturn\n}\nm\nx\ny\n}\n", Set.of(9, 10));
+
+        assertThat(rows(compared)).contains("same|return|same|return", "moved|x|none||zone", "none||moved|x");
+    }
 }

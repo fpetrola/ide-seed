@@ -9,10 +9,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.text.BadLocationException;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.FlowLayout;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +30,8 @@ final class ReplayView extends JPanel {
     private final JList<String> list = new JList<>(listed);
     private final JLabel where = new JLabel(" ");
     private final JLabel what = new JLabel(" ");
-    private final DiffPane pane = new DiffPane();
+    private final org.fife.ui.rsyntaxtextarea.RSyntaxTextArea pane = Code.area();
+    private final JLabel beforePath = new JLabel(" ");
     private final SideBySidePane sides = new SideBySidePane();
     private final java.awt.CardLayout cards = new java.awt.CardLayout();
     private final JPanel shownPanel = new JPanel(cards);
@@ -73,7 +71,11 @@ final class ReplayView extends JPanel {
                 display();
             }
         });
-        shownPanel.add(new JScrollPane(pane), "before");
+        var before = new JPanel(new BorderLayout());
+        beforePath.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+        before.add(beforePath, BorderLayout.PAGE_START);
+        before.add(new org.fife.ui.rtextarea.RTextScrollPane(pane, true), BorderLayout.CENTER);
+        shownPanel.add(before, "before");
         var sidesScroll = new JScrollPane(sides);
         sidesScroll.getVerticalScrollBar().setUnitIncrement(16);
         shownPanel.add(sidesScroll, "after");
@@ -93,8 +95,12 @@ final class ReplayView extends JPanel {
         var alsoScroll = new JScrollPane(alsoList);
         alsoScroll.setBorder(BorderFactory.createTitledBorder("Also changed"));
         right.add(alsoScroll, BorderLayout.PAGE_END);
-        var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(list), right);
-        split.setResizeWeight(0.3);
+        var steps = new JScrollPane(list);
+        steps.setPreferredSize(new java.awt.Dimension(Math.round(Zoom.of(300)), 0)); // the code takes the rest
+        steps.setMinimumSize(new java.awt.Dimension(0, 0));
+        var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, steps, right);
+        split.setResizeWeight(0);
+        split.setOneTouchExpandable(true);
         split.setBorder(BorderFactory.createEmptyBorder());
         add(top, BorderLayout.PAGE_START);
         add(split, BorderLayout.CENTER);
@@ -158,7 +164,7 @@ final class ReplayView extends JPanel {
         if (steps.isEmpty()) {
             where.setText("no steps");
             what.setText(" ");
-            pane.show("");
+            pane.setText("");
             return;
         }
         var step = ide.record("replay-step", Map.of("n", String.valueOf(steps.get(at).get("n"))));
@@ -191,30 +197,17 @@ final class ReplayView extends JPanel {
         mark(path, text);
     }
 
-    /** A file with the lines a step takes marked, scrolled to the first. */
+    /** A file with the lines a step takes marked under its highlighting, scrolled to the first. */
     private void mark(String path, String text) {
-        pane.setText("");
-        var document = pane.getStyledDocument();
-        var first = -1;
+        beforePath.setText(path + "  (as it was)");
+        pane.removeAllLineHighlights();
+        pane.setText(text);
+        marked.forEach(line -> Code.mark(pane, line - 1, Code.ZONE));
         try {
-            var header = new SimpleAttributeSet();
-            StyleConstants.setBold(header, true);
-            StyleConstants.setForeground(header, new Color(0xCCCCCC));
-            document.insertString(0, path + "\n", header);
-            var lines = text.lines().toList();
-            for (var i = 0; i < lines.size(); i++) {
-                var style = new SimpleAttributeSet();
-                StyleConstants.setForeground(style, new Color(0xA9B7C6));
-                if (marked.contains(i + 1)) {
-                    StyleConstants.setBackground(style, new Color(0x52503A));
-                    if (first < 0) first = document.getLength();
-                }
-                document.insertString(document.getLength(), lines.get(i) + "\n", style);
-            }
-        } catch (BadLocationException impossible) {
-            throw new IllegalStateException(impossible);
+            pane.setCaretPosition(marked.isEmpty() ? 0 : pane.getLineStartOffset(Math.min(marked.getFirst() - 1, pane.getLineCount() - 1)));
+        } catch (BadLocationException nowhere) {
+            pane.setCaretPosition(0);
         }
-        pane.setCaretPosition(Math.max(first, 0));
     }
 
     /** A step as a person reads it: what ran, on what, with what, and for which task. */

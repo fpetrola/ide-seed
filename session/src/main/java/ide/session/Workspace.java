@@ -85,7 +85,10 @@ public final class Workspace {
             if (spec.matches()) {
                 var from = Integer.parseInt(spec.group(1));
                 var to = spec.group(2) == null ? from : Integer.parseInt(spec.group(2));
-                places.addFirst(new History.Place(places.getFirst().path(), from, to, ""));
+                var file = places.getFirst().path();
+                // the lines are what it takes: the member they are in is only where
+                places.removeIf(p -> p.path().equals(file) && p.line() <= from && p.endLine() >= to);
+                places.addFirst(new History.Place(file, from, to, ""));
             }
         }
         return places;

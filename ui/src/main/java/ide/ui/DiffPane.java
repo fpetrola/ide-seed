@@ -1,44 +1,32 @@
 package ide.ui;
 
-import javax.swing.JTextPane;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
-import java.awt.Color;
-import java.awt.Font;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 
-/** A diff as IDEs show one: added lines green, removed ones red, each file and each hunk marked. */
-final class DiffPane extends JTextPane {
+/**
+ * A diff as IDEs show one: the code highlighted as Java, added lines on green, removed ones on red, each file's header
+ * and each hunk marked, the marks under the highlighting.
+ */
+final class DiffPane extends RSyntaxTextArea {
 
     DiffPane() {
+        setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVA);
+        Code.theme(this);
         setEditable(false);
-        setFont(Zoom.code(13));
-        setBackground(new Color(0x2B2B2B));
+        setLineWrap(false);
+        setHighlightCurrentLine(false);
+        setCodeFoldingEnabled(false);
     }
 
     void show(String diff) {
-        setText("");
-        var document = getStyledDocument();
-        for (var line : diff.lines().toList()) {
-            var style = new SimpleAttributeSet();
-            StyleConstants.setForeground(style, new Color(0xA9B7C6));
-            if (line.startsWith("+++") || line.startsWith("---")) {
-                StyleConstants.setBold(style, true);
-                StyleConstants.setForeground(style, new Color(0xCCCCCC));
-            } else if (line.startsWith("@@")) {
-                StyleConstants.setForeground(style, new Color(0x9876AA));
-            } else if (line.startsWith("+")) {
-                StyleConstants.setForeground(style, new Color(0x9BCB8A));
-                StyleConstants.setBackground(style, new Color(0x294436));
-            } else if (line.startsWith("-")) {
-                StyleConstants.setForeground(style, new Color(0xE5A3A3));
-                StyleConstants.setBackground(style, new Color(0x4B2A2A));
-            }
-            try {
-                document.insertString(document.getLength(), line + "\n", style);
-            } catch (BadLocationException impossible) {
-                throw new IllegalStateException(impossible);
-            }
+        removeAllLineHighlights();
+        setText(diff);
+        var lines = diff.lines().toList();
+        for (var i = 0; i < lines.size(); i++) {
+            var line = lines.get(i);
+            if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) Code.mark(this, i, Code.HEADER);
+            else if (line.startsWith("+")) Code.mark(this, i, Code.ADDED);
+            else if (line.startsWith("-")) Code.mark(this, i, Code.REMOVED);
         }
         setCaretPosition(0);
     }

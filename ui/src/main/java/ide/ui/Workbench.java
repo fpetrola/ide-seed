@@ -77,6 +77,10 @@ final class Workbench extends JPanel {
     private final Views views = new Views(this::openProblem, this::openResult);
     private final PlansView plans;
     private final ReplayView replay;
+    private final JSplitPane center;
+    private final JSplitPane withPlans;
+    private final JSplitPane main;
+    private int[] unmaximized; // the dividers before the views took the whole window, if they did
     /** The terminal, in the project's folder; none if the IDE was not opened on a folder. */
     private final Terminal terminal;
     private final JLabel status = new JLabel(" ");
@@ -120,6 +124,7 @@ final class Workbench extends JPanel {
             public void replay(String plan) {
                 Workbench.this.replay.load(Optional.of(plan));
                 views.setSelectedComponent(Workbench.this.replay);
+                if (unmaximized == null) maximizeViews();
             }
         });
         this.replay = new ReplayView(ide, this::refresh);
@@ -177,18 +182,21 @@ final class Workbench extends JPanel {
         });
         bulbs.setRepeats(false);
         checks.setRepeats(false);
-        var center = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editors, views);
+        center = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editors, views);
         center.setResizeWeight(0.85);
         center.setBorder(BorderFactory.createEmptyBorder());
         var projectScroll = new JScrollPane(project);
         projectScroll.setBorder(BorderFactory.createEmptyBorder());
-        var withPlans = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, center, plans); // the plans beside the editors, seen with the terminal
+        withPlans = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, center, plans); // the plans beside the editors, seen with the terminal
         withPlans.setResizeWeight(1);
         withPlans.setBorder(BorderFactory.createEmptyBorder());
         plans.setPreferredSize(new java.awt.Dimension(Math.round(Zoom.of(340)), 0));
-        var main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, projectScroll, withPlans);
+        // any side may be made as narrow as one wants, or folded away with the divider's arrows
+        for (var side : List.<java.awt.Component>of(plans, projectScroll, editors, views)) side.setMinimumSize(new java.awt.Dimension(0, 0));
+        main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, projectScroll, withPlans);
         main.setDividerLocation(260);
         main.setBorder(BorderFactory.createEmptyBorder());
+        for (var split : List.of(center, withPlans, main)) split.setOneTouchExpandable(true);
         add(main, BorderLayout.CENTER);
         add(runBar(), BorderLayout.PAGE_START);
         var bar = new JPanel(new BorderLayout(16, 0));
@@ -299,9 +307,11 @@ final class Workbench extends JPanel {
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
+                case "maximize-views" -> maximizeViews();
                 case "replay" -> {
                     replay.load(plans.shownPlan());
                     views.setSelectedComponent(replay);
+                    if (unmaximized == null) maximizeViews();
                 }
                 case "run" -> editors.current().ifPresentOrElse(this::run, () -> say("run: no file is open"));
                 case "rerun" -> {
@@ -350,6 +360,25 @@ final class Workbench extends JPanel {
     }
 
     /** Shows the terminal and gives it the keys; it starts the first time it is shown. */
+    /** The views below (the replay, the terminal...) take the whole window, as IntelliJ's Maximize Tool Window; again, back. */
+    private void maximizeViews() {
+        if (unmaximized == null) {
+            unmaximized = new int[]{center.getDividerLocation(), withPlans.getDividerLocation(), main.getDividerLocation()};
+            center.setDividerLocation(0);
+            withPlans.setDividerLocation(withPlans.getWidth() - withPlans.getDividerSize());
+            main.setDividerLocation(0);
+        } else {
+            center.setDividerLocation(unmaximized[0]);
+            withPlans.setDividerLocation(unmaximized[1]);
+            main.setDividerLocation(unmaximized[2]);
+            unmaximized = null;
+        }
+    }
+
+    boolean viewsMaximized() {
+        return unmaximized != null;
+    }
+
     private void terminal() {
         if (terminal == null) {
             say("no terminal: the IDE was not opened on a folder");
@@ -879,7 +908,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", null, "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", "maximize-views", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");

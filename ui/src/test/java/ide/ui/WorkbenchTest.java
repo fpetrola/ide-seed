@@ -987,6 +987,7 @@ class WorkbenchTest {
         var workbench = new Workbench(new Ide(workspace), dialogs);
 
         workbench.act("replay");
+        assertThat(workbench.viewsMaximized()).isTrue(); // the replay takes the whole window
         var replay = workbench.replay();
         assertThat(replay.steps()).containsExactly("1 rename  element=a.A#m(int)  name=plus  [t1]", "2 rename  element=a.A#x  name=count  [t1]");
         assertThat(replay.where()).isEqualTo("step 1 of 2, before");
@@ -1004,6 +1005,8 @@ class WorkbenchTest {
         replay.previous();
         assertThat(replay.where()).isEqualTo("step 1 of 2, after");
 
+        workbench.act("maximize-views");
+        assertThat(workbench.viewsMaximized()).isFalse();
         workbench.open("a/A.java", 1, 1);
         replay.goOn();
         assertThat(workbench.text("a/A.java")).contains("int plus(int p)", "public int x;");

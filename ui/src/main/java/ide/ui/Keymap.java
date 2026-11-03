@@ -51,6 +51,7 @@ final class Keymap {
             key("back", "Back", "Go back to where the caret was", "ctrl alt LEFT", "alt LEFT"),
             key("forward", "Forward", "Go forward again", "ctrl alt RIGHT", "alt RIGHT"),
             key("terminal", "Terminal", "The terminal, in the project's folder", "alt F12"),
+            key("maximize-views", "Maximize Views", "The views below take the whole window; again, back", "ctrl shift QUOTE"),
             key("replay", "Replay Plan", "The plan shown, step by step as it was done: what each step takes, then what it changed", "ctrl alt shift R"),
             key("run", "Run Current File", "Runs the program of the current file's class, saved first", "ctrl shift F10"),
             key("run-chosen", "Run Configuration", "Runs the chosen run configuration", "shift F10"),

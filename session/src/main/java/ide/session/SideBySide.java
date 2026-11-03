@@ -13,7 +13,8 @@ import java.util.Set;
  * A file before and after, as two columns of rows side by side. A row is what stayed (same on both sides), what went
  * (removed, only on the left), what came (added, only on the right), or a line changed (changed on both: a run of
  * lines that went, next to a run that came, row by row). Lines that went from one place and came to another, maybe
- * indented otherwise, are moved on both sides, not removed and added. A row whose left line is one of {@code zone},
+ * indented otherwise, are moved on both sides, not removed and added; the lines a step takes, when they are a small
+ * part of the file, are aligned last, so that what it did not touch aligns first. A row whose left line is one of {@code zone},
  * the lines a step takes, is in the zone; each run of changes with no line in it is also changed, at its first line.
  */
 record SideBySide(List<Row> rows, List<Also> also) {
@@ -41,7 +42,12 @@ record SideBySide(List<Row> rows, List<Also> also) {
     static SideBySide of(String before, String after, Set<Integer> zone) {
         var left = before == null ? List.<String>of() : before.lines().toList();
         var right = after == null ? List.<String>of() : after.lines().toList();
-        var places = TextDiff.common(left, right);
+        // what the step takes is aligned last: when it is a small part of the file, its lines do not pair as kept, so
+        // that the rest aligns and they show as moved if they come elsewhere
+        var small = !zone.isEmpty() && zone.size() * 3 < left.size();
+        var masked = small ? java.util.stream.IntStream.range(0, left.size())
+                .mapToObj(n -> zone.contains(n + 1) ? "\u0000" + n : left.get(n)).toList() : left;
+        var places = TextDiff.common(masked, right);
         // the lines in order: kept pairs, and what went or came between them
         record Op(int left, int right) { // -1 on the side it is not
         }
@@ -79,15 +85,20 @@ record SideBySide(List<Row> rows, List<Also> also) {
                 movedRight.add(op.right());
             }
         }
-        // rows: a run of what went next to a run of what came pairs up as changed, row by row
+        // rows: a run of what went next to a run of what came pairs up as changed, row by row; what only came is in
+        // the zone when it came where the zone is: after a line of it, or before one
         var rows = new ArrayList<Row>();
+        var lastLeft = 0;
         for (var at = 0; at < ordered.size(); ) {
             var op = ordered.get(at);
             if (op.left() >= 0 && op.right() >= 0) {
                 rows.add(row(left, right, op.left(), op.right(), "same", "same", zone));
+                lastLeft = op.left() + 1;
                 at++;
                 continue;
             }
+            var where = lastLeft;
+            var came = zone.contains(where) || zone.contains(where + 1);
             var gone = new ArrayList<Integer>();
             var come = new ArrayList<Integer>();
             while (at < ordered.size() && (ordered.get(at).left() < 0 || ordered.get(at).right() < 0)) {
@@ -104,9 +115,10 @@ record SideBySide(List<Row> rows, List<Also> also) {
                 else rows.add(row(left, right, l, -1, "removed", "none", zone));
             }
             for (var r : come) {
-                if (movedRight.contains(r)) rows.add(row(left, right, -1, r, "none", "moved", zone));
-                else if (pairedCome.indexOf(r) >= pairs) rows.add(row(left, right, -1, r, "none", "added", zone));
+                if (movedRight.contains(r)) rows.add(came(row(left, right, -1, r, "none", "moved", zone), came));
+                else if (pairedCome.indexOf(r) >= pairs) rows.add(came(row(left, right, -1, r, "none", "added", zone), came));
             }
+            if (!gone.isEmpty()) lastLeft = gone.getLast() + 1;
         }
         // also changed: each run of rows that are not the same, none of them in the zone
         var also = new ArrayList<Also>();
@@ -118,8 +130,9 @@ record SideBySide(List<Row> rows, List<Also> also) {
             var start = at;
             var inZone = false;
             while (at < rows.size() && !rows.get(at).leftKind().equals("same")) inZone |= rows.get(at++).zone();
-            if (!inZone && !zone.isEmpty()) {
-                var first = rows.get(start);
+            if (!inZone && !zone.isEmpty()) { // said by its first line that says something
+                var first = rows.subList(start, at).stream().filter(r -> !(r.rightLine() > 0 ? r.right() : r.left()).isBlank())
+                        .findFirst().orElse(rows.get(start));
                 also.add(first.rightLine() > 0 ? new Also(start, first.rightLine(), first.right()) : new Also(start, first.leftLine(), first.left()));
             }
         }
@@ -129,6 +142,10 @@ record SideBySide(List<Row> rows, List<Also> also) {
     private static Row row(List<String> left, List<String> right, int l, int r, String leftKind, String rightKind, Set<Integer> zone) {
         return new Row(l < 0 ? 0 : l + 1, l < 0 ? "" : left.get(l), leftKind, r < 0 ? 0 : r + 1, r < 0 ? "" : right.get(r), rightKind,
                 l >= 0 && zone.contains(l + 1));
+    }
+
+    private static Row came(Row row, boolean zone) {
+        return new Row(row.leftLine(), row.left(), row.leftKind(), row.rightLine(), row.right(), row.rightKind(), zone);
     }
 
     /** A line that says something: not blank, not a lone brace. */
