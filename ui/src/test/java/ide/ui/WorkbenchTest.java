@@ -884,7 +884,7 @@ class WorkbenchTest {
         workbench.act("change-signature");
 
         assertThat(dialogs.filled.getFirst().fields()).extracting(f -> f.param().name() + "=" + f.value())
-                .containsExactly("method=a.A#m(int)", "parameters=int p");
+                .containsExactly("method=a.A#m(int)", "parameters=int p", "visibility=package");
     }
 
     @Test

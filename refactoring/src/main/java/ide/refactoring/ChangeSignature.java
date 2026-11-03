@@ -40,12 +40,13 @@ public final class ChangeSignature implements Refactoring {
                 Param.of("visibility", "text").optional());
     }
 
-    /** The parameters the method has now, as they would be written to keep them. */
+    /** The parameters the method has now, as they would be written to keep them, and its visibility. */
     @Override
     public Map<String, String> suggestions(Run run, Args args) {
         if (args.values().get("method") == null || args.values().get("parameters") != null) return Map.of();
-        var method = args.element("method", run.program()).id();
-        return Map.of("parameters", String.join(", ", params(run, method).stream().map(p -> p.fact(Fact.TYPE) + " " + p.name()).toList()));
+        var method = args.element("method", run.program());
+        return Map.of("parameters", String.join(", ", params(run, method.id()).stream().map(p -> p.fact(Fact.TYPE) + " " + p.name()).toList()),
+                "visibility", method.fact(Fact.VISIBILITY));
     }
 
     @Override
@@ -67,7 +68,7 @@ public final class ChangeSignature implements Refactoring {
         for (var param : params(run, method)) {
             if (!kept.contains(param.name())) projection.apply(new Primitive.Delete(param.id()));
         }
-        if (args.values().get("visibility") != null) {
+        if (args.values().get("visibility") != null && !args.text("visibility").equals(run.program().element(method).fact(Fact.VISIBILITY))) {
             projection.apply(new Primitive.Set(method, "visibility", args.text("visibility")));
         }
         return method;

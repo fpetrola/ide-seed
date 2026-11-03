@@ -120,7 +120,7 @@ class CapabilitiesTest {
                 """)).capabilities();
 
         assertThat(capabilities.invoke("suggest", Map.of("refactoring", "change-signature", "args", Map.of("method", "a.P#add(int,long)"))))
-                .isEqualTo("{\"parameters\":\"int a, long b\"}");
+                .contains("\"parameters\":\"int a, long b\"", "\"visibility\":\"package\"");
         assertThat(capabilities.invoke("suggest", Map.of("refactoring", "extract-superclass", "args", Map.of("type", "a.P"))))
                 .isEqualTo("{\"name\":\"AbstractP\"}");
     }
