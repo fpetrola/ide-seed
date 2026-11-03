@@ -996,6 +996,9 @@ class WorkbenchTest {
         assertThat(replay.shown()).contains("a/A.java changed*:    int m(int p) { | changed:    int plus(int p) {");
         assertThat(replay.seen()).isEqualTo("a/A.java:5"); // what it takes is what is seen first
         assertThat(replay.files()).containsExactly("a/A.java");
+        replay.sides().wheel(true, 1); // Shift+wheel: both sides sideways, wherever the pointer is
+        replay.sides().wheel(false, 0);
+        assertThat(replay.sides().file()).isEqualTo("a/A.java");
 
         replay.only("before"); // the file as it was, alone, what the step takes marked: chosen, it stays chosen
         assertThat(replay.where()).isEqualTo("step 1 of 2: before");

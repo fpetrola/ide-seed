@@ -99,9 +99,7 @@ final class ReplayView extends JPanel {
         before.add(beforePath, BorderLayout.PAGE_START);
         before.add(new org.fife.ui.rtextarea.RTextScrollPane(pane, true), BorderLayout.CENTER);
         shownPanel.add(before, "before");
-        var sidesScroll = new JScrollPane(sides);
-        sidesScroll.getVerticalScrollBar().setUnitIncrement(16);
-        shownPanel.add(sidesScroll, "after");
+        shownPanel.add(sides, "after"); // it scrolls itself: its bars always at the bottom and the side of the view
         alsoList.setVisibleRowCount(3);
         alsoList.setToolTipText("What the step changed away from what it takes: a click shows it");
         alsoList.addListSelectionListener(event -> {
@@ -299,6 +297,10 @@ final class ReplayView extends JPanel {
         var listed = new ArrayList<String>();
         for (var i = 0; i < files.getItemCount(); i++) listed.add(files.getItemAt(i));
         return listed;
+    }
+
+    SideBySidePane sides() {
+        return sides;
     }
 
     String header() {
