@@ -440,10 +440,10 @@ refactoring introduce-local-object "Makes locals one object of an existing class
   require nonempty(refs(locals)) "none of the locals is read"
   # before the first use of any of them: one may be read nowhere
   let at = statement(first(refs(locals)))
-  # a value is a local of its own there, named as its parameter, inlined with the others
+  # a value is a local of its own there, inlined with the others: named as its parameter, if no other is
   let made = list()
   for v in valued(values)
-    l := create LOCAL ${owner(first(locals))} ${v} facts="type=${type(param-named(constructor, v))}"
+    l := create LOCAL ${owner(first(locals))} ${free-name(owner(first(locals)), v)} facts="type=${type(param-named(constructor, v))}"
     move ${first(statements(owner(first(locals))))} ${owner(at)} before=${at}
     set ${l} initializer ${value-of(values, v)}
     let made = list(made, l)

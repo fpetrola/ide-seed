@@ -133,6 +133,10 @@ class IntroduceLocalObjectTest {
 
                 class Report {
                     void print(ResultSet rs, List<String> fields) throws SQLException {
+                        if (fields.isEmpty()) {
+                            String id = "none";
+                            System.out.println(id);
+                        }
                         while (rs.next()) {
                             String street = rs.getString("street");
                             System.out.println(street);
@@ -168,7 +172,7 @@ class IntroduceLocalObjectTest {
                 """));
 
         var result = ws.invoke("introduce-local-object", Map.of("constructor", "a.Address#new(String,String)",
-                "locals", List.of("a.Report#print(String,String)/s"), "name", "address", "values", "street = id"));
+                "locals", List.of("a.Report#print(String,String)/s"), "name", "address", "values", "id = street, street = id"));
 
         assertThat(result.applied()).isFalse();
         assertThat(ws.source("a/Report.java")).contains("String s = street;");

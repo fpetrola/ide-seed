@@ -90,6 +90,7 @@ final class ScriptFunctions {
             case "param-named" -> graph.children(element(args, 0).id()).stream() // a callable's parameter by its name
                     .filter(e -> e.kind().name().equals("PARAM") && e.name().equals(text(args, 1))).findFirst()
                     .map(e -> elem(e.id())).orElseThrow(() -> new IllegalArgumentException(element(args, 0).qualified() + " has no parameter " + text(args, 1)));
+            case "free-name" -> text(freeName(element(args, 0), text(args, 1))); // a name no variable of a callable has: the name, else name2, ...
             case "valued" -> new Value.Items(assigned(args.get(0)).keySet().stream().<Value>map(Value.Text::new).toList()); // the names of name = value, ...
             case "value-of" -> text(assigned(args.get(0)).get(text(args, 1))); // the value a name is given in name = value, ...
             case "in-order" -> inOrder(element(args, 0), Value.items(args.get(1)).stream().map(this::element).toList(),
@@ -167,6 +168,15 @@ final class ScriptFunctions {
         var text = Value.asText(value);
         if (graph.contains(new ElementId(text))) return elem(new ElementId(text));
         return graph.find(text).map(e -> elem(e.id())).orElse(null);
+    }
+
+    private String freeName(Element callable, String name) {
+        var taken = graph.children(callable.id()).stream().filter(e -> e.kind().name().equals("PARAM") || e.kind().name().equals("LOCAL"))
+                .map(Element::name).collect(Collectors.toSet());
+        if (!taken.contains(name)) return name;
+        var n = 2;
+        while (taken.contains(name + n)) n++;
+        return name + n;
     }
 
     /** {@code name = value, ...}, in the order written; the commas inside a value's brackets or quotes are its own. */
