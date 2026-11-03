@@ -141,6 +141,7 @@ final class ScriptFunctions {
             case "count" -> text(String.valueOf(Value.items(args.get(0)).size())); // numbers are text; eq compares them so
             case "first" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getFirst();
             case "last" -> Value.items(args.get(0)).isEmpty() ? null : Value.items(args.get(0)).getLast();
+            case "names" -> new Value.Items(Value.items(args.get(0)).stream().<Value>map(e -> new Value.Text(element(e).name())).toList()); // of elements
             case "list" -> new Value.Items(args.stream().flatMap(a -> Value.items(a).stream()).toList()); // its arguments, lists flattened
             case "reversed" -> new Value.Items(Value.items(args.get(0)).reversed());
             default -> throw new IllegalArgumentException("unknown script function: " + name);

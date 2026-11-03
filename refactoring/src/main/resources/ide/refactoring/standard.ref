@@ -475,6 +475,26 @@ refactoring move-statement "Moves a statement before another of its block, as In
   return ${statement}
 end
 
+refactoring introduce-functional-parameter "Makes a method take what one of its calls does as an object of a new functional interface, as IntelliJ's Introduce Functional Parameter: the interface declares the called method, and the callers pass it"
+  param method : element(METHOD) "the method that takes it"
+  param called : element(METHOD) "the method it calls once, which its callers pass"
+  param name : text "name of the new interface" default "${cap(name(called))}Function"
+  param parameter : text "name of the parameter" default "function"
+  let calls = refs(called) | within method
+  require eq(count(calls), "1") "${qualified(method)} calls ${qualified(called)} other than once"
+  i := create INTERFACE ${owner(top(method))} ${name}
+  set ${i} annotations @FunctionalInterface
+  let through = "this"
+  if eq(attr(called, "static"), "true")
+    let through = name(owner(called))
+  end
+  change-signature ${method} "${join(names(params(method)), ", ")}, ${name} ${parameter} = ${through}::${name(called)}"
+  d := copy-signature ${called} ${i}
+  # its uses are read anew: the call's, after the method's signature changed
+  retarget ${first(refs(called) | within method)} ${d}
+  return ${i}
+end
+
 refactoring move-out-of-loop "Moves the last statements of a loop's body after it: a local of the loop they read is declared before it and given its value in each turn; they run once, after the last turn, with what it left (its type's default if there was none)" changes meaning
   param from : element(STATEMENT) "the first statement to move: it and those after it in its block go"
   param locals : elements(LOCAL) "the locals of the loop they read"
