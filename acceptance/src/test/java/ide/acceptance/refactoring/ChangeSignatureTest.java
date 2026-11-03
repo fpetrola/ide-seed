@@ -163,4 +163,23 @@ class ChangeSignatureTest {
         assertThat(result.violations()).extracting(Violation::code).containsExactly("delete.referenced");
         assertThat(ws.source("a/Calc.java")).isEqualTo(CALC);
     }
+
+    /** As IntelliJ's dialog: the visibility goes with the signature. */
+    @Test
+    void changesTheVisibilityToo() {
+        var ws = Workspace.of(Map.of("a/Calc.java", CALC, "b/User.java", USER));
+
+        var result = ws.invoke("change-signature", Map.of("method", "a.Calc#add(int,int,int)", "parameters", "a, b, unused",
+                "visibility", "private"));
+
+        assertThat(result.violations()).isNotEmpty(); // User calls it from elsewhere
+        assertThat(ws.source("a/Calc.java")).isEqualTo(CALC);
+
+        var ws2 = Workspace.of(Map.of("a/Calc.java", CALC));
+        var result2 = ws2.invoke("change-signature", Map.of("method", "a.Calc#add(int,int,int)", "parameters", "a, b",
+                "visibility", "private"));
+
+        assertThat(result2.violations()).isEmpty();
+        assertThat(ws2.source("a/Calc.java")).contains("private int add(int a, int b) {", "return add(1, 2);");
+    }
 }

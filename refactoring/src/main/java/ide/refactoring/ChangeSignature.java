@@ -30,13 +30,14 @@ public final class ChangeSignature implements Refactoring {
 
     @Override
     public String description() {
-        return "Reorders, adds (with a default for the calls) and removes parameters of a method";
+        return "Reorders, adds (with a default for the calls) and removes parameters of a method, and changes its visibility";
     }
 
     @Override
     public List<Param> params() {
         return List.of(Param.of("method", "element", "METHOD"), new Param("parameters", "text", List.of(),
-                "the new parameters, as in Java: int b, int a, long scale = 1 (a new one gives the value calls pass)", true));
+                "the new parameters, as in Java: int b, int a, long scale = 1 (a new one gives the value calls pass)", true),
+                Param.of("visibility", "text").optional());
     }
 
     /** The parameters the method has now, as they would be written to keep them. */
@@ -65,6 +66,9 @@ public final class ChangeSignature implements Refactoring {
         var kept = items.stream().map(Item::name).toList();
         for (var param : params(run, method)) {
             if (!kept.contains(param.name())) projection.apply(new Primitive.Delete(param.id()));
+        }
+        if (args.values().get("visibility") != null) {
+            projection.apply(new Primitive.Set(method, "visibility", args.text("visibility")));
         }
         return method;
     }
