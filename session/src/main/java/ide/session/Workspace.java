@@ -57,7 +57,7 @@ public final class Workspace {
     }
 
     /**
-     * The places of the code a refactoring's arguments name: each element's whole declaration, and the lines it is
+     * The places of the code a refactoring's arguments name: each element's whole declaration (a statement's lines), and the lines it is
      * given (as {@code 31-40} or {@code 46:93-46:111}) in the file of the first element given.
      */
     private List<History.Place> places(Map<String, ?> args) {
@@ -68,9 +68,12 @@ public final class Workspace {
                 var text = String.valueOf(item);
                 if (project.program().find(text).isEmpty() && !project.program().contains(new ide.program.ElementId(text))) continue;
                 var element = project.program().find(text).orElseGet(() -> project.program().element(new ide.program.ElementId(text)));
-                try {
-                    var place = place(Optional.of(element.qualified()), Optional.empty(), 0, 0);
-                    places.add(new History.Place(place.path(), place.line(), place.endLine(), element.qualified()));
+                try { // its whole declaration, in the file of its top-level type: a statement's lines too
+                    var file = project.program().topLevel(element.id()).fact(ide.program.Fact.FILE);
+                    var whole = project.declared(element.id());
+                    if (file != null && whole.isPresent()) {
+                        places.add(new History.Place(file, whole.get().line(), whole.get().endLine(), element.qualified()));
+                    }
                 } catch (RuntimeException notInAFile) {
                     // a package, or what no file declares
                 }

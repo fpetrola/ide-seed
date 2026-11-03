@@ -127,4 +127,15 @@ class ReplayTest {
 
         assertThat(steps(ws)).extracting(s -> s.get("what")).containsExactly("rename", "edit");
     }
+
+    /** A statement given by its place in a body is placed at its lines, as an element is. */
+    @Test
+    void aStatementAStepTakesIsPlacedAtItsLines() throws Exception {
+        var ws = open();
+        ws.edit("a/P.java", P.replace("        return x * 2;\n", "        int a = 1;\n        int b = 2;\n        return x * 2;\n"));
+        ws.invoke("move-statement", Map.of("statement", "a.P#twice()[2]", "before", "a.P#twice()[1]"));
+
+        assertThat(steps(ws).getLast().get("where")).asList().extracting(w -> ((Map<?, ?>) w).get("line") + "-" + ((Map<?, ?>) w).get("endLine"))
+                .containsExactlyInAnyOrder("8-8", "7-7");
+    }
 }
