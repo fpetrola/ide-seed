@@ -107,14 +107,34 @@ final class History {
     Map<String, Object> step(int n) {
         var step = find(n);
         var shown = summary(step);
+        var also = new ArrayList<Map<String, Object>>();
         shown.put("changes", step.changes.stream().map(c -> {
             var change = new LinkedHashMap<String, Object>();
             change.put("path", c.path());
+            change.put("status", c.before() == null ? "new" : c.after() == null ? "deleted" : "changed");
             change.put("before", c.before());
             change.put("after", c.after());
             change.put("diff", TextDiff.unified(c.path(), Objects.requireNonNullElse(c.before(), ""), Objects.requireNonNullElse(c.after(), "")));
+            var zone = new java.util.HashSet<Integer>();
+            step.where.stream().filter(w -> w.path().equals(c.path())).forEach(w -> {
+                for (var line = w.line(); line <= w.endLine(); line++) zone.add(line);
+            });
+            var compared = SideBySide.of(c.before(), c.after(), zone);
+            change.put("rows", compared.rows().stream().map(SideBySide.Row::shown).toList());
+            // what changed away from what the step takes: in a file it names nothing of, all of it
+            var outside = zone.isEmpty() && !step.where.isEmpty() ? List.of(new SideBySide.Also(0, 1, c.before() == null ? "new" : "changed"))
+                    : compared.also();
+            outside.forEach(a -> {
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("path", c.path());
+                entry.put("row", a.row());
+                entry.put("line", a.line());
+                entry.put("text", a.text().strip());
+                also.add(entry);
+            });
             return change;
         }).toList());
+        shown.put("also", also);
         return shown;
     }
 

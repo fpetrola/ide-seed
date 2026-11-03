@@ -34,6 +34,12 @@ final class ReplayView extends JPanel {
     private final JLabel where = new JLabel(" ");
     private final JLabel what = new JLabel(" ");
     private final DiffPane pane = new DiffPane();
+    private final SideBySidePane sides = new SideBySidePane();
+    private final java.awt.CardLayout cards = new java.awt.CardLayout();
+    private final JPanel shownPanel = new JPanel(cards);
+    private final DefaultListModel<String> alsoListed = new DefaultListModel<>();
+    private final JList<String> alsoList = new JList<>(alsoListed);
+    private List<Map<String, Object>> also = List.of();
     private List<Map<String, Object>> steps = List.of();
     private Optional<String> plan = Optional.empty();
     private int at; // the step shown, from 0
@@ -67,7 +73,27 @@ final class ReplayView extends JPanel {
                 display();
             }
         });
-        var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(list), new JScrollPane(pane));
+        shownPanel.add(new JScrollPane(pane), "before");
+        var sidesScroll = new JScrollPane(sides);
+        sidesScroll.getVerticalScrollBar().setUnitIncrement(16);
+        shownPanel.add(sidesScroll, "after");
+        alsoList.setVisibleRowCount(3);
+        alsoList.setToolTipText("What the step changed away from what it takes: a click shows it");
+        alsoList.addListSelectionListener(event -> {
+            var i = alsoList.getSelectedIndex();
+            if (event.getValueIsAdjusting() || i < 0 || i >= also.size()) return;
+            if (!after) {
+                after = true;
+                display();
+            }
+            sides.reveal(String.valueOf(also.get(i).get("path")), number(also.get(i).get("row")));
+        });
+        var right = new JPanel(new BorderLayout());
+        right.add(shownPanel, BorderLayout.CENTER);
+        var alsoScroll = new JScrollPane(alsoList);
+        alsoScroll.setBorder(BorderFactory.createTitledBorder("Also changed"));
+        right.add(alsoScroll, BorderLayout.PAGE_END);
+        var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(list), right);
         split.setResizeWeight(0.3);
         split.setBorder(BorderFactory.createEmptyBorder());
         add(top, BorderLayout.PAGE_START);
@@ -137,14 +163,19 @@ final class ReplayView extends JPanel {
         }
         var step = ide.record("replay-step", Map.of("n", String.valueOf(steps.get(at).get("n"))));
         where.setText(where());
-        what.setText(line(step));
+        what.setText(header(step));
         list.setSelectedIndex(at);
         list.ensureIndexIsVisible(at);
         var changes = (List<Map<String, Object>>) step.get("changes");
+        also = (List<Map<String, Object>>) step.get("also");
+        alsoListed.clear();
+        also.forEach(a -> alsoListed.addElement(a.get("path") + ":" + a.get("line") + "  " + a.get("text")));
         if (after) {
-            pane.show(String.join("", changes.stream().map(c -> String.valueOf(c.get("diff"))).toList()));
+            sides.show(changes);
+            cards.show(shownPanel, "after");
             return;
         }
+        cards.show(shownPanel, "before");
         // what it takes: the first place it names, in its file as it was; else the first file it changed
         var places = (List<Map<String, Object>>) step.get("where");
         var path = places.isEmpty() ? String.valueOf(changes.getFirst().get("path")) : String.valueOf(places.getFirst().get("path"));
@@ -186,6 +217,16 @@ final class ReplayView extends JPanel {
         pane.setCaretPosition(Math.max(first, 0));
     }
 
+    /** A step as a person reads it: what ran, on what, with what, and for which task. */
+    @SuppressWarnings("unchecked")
+    private static String header(Map<String, Object> step) {
+        var args = (Map<String, Object>) step.get("args");
+        var given = String.join(", ", new java.util.TreeMap<>(args).entrySet().stream().map(e -> e.getKey() + " "
+                + (e.getValue() instanceof List<?> l ? String.join(", ", l.stream().map(String::valueOf).toList()) : String.valueOf(e.getValue()))).toList());
+        var task = String.valueOf(step.get("task"));
+        return step.get("what") + ": " + given + (task.isEmpty() ? "" : "   \u00B7 task " + task);
+    }
+
     @SuppressWarnings("unchecked")
     private static String line(Map<String, Object> step) {
         var args = (Map<String, Object>) step.get("args");
@@ -211,7 +252,15 @@ final class ReplayView extends JPanel {
     }
 
     String shown() {
-        return pane.getText();
+        return after ? String.join("\n", sides.lines()) : pane.getText();
+    }
+
+    String header() {
+        return what.getText();
+    }
+
+    List<String> also() {
+        return java.util.Collections.list(alsoListed.elements());
     }
 
     List<Integer> marked() {

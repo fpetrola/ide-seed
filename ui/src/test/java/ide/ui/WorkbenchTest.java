@@ -995,7 +995,8 @@ class WorkbenchTest {
 
         replay.next();
         assertThat(replay.where()).isEqualTo("step 1 of 2, after");
-        assertThat(replay.shown()).contains("-    int m(int p) {", "+    int plus(int p) {");
+        assertThat(replay.header()).isEqualTo("rename: element a.A#m(int), name plus   \u00B7 task t1");
+        assertThat(replay.shown()).contains("a/A.java changed*:    int m(int p) { | changed:    int plus(int p) {");
         replay.next();
         replay.next();
         assertThat(replay.where()).isEqualTo("step 2 of 2, after");

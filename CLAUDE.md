@@ -180,7 +180,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   run-configs, run-config-set, run-config-remove. capabilities conversation, conversation-open, conversation-in (and where it is written). History: each transaction
   applied is a step, kept in `.ide/history.jsonl` (what ran and was given, the task being done, the places of the code
   its arguments name, each file it changed before and after; an undone one is no step), to see again: `replay` (a
-  plan's steps), `replay-step` (with what it changed), `replay-continue` (the files brought back to a step, as one
+  plan's steps), `replay-step` (with what it changed: each file side by side, row by row (SideBySide: same, removed, added,
+  changed, moved lines; the rows of what it takes in its zone), and what it also changed away from that), `replay-continue` (the files brought back to a step, as one
   edit; the steps after it discarded, kept; nothing before can be undone after it; refused if a file changed otherwise). Transcript reads the
   conversation as Claude Code writes it (JSONL), only what was added since and only the lines that can matter: what the
   person said, what the agent answered, the tools it used; `task-talk` is what of it was said while a task was being
@@ -210,7 +211,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   runs it saved first, in the Run view (RunConsole: stdout, stderr in red, input, rerun Ctrl+F5, stop Ctrl+F2), by its
   run configuration; the toolbar's list (top right) chooses one, Shift+F10 runs it, Alt+Shift+F10 edits them (a form
   from run-config-set's schema); the Replay view (Ctrl+Alt+Shift+R, or Replay on a plan) shows a plan's steps
-  one by one, first what each takes (marked in the file as it was), then its diff, both ways, and goes on from a step
+  one by one, first what each takes (marked in the file as it was), then each file side by side as replay-step aligns
+  it, with what it also changed, both ways, and goes on from a step
   (replay-continue); a task's details have a Conversation tab: what was said while it was
   being done, tools used one after another as one line; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability

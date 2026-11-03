@@ -138,4 +138,21 @@ class ReplayTest {
         assertThat(steps(ws).getLast().get("where")).asList().extracting(w -> ((Map<?, ?>) w).get("line") + "-" + ((Map<?, ?>) w).get("endLine"))
                 .containsExactlyInAnyOrder("8-8", "7-7");
     }
+
+    /** A step's files side by side, row by row, the lines it takes in its zone; what changed elsewhere is also changed. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aStepShowsEachFileSideBySideAndWhatElseChanged() throws Exception {
+        var ws = open();
+        ws.invoke("extract-interface", Map.of("type", "a.P", "name", "Doubles", "methods", List.of("a.P#twice()")));
+
+        var step = (Map<String, Object>) call(ws, "replay-step", Map.of("n", "1"));
+        var changes = (List<Map<String, Object>>) step.get("changes");
+
+        assertThat(changes).extracting(c -> c.get("path") + " " + c.get("status")).containsExactly("a/Doubles.java new", "a/P.java changed");
+        var rows = (List<Map<String, Object>>) changes.get(1).get("rows");
+        assertThat(rows).anySatisfy(r -> assertThat(r).containsEntry("leftKind", "changed").containsEntry("zone", true)
+                .containsEntry("right", "public class P implements Doubles {"));
+        assertThat((List<Map<String, Object>>) step.get("also")).extracting(a -> a.get("path")).contains("a/Doubles.java");
+    }
 }
