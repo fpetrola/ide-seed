@@ -994,6 +994,8 @@ class WorkbenchTest {
         assertThat(replay.where()).isEqualTo("step 1 of 2: before and after");
         assertThat(replay.header()).isEqualTo("rename: element a.A#m(int), name plus   \u00B7 task t1");
         assertThat(replay.shown()).contains("a/A.java changed*:    int m(int p) { | changed:    int plus(int p) {");
+        assertThat(replay.seen()).isEqualTo("a/A.java:5"); // what it takes is what is seen first
+        assertThat(replay.files()).containsExactly("a/A.java");
 
         replay.only("before"); // the file as it was, alone, what the step takes marked: chosen, it stays chosen
         assertThat(replay.where()).isEqualTo("step 1 of 2: before");

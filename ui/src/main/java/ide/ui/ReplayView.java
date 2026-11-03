@@ -44,6 +44,8 @@ final class ReplayView extends JPanel {
     private boolean after = true; // before and after side by side, rather than before alone: chosen, it stays
     private final List<Integer> marked = new ArrayList<>();
     private final javax.swing.JToggleButton beforeOnly;
+    private final javax.swing.JComboBox<String> files = new javax.swing.JComboBox<>();
+    private boolean filling;
     private final javax.swing.JToggleButton both;
 
     /** {@code changed}: the files changed (going on from a step). */
@@ -74,6 +76,13 @@ final class ReplayView extends JPanel {
         bar.add(where);
         bar.add(beforeOnly);
         bar.add(both);
+        files.setToolTipText("The files this step changed: one chosen is shown");
+        files.addActionListener(event -> {
+            if (filling || files.getSelectedIndex() < 0) return;
+            var place = sides.files().get(files.getSelectedIndex());
+            sides.reveal(place.path(), place.row());
+        });
+        bar.add(files);
         bar.add(goOn);
         var top = new JPanel(new BorderLayout());
         top.add(bar, BorderLayout.PAGE_START);
@@ -142,6 +151,17 @@ final class ReplayView extends JPanel {
         display();
     }
 
+    /** The step numbered {@code n}, as Forward would get to it: what the tests do. */
+    void go(int n) {
+        for (var i = 0; i < steps.size(); i++) {
+            if (String.valueOf(steps.get(i).get("n")).equals(String.valueOf(n)) || steps.get(i).get("n") instanceof Number k && k.intValue() == n) {
+                at = i;
+                display();
+                return;
+            }
+        }
+    }
+
     /** The step before. */
     void previous() {
         if (steps.isEmpty() || at == 0) return;
@@ -186,9 +206,20 @@ final class ReplayView extends JPanel {
         also = (List<Map<String, Object>>) step.get("also");
         alsoListed.clear();
         also.forEach(a -> alsoListed.addElement(a.get("path") + ":" + a.get("line") + "  " + a.get("text")));
+        filling = true;
+        files.removeAllItems();
+        changes.forEach(c -> files.addItem(c.get("path") + ("changed".equals(c.get("status")) ? "" : "  (" + c.get("status") + ")")));
+        files.setVisible(changes.size() > 1);
+        filling = false;
         if (after) {
             sides.show(changes);
             cards.show(shownPanel, "after");
+            var first = sides.first();
+            if (first != null) {
+                filling = true;
+                files.setSelectedIndex(changes.stream().map(c -> String.valueOf(c.get("path"))).toList().indexOf(first.path()));
+                filling = false;
+            }
             return;
         }
         cards.show(shownPanel, "before");
@@ -256,6 +287,18 @@ final class ReplayView extends JPanel {
 
     String shown() {
         return after ? String.join("\n", sides.lines()) : pane.getText();
+    }
+
+    /** The file and row seen first. */
+    String seen() {
+        var first = sides.first();
+        return first == null ? "" : first.path() + ":" + first.row();
+    }
+
+    List<String> files() {
+        var listed = new ArrayList<String>();
+        for (var i = 0; i < files.getItemCount(); i++) listed.add(files.getItemAt(i));
+        return listed;
     }
 
     String header() {

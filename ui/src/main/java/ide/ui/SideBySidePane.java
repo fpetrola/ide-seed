@@ -105,6 +105,54 @@ final class SideBySidePane extends JPanel implements javax.swing.Scrollable {
         add(javax.swing.Box.createVerticalGlue()); // the files from the top, the rest empty
         revalidate();
         repaint();
+        // seen first: what the step takes, else what it changed first
+        first = firstOf(changes, true);
+        if (first == null) first = firstOf(changes, false);
+        var seen = first;
+        if (seen != null) javax.swing.SwingUtilities.invokeLater(() -> reveal(seen.path(), seen.row()));
+    }
+
+    /** A row of a file. */
+    record Place(String path, int row) {
+    }
+
+    private Place first;
+
+    /** Where a step is seen first: the first row of what it takes, else the first row it changed. */
+    Place first() {
+        return first;
+    }
+
+    /** The first row of each file a step changed, in order: where to go to see that file. */
+    @SuppressWarnings("unchecked")
+    List<Place> files() {
+        var files = new ArrayList<Place>();
+        for (var change : shown) {
+            var rows = (List<Map<String, Object>>) change.get("rows");
+            var row = 0;
+            for (var i = 0; i < rows.size(); i++) {
+                if (!"same".equals(rows.get(i).get("leftKind")) || !"same".equals(rows.get(i).get("rightKind"))) {
+                    row = i;
+                    break;
+                }
+            }
+            files.add(new Place(String.valueOf(change.get("path")), row));
+        }
+        return files;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Place firstOf(List<Map<String, Object>> changes, boolean zone) {
+        for (var change : changes) {
+            var rows = (List<Map<String, Object>>) change.get("rows");
+            for (var i = 0; i < rows.size(); i++) {
+                var row = rows.get(i);
+                var hit = zone ? Boolean.TRUE.equals(row.get("zone"))
+                        : !"same".equals(row.get("leftKind")) || !"same".equals(row.get("rightKind"));
+                if (hit) return new Place(String.valueOf(change.get("path")), i);
+            }
+        }
+        return null;
     }
 
     /** A side: as wide as it is given, a line longer than that scrolled to sideways; as high as all its lines. */
@@ -144,17 +192,25 @@ final class SideBySidePane extends JPanel implements javax.swing.Scrollable {
         return false;
     }
 
-    /** Scrolls to a row of a file. */
+    /** Scrolls the pane so that a row of a file is near the top, both sides at once, from their start sideways. */
     void reveal(String path, int row) {
         var area = lefts.get(path);
         if (area == null) return;
         try {
-            var at = area.modelToView2D(area.getLineStartOffset(Math.max(0, Math.min(row, area.getLineCount() - 1))));
-            if (at != null) area.scrollRectToVisible(new Rectangle(0, (int) at.getY(), 1, (int) at.getHeight() * 8));
+            var line = Math.max(0, Math.min(row, area.getLineCount() - 1));
+            var at = area.modelToView2D(area.getLineStartOffset(line));
+            if (at == null) return;
+            var point = javax.swing.SwingUtilities.convertPoint(area, 0, (int) at.getY(), this);
+            var visible = getVisibleRect();
+            var top = Math.max(0, point.y - (int) at.getHeight() * 3);
+            scrollRectToVisible(new Rectangle(0, top, 1, Math.max(1, visible.height)));
+            var side = (javax.swing.JScrollPane) javax.swing.SwingUtilities.getAncestorOfClass(javax.swing.JScrollPane.class, area);
+            if (side != null && javax.swing.SwingUtilities.isDescendingFrom(side, this)) side.getHorizontalScrollBar().setValue(0);
         } catch (javax.swing.text.BadLocationException | RuntimeException nowhere) {
             // a row that is not there: stay
         }
     }
+
 
     /** At the size zoomed to; the wheel over it scrolls the pane, Shift+wheel sideways (both sides), Ctrl+wheel zooms. */
     private RSyntaxTextArea sized(RSyntaxTextArea area) {
