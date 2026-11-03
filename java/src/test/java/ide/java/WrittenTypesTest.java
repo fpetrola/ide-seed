@@ -38,4 +38,16 @@ class WrittenTypesTest {
 
         assertThat(projection.source("a/A.java")).contains("    Money x;").doesNotContain("import");
     }
+
+    @Test
+    void soIsWhatAMethodDeclaresItThrows() {
+        var projection = JavaProjection.of(Map.of(
+                "a/Rows.java", "package a;\n\nimport java.sql.SQLException;\n\nclass Rows {\n    static void each() throws SQLException {\n    }\n}\n",
+                "a/RowProcessor.java", "package a;\n\ninterface RowProcessor {\n    void processRow();\n}\n"));
+
+        projection.apply(new Primitive.Set(projection.program().find("a.RowProcessor#processRow()").orElseThrow().id(), "throws", "SQLException"));
+
+        assertThat(projection.source("a/RowProcessor.java")).contains("import java.sql.SQLException;", "void processRow() throws SQLException;");
+        assertThat(projection.program().unresolved()).isEmpty();
+    }
 }

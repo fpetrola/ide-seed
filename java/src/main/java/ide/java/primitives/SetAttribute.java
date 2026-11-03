@@ -242,7 +242,7 @@ final class SetAttribute {
         var unit = declaration.unit();
         var edits = new EditSet();
         var types = java.util.Arrays.stream(value.split(",")).map(String::strip).filter(type -> !type.isEmpty())
-                .map(type -> type.contains(".") ? Imports.nameable(edits, unit, type) : type).toList();
+                .map(type -> type.contains(".") ? Imports.nameable(edits, unit, type) : imported(c, edits, unit, type)).toList();
         var thrown = callable.getThrownExceptions();
         var parameters = callable.getParameters();
         var close = unit.next(')', parameters.isNonEmpty() ? parameters.getLast().orElseThrow().getEnd().orElseThrow()

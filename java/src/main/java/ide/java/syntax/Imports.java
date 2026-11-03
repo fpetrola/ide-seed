@@ -11,14 +11,15 @@ public final class Imports {
     private Imports() {
     }
 
-    /** An import after the last one, or in a block of its own after the package line. */
+    /** An import after the last one, or in a block of its own after the package line (with none, first). */
     public static void add(EditSet edits, Unit unit, String qualified) {
         var imports = unit.tree().getImports();
         if (imports.isNonEmpty()) {
             edits.insertAtLine(unit, imports.getLast().orElseThrow().getEnd().orElseThrow().line + 1, "import " + qualified + ";\n");
-        } else {
-            var line = unit.tree().getPackageDeclaration().map(p -> p.getEnd().orElseThrow().line).orElse(0);
-            edits.insertAtLine(unit, line + 1, "\nimport " + qualified + ";\n");
+        } else if (unit.tree().getPackageDeclaration().isPresent()) {
+            edits.insertAtLine(unit, unit.tree().getPackageDeclaration().get().getEnd().orElseThrow().line + 1, "\nimport " + qualified + ";\n");
+        } else { // the first lines of the file, a blank line apart from what follows
+            edits.insertAtLine(unit, 1, "import " + qualified + ";\n\n");
         }
     }
 

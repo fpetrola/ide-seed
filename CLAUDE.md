@@ -108,7 +108,7 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   package's) with files of its package, else in the one with most files. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
   re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
-  the changed member's type, supertypes and subtypes); `resolvedLastTime()` tells which. The AST is never edited.
+  the changed member's type, supertypes and subtypes; a file's imports changed, every member of it); `resolvedLastTime()` tells which. The AST is never edited.
   Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.
 - `engine` (projection) — Transaction (born with its Repairer; intercepts `apply`, folds each declared Change into
