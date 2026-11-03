@@ -211,8 +211,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   runs it saved first, in the Run view (RunConsole: stdout, stderr in red, input, rerun Ctrl+F5, stop Ctrl+F2), by its
   run configuration; the toolbar's list (top right) chooses one, Shift+F10 runs it, Alt+Shift+F10 edits them (a form
   from run-config-set's schema); the Replay view (Ctrl+Alt+Shift+R, or Replay on a plan) shows a plan's steps
-  one by one, first what each takes (marked in the file as it was), then each file side by side as replay-step aligns
-  it, with what it also changed, both ways, taking the whole window (Maximize Views, Ctrl+Shift+', toggles it; every
+  one by one, Forward and Back from step to step, each as chosen (it stays): before and after, each file side by side
+  as replay-step aligns it, what it takes marked on the left (the default), or before alone; with what it also changed, taking the whole window (Maximize Views, Ctrl+Shift+', toggles it; every
   side panel folds or shrinks to nothing); code shown anywhere (replay, diffs, previews) is highlighted as Java, the
   marks of a diff under it (Code), and goes on from a step
   (replay-continue); a task's details have a Conversation tab: what was said while it was

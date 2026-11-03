@@ -17,10 +17,10 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * A plan seen again, step by step, as the IDE kept it (replay): each step first as it will run, what it is given and
- * the place of the code it takes marked in the file as it was, then what it changed, as a diff of each file. Forward
- * and back go through both; going on from a step brings the files back to it (replay-continue), the steps after it
- * discarded. It shows what the IDE answers and decides nothing.
+ * A plan seen again, step by step, as the IDE kept it (replay). A step is seen, as chosen and until chosen otherwise,
+ * before and after side by side (each file it changed, row by row, what it takes marked on the left), or before alone
+ * (the file as it was, what it takes marked); Forward and Back go from step to step. Going on from a step brings the
+ * files back to it (replay-continue), the steps after it discarded. It shows what the IDE answers and decides nothing.
  */
 final class ReplayView extends JPanel {
 
@@ -41,24 +41,39 @@ final class ReplayView extends JPanel {
     private List<Map<String, Object>> steps = List.of();
     private Optional<String> plan = Optional.empty();
     private int at; // the step shown, from 0
-    private boolean after; // its changes, rather than what it takes
+    private boolean after = true; // before and after side by side, rather than before alone: chosen, it stays
     private final List<Integer> marked = new ArrayList<>();
+    private final javax.swing.JToggleButton beforeOnly;
+    private final javax.swing.JToggleButton both;
 
     /** {@code changed}: the files changed (going on from a step). */
     ReplayView(Ide ide, Runnable changed) {
         super(new BorderLayout());
         this.ide = ide;
         this.changed = changed;
-        var previous = button("◀ Back", "The step before, or what this one takes");
+        var previous = button("\u25C0 Back", "The step before");
         previous.addActionListener(event -> previous());
-        var next = button("Forward ▶", "What this step changed, or the next step");
+        var next = button("Forward \u25B6", "The next step");
         next.addActionListener(event -> next());
         var goOn = button("Go on from here", "Bring the files back to how this step left them; the steps after it are discarded");
         goOn.addActionListener(event -> goOn());
+        var beforeOnly = new javax.swing.JToggleButton("Before");
+        beforeOnly.setToolTipText("The file as it was, alone, what the step takes marked");
+        var both = new javax.swing.JToggleButton("Before and after", true);
+        both.setToolTipText("Each file it changed side by side: what went, came, changed and moved, what it takes marked");
+        var chosen = new javax.swing.ButtonGroup();
+        chosen.add(beforeOnly);
+        chosen.add(both);
+        beforeOnly.addActionListener(event -> only("before"));
+        both.addActionListener(event -> only("both"));
+        this.beforeOnly = beforeOnly;
+        this.both = both;
         var bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         bar.add(previous);
         bar.add(next);
         bar.add(where);
+        bar.add(beforeOnly);
+        bar.add(both);
         bar.add(goOn);
         var top = new JPanel(new BorderLayout());
         top.add(bar, BorderLayout.PAGE_START);
@@ -67,7 +82,6 @@ final class ReplayView extends JPanel {
         list.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting() && list.getSelectedIndex() >= 0 && list.getSelectedIndex() != at) {
                 at = list.getSelectedIndex();
-                after = false;
                 display();
             }
         });
@@ -84,10 +98,7 @@ final class ReplayView extends JPanel {
         alsoList.addListSelectionListener(event -> {
             var i = alsoList.getSelectedIndex();
             if (event.getValueIsAdjusting() || i < 0 || i >= also.size()) return;
-            if (!after) {
-                after = true;
-                display();
-            }
+            if (!after) only("both");
             sides.reveal(String.valueOf(also.get(i).get("path")), number(also.get(i).get("row")));
         });
         var right = new JPanel(new BorderLayout());
@@ -121,27 +132,27 @@ final class ReplayView extends JPanel {
         listed.clear();
         steps.forEach(step -> listed.addElement(line(step)));
         at = 0;
-        after = false;
         display();
     }
 
+    /** The next step, seen as the one before was. */
     void next() {
-        if (steps.isEmpty()) return;
-        if (!after) after = true;
-        else if (at < steps.size() - 1) {
-            at++;
-            after = false;
-        }
+        if (steps.isEmpty() || at >= steps.size() - 1) return;
+        at++;
         display();
     }
 
+    /** The step before. */
     void previous() {
-        if (steps.isEmpty()) return;
-        if (after) after = false;
-        else if (at > 0) {
-            at--;
-            after = true;
-        }
+        if (steps.isEmpty() || at == 0) return;
+        at--;
+        display();
+    }
+
+    /** How steps are seen from now on: {@code before} alone, or {@code both} side by side. */
+    void only(String view) {
+        after = !view.equals("before");
+        (after ? both : beforeOnly).setSelected(true);
         display();
     }
 
@@ -154,7 +165,6 @@ final class ReplayView extends JPanel {
         var shown = at;
         load(plan);
         at = Math.min(shown, steps.size() - 1);
-        after = true;
         display();
     }
 
@@ -241,7 +251,7 @@ final class ReplayView extends JPanel {
     }
 
     String where() {
-        return steps.isEmpty() ? "no steps" : "step " + (at + 1) + " of " + steps.size() + ", " + (after ? "after" : "before");
+        return steps.isEmpty() ? "no steps" : "step " + (at + 1) + " of " + steps.size() + ": " + (after ? "before and after" : "before");
     }
 
     String shown() {

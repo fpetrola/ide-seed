@@ -990,20 +990,20 @@ class WorkbenchTest {
         assertThat(workbench.viewsMaximized()).isTrue(); // the replay takes the whole window
         var replay = workbench.replay();
         assertThat(replay.steps()).containsExactly("1 rename  element=a.A#m(int)  name=plus  [t1]", "2 rename  element=a.A#x  name=count  [t1]");
-        assertThat(replay.where()).isEqualTo("step 1 of 2, before");
-        assertThat(replay.shown()).contains("int m(int p) {");
-        assertThat(replay.marked()).containsExactly(6, 7, 8);
-
-        replay.next();
-        assertThat(replay.where()).isEqualTo("step 1 of 2, after");
+        // a step chosen shows before and after side by side at once, what it takes marked on the left
+        assertThat(replay.where()).isEqualTo("step 1 of 2: before and after");
         assertThat(replay.header()).isEqualTo("rename: element a.A#m(int), name plus   \u00B7 task t1");
         assertThat(replay.shown()).contains("a/A.java changed*:    int m(int p) { | changed:    int plus(int p) {");
+
+        replay.only("before"); // the file as it was, alone, what the step takes marked: chosen, it stays chosen
+        assertThat(replay.where()).isEqualTo("step 1 of 2: before");
+        assertThat(replay.shown()).contains("int m(int p) {");
+        assertThat(replay.marked()).containsExactly(6, 7, 8);
         replay.next();
-        replay.next();
-        assertThat(replay.where()).isEqualTo("step 2 of 2, after");
+        assertThat(replay.where()).isEqualTo("step 2 of 2: before");
+        replay.only("both");
         replay.previous();
-        replay.previous();
-        assertThat(replay.where()).isEqualTo("step 1 of 2, after");
+        assertThat(replay.where()).isEqualTo("step 1 of 2: before and after");
 
         workbench.act("maximize-views");
         assertThat(workbench.viewsMaximized()).isFalse();
