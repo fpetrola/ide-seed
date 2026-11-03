@@ -322,6 +322,11 @@ public final class Plans {
                 .max(java.util.Comparator.comparing(Stretch::from)).map(Stretch::task);
     }
 
+    /** The plan a task is of. */
+    Optional<String> planOf(String task) {
+        return Optional.ofNullable(tasks.get(task)).map(t -> t.plan);
+    }
+
     /** What the person said that the agent was not told yet, now told. */
     List<Steer> take() {
         var waiting = steering.stream().filter(steer -> !steer.told()).toList();

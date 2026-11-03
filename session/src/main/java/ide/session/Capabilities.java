@@ -150,6 +150,18 @@ final class Capabilities {
                     return workspace.point(optional(args, "element"), optional(args, "path"), from,
                             args.containsKey("end") ? number(args, "end") : from, optional(args, "note").orElse("")).shown();
                 }))
+                .register(Capability.of("replay", "The steps a plan's tasks took (every step, with no plan), to see again one by "
+                        + "one: each transaction applied, numbered, what ran and what it was given, the task being done, the places "
+                        + "of the code it took and the files it changed; discarded: after a step the files were brought back to",
+                        List.of(Param.of("plan", "text").optional()), args -> entries("steps", workspace.replay(optional(args, "plan")))))
+                .register(Capability.of("replay-step", "A step with what it changed: each file before and after (none: it did not "
+                        + "exist), and the diff", List.of(Param.of("n", "text")), args -> workspace.replayStep(number(args, "n"))))
+                .register(Capability.of("replay-continue", "Brings the files back to how a step left them, to go on from there: the "
+                        + "steps after it are discarded (kept, to see), and what was done before cannot be undone; refused if a file "
+                        + "changed since its last step", List.of(Param.of("n", "text")), args -> {
+                    workspace.continueFrom(number(args, "n"));
+                    return entries("steps", workspace.replay(Optional.empty()));
+                }))
                 .register(Capability.of("pointed", "The last place the person was pointed at, numbered from 1 (0: none yet)",
                         List.of(), args -> workspace.attention().pointed().shown()))
                 .register(Capability.of("look", "Where the person is looking, as the window says it: a file, the caret, and "

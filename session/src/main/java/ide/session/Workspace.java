@@ -52,6 +52,55 @@ public final class Workspace {
         this.attention = new Attention(session::event);
         this.runs = new RunConfigs(root == null ? null : root.resolve(".ide/runs.json"), session::event);
         this.conversation = new Conversation(root == null ? null : root.resolve(".ide/conversation.json"), session::event);
+        if (root != null) session.historyIn(root.resolve(".ide/history.jsonl"));
+        session.attribution(() -> plans.doing().apply(java.time.Instant.now()).orElse(""), this::places);
+    }
+
+    /**
+     * The places of the code a refactoring's arguments name: each element's whole declaration, and the lines it is
+     * given (as {@code 31-40} or {@code 46:93-46:111}) in the file of the first element given.
+     */
+    private List<History.Place> places(Map<String, ?> args) {
+        var places = new java.util.ArrayList<History.Place>();
+        for (var value : args.values()) {
+            var items = value instanceof Collection<?> list ? list : List.of(String.valueOf(value));
+            for (var item : items) {
+                var text = String.valueOf(item);
+                if (project.program().find(text).isEmpty() && !project.program().contains(new ide.program.ElementId(text))) continue;
+                var element = project.program().find(text).orElseGet(() -> project.program().element(new ide.program.ElementId(text)));
+                try {
+                    var place = place(Optional.of(element.qualified()), Optional.empty(), 0, 0);
+                    places.add(new History.Place(place.path(), place.line(), place.endLine(), element.qualified()));
+                } catch (RuntimeException notInAFile) {
+                    // a package, or what no file declares
+                }
+            }
+        }
+        var lines = args.get("lines");
+        if (lines != null && !places.isEmpty()) {
+            var spec = java.util.regex.Pattern.compile("(\\d+)(?::\\d+)?(?:-(\\d+)(?::\\d+)?)?").matcher(String.valueOf(lines).strip());
+            if (spec.matches()) {
+                var from = Integer.parseInt(spec.group(1));
+                var to = spec.group(2) == null ? from : Integer.parseInt(spec.group(2));
+                places.addFirst(new History.Place(places.getFirst().path(), from, to, ""));
+            }
+        }
+        return places;
+    }
+
+    /** The steps of a plan's tasks (all, with none), to see again. */
+    public List<Map<String, Object>> replay(Optional<String> plan) {
+        return session.history().steps(task -> plan.isEmpty() || plans.planOf(task).filter(plan.get()::equals).isPresent());
+    }
+
+    /** A step with what it changed in each file. */
+    public Map<String, Object> replayStep(int n) {
+        return session.history().step(n);
+    }
+
+    /** Brings the files back to how step {@code n} left them; the steps after it are discarded, and nothing is undone. */
+    public void continueFrom(int n) {
+        session.back(n);
     }
 
     /** A workspace over these sources, with the standard library and knowledge; it has nowhere to save. */

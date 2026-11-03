@@ -51,16 +51,38 @@ public final class Session {
     private EventLog log = EventLog.NONE;
     private Trace lastSearch = new Trace();
     private Map<String, String> saved;
+    private History history = new History(null);
+    private Map<String, String> current; // the sources after the last transaction or undo: what the next one starts from
+    private java.util.function.Supplier<String> task = () -> "";
+    private java.util.function.Function<Map<String, ?>, List<History.Place>> places = args -> List.of();
+    private boolean previewing;
 
     public Session(JavaProjection project, Library library, Repairer repairer) {
         this.project = project;
         this.library = library;
         this.repairer = repairer;
         this.saved = project.sources();
+        this.current = saved;
+    }
+
+    /** Keeps each transaction as a step in a JSONL file from now on, with what was kept there before. */
+    void historyIn(Path file) {
+        history = new History(file);
+    }
+
+    /** What a step is attributed to: the task being done, and the places of the code a refactoring's arguments name. */
+    void attribution(java.util.function.Supplier<String> task, java.util.function.Function<Map<String, ?>, List<History.Place>> places) {
+        this.task = task;
+        this.places = places;
+    }
+
+    History history() {
+        return history;
     }
 
     /** Runs a refactoring naively in a transaction, then verifies and repairs; rolls back if violations remain. */
     public Result invoke(String refactoring, Map<String, ?> args) {
+        var where = previewing ? List.<History.Place>of() : places(args);
         var tx = new Transaction(project, repairer);
         Result result;
         try {
@@ -69,16 +91,30 @@ public final class Session {
         } catch (PrimitiveRejected rejected) {
             result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
         }
-        return record(tx, Map.of("event", "transaction", "refactoring", refactoring, "args", args), result);
+        return record(tx, Map.of("event", "transaction", "refactoring", refactoring, "args", args), result, refactoring, args, where);
+    }
+
+    /** The places a refactoring's arguments name; what cannot be placed is left out. */
+    private List<History.Place> places(Map<String, ?> args) {
+        try {
+            return places.apply(args);
+        } catch (RuntimeException unplaced) {
+            return List.of();
+        }
     }
 
     /** What a refactoring would do, verified, as a diff; nothing is kept. */
     public Preview preview(String refactoring, Map<String, ?> args) {
         var before = project.sources();
-        var result = invoke(refactoring, args);
-        var diff = diff(before, project.sources());
-        if (result.applied()) undo();
-        return new Preview(result, diff);
+        previewing = true;
+        try {
+            var result = invoke(refactoring, args);
+            var diff = diff(before, project.sources());
+            if (result.applied()) undo();
+            return new Preview(result, diff);
+        } finally {
+            previewing = false;
+        }
     }
 
     /** The step tree a refactoring would produce, without verifying or keeping anything. */
@@ -112,7 +148,7 @@ public final class Session {
         } catch (PrimitiveRejected rejected) {
             result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
         }
-        return record(tx, Map.of("event", "edit", "path", path), result);
+        return record(tx, Map.of("event", "edit", "path", path), result, "edit", Map.of("path", path), List.of());
     }
 
     /** Applies a fix, its questions answered or defaulted, as a transaction that must make its diagnostic disappear. */
@@ -125,15 +161,39 @@ public final class Session {
         var diagnostic = fix.diagnostic();
         var event = Map.of("event", "fix", "path", diagnostic.path(), "line", diagnostic.line(), "title", title);
         if (project.diagnostics().contains(diagnostic)) {
-            return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)));
+            return record(tx, event, tx.abort(new Violation("fix.ineffective", null, null, title + " left " + diagnostic)), "fix", event, List.of());
         }
-        return record(tx, event, tx.commit());
+        return record(tx, event, tx.commit(), "fix", Map.of("path", diagnostic.path(), "line", diagnostic.line(), "title", title),
+                List.of(new History.Place(diagnostic.path(), diagnostic.line(), diagnostic.line(), "")));
+    }
+
+    /**
+     * Brings the files back to how step {@code n} left them, as one edit by hand, and discards the steps after it;
+     * refused if a file is not what the last of them left. What was done before cannot be undone after it.
+     */
+    void back(int n) {
+        var restored = history.back(n, project.sources());
+        var tx = new Transaction(project, repairer);
+        Result result;
+        try {
+            restored.forEach(tx::edit);
+            result = tx.keep();
+        } catch (PrimitiveRejected rejected) {
+            result = tx.abort(new Violation(rejected.code(), null, null, rejected.getMessage()));
+        }
+        if (!result.applied()) throw new IllegalStateException("cannot go back to step " + n + ": " + result.violations());
+        undo.clear();
+        current = project.sources();
+        history.discardAfter(n);
+        log.append(Map.of("event", "branch", "step", n, "files", List.copyOf(restored.keySet())));
     }
 
     /** Reverts the last applied transaction. */
     public void undo() {
         if (undo.isEmpty()) throw new IllegalStateException("nothing to undo");
         project.restore(undo.pop());
+        current = project.sources();
+        if (!previewing) history.undone();
         log.append(Map.of("event", "undo"));
     }
 
@@ -294,8 +354,13 @@ public final class Session {
     }
 
     /** Logs a finished transaction and makes it undoable if it applied. */
-    private Result record(Transaction tx, Map<String, ?> event, Result result) {
-        if (result.applied()) undo.push(tx.before());
+    private Result record(Transaction tx, Map<String, ?> event, Result result, String what, Map<String, ?> args, List<History.Place> where) {
+        if (result.applied()) {
+            undo.push(tx.before());
+            var after = project.sources();
+            if (!previewing) history.add(what, args, task.get(), where, current, after);
+            current = after;
+        }
         lastSearch = result.search();
         var entry = new LinkedHashMap<String, Object>(event);
         entry.putAll(report(result));

@@ -177,7 +177,11 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   class's program as saved (the IDE's own Java launches it from its sources, with Maven's classpath, in the project's
   folder), by a run configuration (RunConfigs, in `.ide/runs.json`: name, class, arguments and VM options split as a
   shell does, folder, environment `NAME=value;...`; one chosen; a class run with none gets one named after it);
-  run-configs, run-config-set, run-config-remove. capabilities conversation, conversation-open, conversation-in (and where it is written). Transcript reads the
+  run-configs, run-config-set, run-config-remove. capabilities conversation, conversation-open, conversation-in (and where it is written). History: each transaction
+  applied is a step, kept in `.ide/history.jsonl` (what ran and was given, the task being done, the places of the code
+  its arguments name, each file it changed before and after; an undone one is no step), to see again: `replay` (a
+  plan's steps), `replay-step` (with what it changed), `replay-continue` (the files brought back to a step, as one
+  edit; the steps after it discarded, kept; nothing before can be undone after it; refused if a file changed otherwise). Transcript reads the
   conversation as Claude Code writes it (JSONL), only what was added since and only the lines that can matter: what the
   person said, what the agent answered, the tools it used; `task-talk` is what of it was said while a task was being
   done (Plans.doing: of the tasks being done then, the one started last). Attention: where attention is, both ways, between a person and an agent on the same
