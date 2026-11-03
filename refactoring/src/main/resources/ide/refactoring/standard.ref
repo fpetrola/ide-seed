@@ -495,6 +495,13 @@ refactoring introduce-functional-parameter "Makes a method take what one of its 
   return ${i}
 end
 
+refactoring change-visibility "Changes a member's or a type's visibility, as IntelliJ's Change Visibility: refused if a use would no longer reach it"
+  param element : element(CLASS,INTERFACE,ENUM,FIELD,METHOD,CONSTRUCTOR) "what changes"
+  param visibility : text "its new visibility"
+  set ${element} visibility ${visibility}
+  return ${element}
+end
+
 refactoring move-out-of-loop "Moves the last statements of a loop's body after it: a local of the loop they read is declared before it and given its value in each turn; they run once, after the last turn, with what it left (its type's default if there was none)" changes meaning
   param from : element(STATEMENT) "the first statement to move: it and those after it in its block go"
   param locals : elements(LOCAL) "the locals of the loop they read"
