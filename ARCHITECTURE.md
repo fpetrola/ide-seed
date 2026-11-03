@@ -876,6 +876,15 @@ se le habla), qué ignora, su prueba de autonomía, su estado actual con las int
     session) que explica el plan, la atención y los refactorings en lugar de editar texto. El servidor MCP lo pasa
     como `instructions` al inicializar, así que Claude lo recibe sin que nadie lo ponga en un `CLAUDE.md` del proyecto.
     Un test verifica que cada herramienta que nombra exista.
+  - **Decisión: un plan se vuelve a ver paso a paso, de diffs grabados (2026-11-03).** Cada transacción aplicada es
+    un paso de la historia (`.ide/history.jsonl`, en session): qué corrió y con qué, la tarea que se hacía, los lugares
+    del código que nombran sus argumentos y cada archivo que cambió, antes y después; una deshecha no es paso. La vista
+    Replay (Ctrl+Alt+Shift+R, o Replay en el plan) muestra cada paso primero como va a correr, con su zona marcada en
+    el archivo como estaba, y después su diff; adelante y atrás, sin volver a correr nada ni tocar el workspace.
+    Fernando eligió diffs grabados antes que reejecutar (exacto, rápido, ida y vuelta) y mirar más rama antes que undo
+    real: "seguir desde acá" (`replay-continue`) deja los archivos como los dejó ese paso, en una edición, y los pasos
+    siguientes quedan descartados, no borrados; lo de antes ya no se deshace. Si un archivo cambió por otro lado
+    desde su último paso (con el IDE cerrado), se rechaza.
 - **Abierto.** En la UI: el diff lado a lado, el rename en el lugar con recuadro, el árbol de tipos de F4 y Ctrl+T
   como popup, y sugerencias que se recalculan al cambiar un campo del formulario. El runner de `main`.
 

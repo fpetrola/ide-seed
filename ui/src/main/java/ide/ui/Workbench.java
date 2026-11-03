@@ -76,6 +76,7 @@ final class Workbench extends JPanel {
     private final Editors editors;
     private final Views views = new Views(this::openProblem, this::openResult);
     private final PlansView plans;
+    private final ReplayView replay;
     /** The terminal, in the project's folder; none if the IDE was not opened on a folder. */
     private final Terminal terminal;
     private final JLabel status = new JLabel(" ");
@@ -114,8 +115,16 @@ final class Workbench extends JPanel {
             public java.util.Optional<String> ask(String title) {
                 return dialogs.line(title, "", Workbench.this.plansOnScreen());
             }
+
+            @Override
+            public void replay(String plan) {
+                Workbench.this.replay.load(Optional.of(plan));
+                views.setSelectedComponent(Workbench.this.replay);
+            }
         });
+        this.replay = new ReplayView(ide, this::refresh);
         views.addTab("Run", Icons.of("RUN"), console);
+        views.addTab("Replay", Icons.of("RUN"), replay);
         if (terminal != null) views.addTab("Terminal", Icons.of("TERMINAL"), terminal);
         this.editors = new Editors(Keymap.strokes(), new Editors.Help() {
             @Override
@@ -290,6 +299,10 @@ final class Workbench extends JPanel {
                 case "back" -> travel(back, forward);
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
+                case "replay" -> {
+                    replay.load(plans.shownPlan());
+                    views.setSelectedComponent(replay);
+                }
                 case "run" -> editors.current().ifPresentOrElse(this::run, () -> say("run: no file is open"));
                 case "rerun" -> {
                     if (console.title().isEmpty()) {
@@ -535,6 +548,10 @@ final class Workbench extends JPanel {
     /** Opened again: if Claude was working on the project when the IDE closed, it goes on. */
     void reopened() {
         if (ide.folder().isPresent() && Boolean.TRUE.equals(ide.record("conversation", Map.of()).get("open"))) claude(true);
+    }
+
+    ReplayView replay() {
+        return replay;
     }
 
     PlansView plans() {
@@ -862,7 +879,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "terminal", "claude", "claude-new", null, "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");

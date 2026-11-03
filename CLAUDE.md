@@ -209,7 +209,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   on by itself if Claude was working when the IDE closed; closing the terminal ends what runs in it, not only its shell; a class with a main shows IntelliJ's green arrows (its line and its main's): a click, Ctrl+Shift+F10,
   runs it saved first, in the Run view (RunConsole: stdout, stderr in red, input, rerun Ctrl+F5, stop Ctrl+F2), by its
   run configuration; the toolbar's list (top right) chooses one, Shift+F10 runs it, Alt+Shift+F10 edits them (a form
-  from run-config-set's schema); a task's details have a Conversation tab: what was said while it was
+  from run-config-set's schema); the Replay view (Ctrl+Alt+Shift+R, or Replay on a plan) shows a plan's steps
+  one by one, first what each takes (marked in the file as it was), then its diff, both ways, and goes on from a step
+  (replay-continue); a task's details have a Conversation tab: what was said while it was
   being done, tools used one after another as one line; before each call it says where the person looks, after it
   opens and selects what an agent pointed at), `mcp` (Server: JSON-RPC 2.0, each capability
   a tool with a JSON Schema (a call that fails, even by a StackOverflowError or a LinkageError, an error result), list_changed after a call that changes the tools, the guide as its instructions; `handle` is the protocol, `run` serves it

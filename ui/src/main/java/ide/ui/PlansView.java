@@ -44,6 +44,9 @@ final class PlansView extends JPanel {
 
         /** A line of text the person writes, if they do. */
         Optional<String> ask(String title);
+
+        /** The plan seen again, step by step. */
+        void replay(String plan);
     }
 
     /** A plan as the chooser lists it. */
@@ -122,7 +125,13 @@ final class PlansView extends JPanel {
         var planBar = new JPanel(new BorderLayout(0, 4));
         progress.setStringPainted(true);
         planBar.add(progress, BorderLayout.PAGE_START);
-        planBar.add(row(planStart, planPause, planStop, planReplan), BorderLayout.CENTER);
+        var planReplay = new JButton("Replay");
+        planReplay.setToolTipText("The plan step by step as it was done: what each step takes, then what it changed");
+        planReplay.putClientProperty("JButton.buttonType", "borderless");
+        planReplay.addActionListener(event -> {
+            if (!shown.isEmpty()) actions.replay(shown);
+        });
+        planBar.add(row(planStart, planPause, planStop, planReplan, planReplay), BorderLayout.CENTER);
         top.add(planBar, BorderLayout.PAGE_END);
         add(top, BorderLayout.PAGE_START);
 
@@ -211,6 +220,11 @@ final class PlansView extends JPanel {
     }
 
     /** Shows another plan, not making it the one that goes on. */
+    /** The plan shown, if any. */
+    java.util.Optional<String> shownPlan() {
+        return shown.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(shown);
+    }
+
     void choose(String plan) {
         shown = plan;
         chosenTask = "";

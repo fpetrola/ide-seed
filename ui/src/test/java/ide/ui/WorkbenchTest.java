@@ -970,4 +970,42 @@ class WorkbenchTest {
 
         assertThat(workbench.text("a/A.java")).contains("private static final int FIVE = 2 + 3;", "return x + p * (FIVE);");
     }
+
+    /**
+     * A plan seen again in the window, step by step: first what will run and the place of the code it takes, then
+     * what it changed, as a diff; back the same way; and going on from a step brings the files back to it.
+     */
+    @Test
+    void aPlanIsSeenAgainStepByStepBothWays() throws IOException {
+        Files.createDirectories(root.resolve("a"));
+        Files.writeString(root.resolve("a/A.java"), A);
+        var workspace = Workspace.open(root);
+        workspace.capabilities().invoke("plan-new", Map.of("title", "Tidy A", "tasks", "Rename"));
+        workspace.capabilities().invoke("task-update", Map.of("task", "t1", "state", "doing"));
+        workspace.invoke("rename", Map.of("element", "a.A#m(int)", "name", "plus"));
+        workspace.invoke("rename", Map.of("element", "a.A#x", "name", "count"));
+        var workbench = new Workbench(new Ide(workspace), dialogs);
+
+        workbench.act("replay");
+        var replay = workbench.replay();
+        assertThat(replay.steps()).containsExactly("1 rename  element=a.A#m(int)  name=plus  [t1]", "2 rename  element=a.A#x  name=count  [t1]");
+        assertThat(replay.where()).isEqualTo("step 1 of 2, before");
+        assertThat(replay.shown()).contains("int m(int p) {");
+        assertThat(replay.marked()).containsExactly(6, 7, 8);
+
+        replay.next();
+        assertThat(replay.where()).isEqualTo("step 1 of 2, after");
+        assertThat(replay.shown()).contains("-    int m(int p) {", "+    int plus(int p) {");
+        replay.next();
+        replay.next();
+        assertThat(replay.where()).isEqualTo("step 2 of 2, after");
+        replay.previous();
+        replay.previous();
+        assertThat(replay.where()).isEqualTo("step 1 of 2, after");
+
+        workbench.open("a/A.java", 1, 1);
+        replay.goOn();
+        assertThat(workbench.text("a/A.java")).contains("int plus(int p)", "public int x;");
+        assertThat(replay.steps()).last().asString().endsWith("(discarded)");
+    }
 }
