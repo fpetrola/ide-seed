@@ -87,4 +87,72 @@ class MoveMembersTest {
         assertThat(ws.source("a/Repo.java")).contains("        count++;").doesNotContain("Repo.count", "Main");
         assertThat(ws.errors()).isEmpty();
     }
+
+    /** As IntelliJ's Move Members: a class there is not is created, beside the one they leave. */
+    @Test
+    void aClassThereIsNotIsCreatedBesideTheirs() {
+        var ws = Workspace.of(Map.of("a/Main.java", """
+                package a;
+
+                public class Main {
+                    static int count;
+
+                    static void add() {
+                        count++;
+                    }
+
+                    public static void main(String[] args) {
+                        add();
+                    }
+                }
+                """));
+
+        var result = ws.invoke("move-members", Map.of("members", List.of("a.Main#count", "a.Main#add()"), "to", "a.Repo"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("a/Repo.java")).contains("class Repo", "static int count;", "        count++;");
+        assertThat(ws.source("a/Main.java")).contains("        Repo.add();");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    @Test
+    void inTheDefaultPackageTooAndByItsNameAlone() {
+        var ws = Workspace.of(Map.of("Main.java", """
+                public class Main {
+                    static int count;
+
+                    static void add() {
+                        count++;
+                    }
+
+                    public static void main(String[] args) {
+                        add();
+                    }
+                }
+                """));
+
+        var result = ws.invoke("move-members", Map.of("members", List.of("Main#add()"), "to", "Counter"));
+
+        assertThat(result.violations()).isEmpty();
+        assertThat(ws.source("Counter.java")).contains("class Counter", "Main.count++;");
+        assertThat(ws.source("Main.java")).contains("        Counter.add();");
+        assertThat(ws.errors()).isEmpty();
+    }
+
+    @Test
+    void aNewClassGoesOnlyBesideTheirs() {
+        var ws = Workspace.of(Map.of("a/Main.java", """
+                package a;
+
+                public class Main {
+                    static void add() {
+                    }
+                }
+                """));
+
+        var result = ws.invoke("move-members", Map.of("members", List.of("a.Main#add()"), "to", "b.Repo"));
+
+        assertThat(result.applied()).isFalse();
+        assertThat(ws.source("a/Main.java")).contains("static void add()");
+    }
 }

@@ -81,7 +81,7 @@ The library also holds every other refactoring, so scripts call each other: `enc
 
 Functions over the program, called as `f(x, ...)`:
 
-- About an element: `name`, `kind`, `qualified`, `owner`, `top`, `type`, `declared-type`, `attr(e, "static")`,
+- About an element: `find` (by id or address, none if there is none), `name`, `simple` (a name without its qualifier), `kind`, `qualified`, `owner`, `top`, `type`, `declared-type`, `attr(e, "static")`,
   `superclass`, `enclosing`, `body`, `getter-of`.
 - Lists: `members`, `fields`, `methods`, `params`, `variables`, `constructors`, `statements`, `subclasses`,
   `family` (a method with everything it overrides and everything that overrides it), `refs` (the uses of an element; of several, all of them in the order they are made).

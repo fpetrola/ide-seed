@@ -69,13 +69,18 @@ refactoring rename-method-family "Renames a method with every method it override
   return ${method}
 end
 
-refactoring move-members "Moves members to another class, as IntelliJ's Move Members: what used them from elsewhere names their new class"
+refactoring move-members "Moves members to another class, as IntelliJ's Move Members: what used them from elsewhere names their new class; one there is not is created beside theirs"
   param members : elements(FIELD,METHOD) "the members to move"
-  param to : element(CLASS,INTERFACE) "where they go"
-  for m in members
-    move ${m} ${to}
+  param to : text "the class they go to, by its qualified name (a new one may be named alone)"
+  let t = find(to)
+  if empty(t)
+    t := create CLASS ${owner(top(first(members)))} ${simple(to)}
+    require or(eq(qualified(t), to), eq(name(t), to)) "${to} would not be beside ${qualified(top(first(members)))}"
   end
-  return ${to}
+  for m in members
+    move ${m} ${t}
+  end
+  return ${t}
 end
 
 refactoring move-type "Moves a top-level type to another package"

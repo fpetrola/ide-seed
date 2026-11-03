@@ -55,6 +55,8 @@ final class ScriptFunctions {
                     .filter(m -> m.kind().name().equals("FIELD") && m.name().equals(text(args, 1)))
                     .map(m -> elem(m.id())).findFirst().orElse(null);
             case "top-in" -> elem(graph.typesIn(text(args, 0)).getFirst().id());
+            case "find" -> find(args.getFirst()); // an element by id or address, none if there is none
+            case "simple" -> text(text(args, 0).substring(text(args, 0).lastIndexOf('.') + 1)); // a name without its qualifier
             case "type-in" -> types(text(args, 0)).stream().filter(t -> t.name().equals(text(args, 1))).findFirst()
                     .map(t -> elem(t.id())).orElse(null);
             case "inside" -> projection.inside(text(args, 0), Integer.parseInt(text(args, 1)), Integer.parseInt(text(args, 2)))
@@ -150,6 +152,13 @@ final class ScriptFunctions {
             if (e.id().equals(target)) return true;
             if (e.parent() == null) return false;
         }
+    }
+
+    private Value find(Value value) {
+        if (value instanceof Value.Elem e) return graph.contains(e.id()) ? e : null;
+        var text = Value.asText(value);
+        if (graph.contains(new ElementId(text))) return elem(new ElementId(text));
+        return graph.find(text).map(e -> elem(e.id())).orElse(null);
     }
 
     /** The uses of an element; of several, those of each, in the order each site makes them. */
