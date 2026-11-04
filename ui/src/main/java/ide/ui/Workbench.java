@@ -1237,7 +1237,7 @@ final class Workbench extends JPanel {
         var all = true;
         for (var entry : unapplied.entrySet()) {
             var report = ide.record("edit", Map.of("path", entry.getKey(), "text", entry.getValue()));
-            views.steps(strings(report.get("steps")));
+            views.steps(strings(report.get("steps")), false); // the view below stays as the person left it
             if (Boolean.TRUE.equals(report.get("applied"))) {
                 editors.applied(entry.getKey(), entry.getValue());
             } else {

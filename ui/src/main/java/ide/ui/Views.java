@@ -114,6 +114,11 @@ final class Views extends JTabbedPane {
 
     /** The steps of a change, as the trace writes them: two spaces a level, a sigil, a label. */
     void steps(List<String> lines) {
+        steps(lines, true);
+    }
+
+    /** What a change did, step by step; brought forward, or left where it is (an edit by hand, not a refactoring). */
+    void steps(List<String> lines, boolean brought) {
         stepLines.clear();
         stepLines.addAll(lines);
         var root = new DefaultMutableTreeNode("steps");
@@ -128,7 +133,7 @@ final class Views extends JTabbedPane {
         }
         steps.setRoot(root);
         for (var row = 0; row < stepsTree.getRowCount(); row++) stepsTree.expandRow(row);
-        setSelectedIndex(2);
+        if (brought) setSelectedIndex(2);
     }
 
     String steps() {

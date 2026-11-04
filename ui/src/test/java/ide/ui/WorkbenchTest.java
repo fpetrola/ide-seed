@@ -196,6 +196,19 @@ class WorkbenchTest {
         assertThat(workbench.text("a/C.java")).contains("        return (n + n) * 2;\n").doesNotContain("sum");
     }
 
+    /** An edit by hand leaves the view below as it was: its steps are there, not brought forward as a refactoring's. */
+    @Test
+    void anAppliedEditLeavesTheViewBelowAsItWas() throws IOException {
+        var workbench = workbench();
+        workbench.views().setSelectedIndex(workbench.views().indexOfTab("Output"));
+        workbench.open("a/B.java", 5, 16);
+        workbench.type("a/B.java", B.replace("return a.m(1);", "return a.m(2);"));
+
+        workbench.act("apply-edit");
+
+        assertThat(workbench.views().getTitleAt(workbench.views().getSelectedIndex())).isEqualTo("Output");
+    }
+
     @Test
     void anAppliedEditShowsItsProblemsAndAQuickFixTakesThemAway() throws IOException {
         var workbench = workbench();
