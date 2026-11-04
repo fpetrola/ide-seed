@@ -33,10 +33,13 @@ public final class Sources {
      * @param changed       told after every change, with the paths of the files it added, replaced or removed
      */
     public Sources(ParserConfiguration configuration, Consumer<Set<String>> changed) {
-        this(configuration, changed, 16);
+        this(configuration, changed, 1 << 20);
     }
 
-    /** @param keeping how many of the trees used last stay in memory though nothing holds them */
+    /**
+     * @param keeping how much source text the trees used last may have to stay in memory though nothing holds them: a
+     *                tree takes tens of times its text
+     */
     public Sources(ParserConfiguration configuration, Consumer<Set<String>> changed, int keeping) {
         this.parser = new JavaParser(configuration);
         this.trees = new Trees(parser, keeping);

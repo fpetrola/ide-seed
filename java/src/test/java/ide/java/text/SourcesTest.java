@@ -150,12 +150,13 @@ class SourcesTest {
     }
 
     /**
-     * Only the trees used last stay in memory; another is parsed again from its text when asked for. While a node of it
-     * is held, its tree is that same one: what a change looks at never comes from two readings of a file.
+     * Only the trees used last stay in memory, as many as fit in so much source text (a generated file of megabytes has
+     * a tree of tens of times that); another is parsed again from its text when asked for. While a node of it is held,
+     * its tree is that same one: what a change looks at never comes from two readings of a file.
      */
     @Test
     void aTreeNobodyUsesIsLetGoAndParsedAgainWhenAskedFor() {
-        var few = new Sources(new ParserConfiguration(), paths -> { }, 1);
+        var few = new Sources(new ParserConfiguration(), paths -> { }, A.length()); // A's text, not A's and B's
         few.put(Map.of("a/A.java", A, "a/B.java", B));
         var a = few.unit("a/A.java");
         var held = field(a, 0);
