@@ -59,6 +59,8 @@ public final class Program {
         }
         this.unresolved = List.copyOf(unresolved);
         for (var u : this.unresolved) byUnresolvedId.putIfAbsent(u.id(), u);
+        for (var index : List.of(from, to, in)) index.replaceAll((k, list) -> List.copyOf(list)); // most hold one or two
+        children.replaceAll((k, list) -> List.copyOf(list));
     }
 
     // ---- elements
