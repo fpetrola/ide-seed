@@ -2,6 +2,7 @@ package ide.java.text;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 
@@ -14,18 +15,18 @@ import java.util.LinkedHashMap;
  */
 final class Trees {
 
-    private final JavaParser parser;
+    private final ParserConfiguration configuration;
     private final int keeping;
     private final LinkedHashMap<Unit, CompilationUnit> kept = new LinkedHashMap<>(16, 0.75f, true);
     private long size; // the length of the texts of the trees kept
 
-    Trees(JavaParser parser, int keeping) {
-        this.parser = parser;
+    Trees(ParserConfiguration configuration, int keeping) {
+        this.configuration = configuration;
         this.keeping = keeping;
     }
 
     ParseResult<CompilationUnit> parse(String text) {
-        var result = parser.parse(text);
+        var result = new JavaParser(configuration).parse(text); // a parser keeps the last text's tokens and buffers
         result.getResult().ifPresent(Trees::withoutTokens);
         return result;
     }

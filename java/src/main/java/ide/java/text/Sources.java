@@ -23,7 +23,7 @@ import java.util.Set;
  */
 public final class Sources {
 
-    private final JavaParser parser;
+    private final ParserConfiguration configuration;
     private final Trees trees;
     private final Consumer<Set<String>> changed;
     private final Map<String, Unit> units = new TreeMap<>();
@@ -41,8 +41,8 @@ public final class Sources {
      *                tree takes tens of times its text
      */
     public Sources(ParserConfiguration configuration, Consumer<Set<String>> changed, int keeping) {
-        this.parser = new JavaParser(configuration);
-        this.trees = new Trees(parser, keeping);
+        this.configuration = configuration;
+        this.trees = new Trees(configuration, keeping);
         this.changed = changed;
     }
 
@@ -137,7 +137,7 @@ public final class Sources {
 
     /** Parses a text that is not one of the sources (an editor's copy, a text in the making). */
     public Optional<CompilationUnit> parseDetached(String text) {
-        var result = parser.parse(text);
+        var result = new JavaParser(configuration).parse(text);
         return result.isSuccessful() ? result.getResult() : Optional.empty();
     }
 

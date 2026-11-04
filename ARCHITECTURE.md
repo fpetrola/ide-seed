@@ -2341,6 +2341,16 @@ Los pasos, cada uno medido:
    anónima de una interna hecha sobre lo que contesta una llamada (`outer().new Inner() { ... }`): un
    `StackOverflowError` ahí es un uso que no se sabe, como cualquier otra falla del solver.
 
+5. *Lo que la lectura guarda.* Leído oozx (790 mil líneas: 800 mil elementos, 593 mil de ellos sentencias, y 794
+   mil usos), el heap vivo era 1046 MB, casi todo índices: cada elemento entraba en unos nueve mapas. Hecho, medido
+   después de cada paso: el rango de un ubicador en cuatro enteros (896 MB con el siguiente), la lectura responde con
+   los mapas de cada archivo en vez de una copia de todos, los índices de `Program` con listas de su tamaño, los nombres
+   compartidos, y lo que es de un cuerpo se busca dentro de su método en vez de estar indexado por dirección (783 MB).
+   Un parser nuevo por archivo: el que se reusaba guardaba los tokens del último (29 MB con un archivo generado).
+   *Abierto, para decidir:* lo que queda es por elemento, y las sentencias son las tres cuartas partes; cada una tiene
+   elemento, id, dirección, nombre calificado, declaración y dos entradas de identidad, unos 500 bytes (~300 MB en
+   oozx). Bajarlo en serio es no tener las sentencias de un método como elementos hasta que algo las pida.
+
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.
 
