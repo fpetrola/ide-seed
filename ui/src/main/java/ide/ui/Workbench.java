@@ -151,6 +151,7 @@ final class Workbench extends JPanel {
 
             @Override
             public void moved() {
+                shownInTree();
                 position.setText(editors().current().map(path -> editors().line() + ":" + editors().column()).orElse(" "));
                 bulbs.restart();
             }
@@ -856,6 +857,7 @@ final class Workbench extends JPanel {
         }
         tree.setRoot(root);
         for (var row = 0; row < project.getRowCount(); row++) project.expandRow(row);
+        shownInTree();
         for (var path : editors.open()) {
             if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
             else editors.close(path); // the program no longer has it: undone, deleted, moved
@@ -866,6 +868,29 @@ final class Workbench extends JPanel {
         views.problems(problems);
         plans.refresh();
         views.changes(ide.text("diff", Map.of()));
+    }
+
+    /** The file being edited, selected in the project's tree and scrolled to, as IDEs show it. */
+    private void shownInTree() {
+        var path = editors().current().orElse(null);
+        if (path == null || path.equals(inTree())) return;
+        var all = ((DefaultMutableTreeNode) tree.getRoot()).depthFirstEnumeration();
+        while (all.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) all.nextElement();
+            if (node.getUserObject() instanceof Node file && file.file() && file.path().equals(path)) {
+                var shown = new javax.swing.tree.TreePath(node.getPath());
+                project.setSelectionPath(shown);
+                project.scrollPathToVisible(shown);
+                return;
+            }
+        }
+    }
+
+    /** The file selected in the project's tree, if one is. */
+    String inTree() {
+        var selected = project.getSelectionPath();
+        return selected != null && ((DefaultMutableTreeNode) selected.getLastPathComponent()).getUserObject() instanceof Node file
+                && file.file() ? file.path() : null;
     }
 
     /** The problems of what the current editor says and the program does not yet: shown, not applied. */

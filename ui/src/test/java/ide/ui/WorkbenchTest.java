@@ -62,6 +62,21 @@ class WorkbenchTest {
     }
 
     @Test
+    void theTreeShowsTheFileBeingEdited() throws IOException {
+        var workbench = workbench();
+
+        workbench.open("a/A.java", 1, 1);
+        workbench.open("a/B.java", 1, 1);
+        assertThat(workbench.inTree()).isEqualTo("a/B.java");
+
+        workbench.open("a/A.java", 1, 1); // its tab chosen again
+        assertThat(workbench.inTree()).isEqualTo("a/A.java");
+
+        workbench.refresh(); // the tree made again keeps it
+        assertThat(workbench.inTree()).isEqualTo("a/A.java");
+    }
+
+    @Test
     void renamingTheElementUnderTheCaretChangesTheEditorsThatShowIt() throws IOException {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 18);
