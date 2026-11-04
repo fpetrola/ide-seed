@@ -10,6 +10,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -35,6 +36,9 @@ public final class Maven {
         }
     }
 
+    /** How the classpath was asked: one remembered before each module was asked apart has only the last one's. */
+    private static final String ASKED = "asked each module apart";
+
     private static final String PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:3.7.0";
     private static final Set<String> BUILT = Set.of("target", "build", "out");
     private static final long MINUTES = 10;
@@ -58,16 +62,22 @@ public final class Maven {
         return folder;
     }
 
-    /** The classpath, as remembered in {@code cache} if the POMs are the ones it was asked with; else asked again. */
+    /**
+     * The classpath, as remembered in {@code cache} if the POMs are the ones it was asked with, and it was asked as it is
+     * now; else asked again.
+     */
     public Classpath classpath(Path cache) {
         var poms = poms();
         try {
             if (Files.isRegularFile(cache)) {
                 var lines = Files.readAllLines(cache);
-                if (lines.stream().filter(line -> line.startsWith("pom ")).toList().equals(poms)) return remembered(lines);
+                if (lines.contains(ASKED) && lines.stream().filter(line -> line.startsWith("pom ")).toList().equals(poms)) {
+                    return remembered(lines);
+                }
             }
             var classpath = ask();
-            var lines = new ArrayList<>(poms);
+            var lines = new ArrayList<>(List.of(ASKED));
+            lines.addAll(poms);
             classpath.entries().forEach(entry -> lines.add("entry " + entry));
             if (classpath.problem() != null) classpath.problem().lines().forEach(line -> lines.add("problem " + line));
             Files.createDirectories(cache.getParent());
@@ -84,28 +94,40 @@ public final class Maven {
         return new Classpath(entries, problem.isEmpty() ? null : problem);
     }
 
-    /** Runs Maven in the project's folder: each module's classpath with its tests', all in one file. */
+    /**
+     * Runs Maven in the project's folder: each module's classpath with its tests', each in a file of its own (the goal
+     * cannot be told from the command line to append, and a reactor's modules would overwrite one file: only the last
+     * one's would be left).
+     */
     private Classpath ask() throws IOException {
-        var output = Files.createTempFile("classpath", ".txt");
+        var outputs = Files.createTempDirectory("classpath");
         try {
             var process = new ProcessBuilder(executable(), "-B", "-q", "-fae", PLUGIN + ":build-classpath",
-                    "-Dmdep.outputFile=" + output, "-Dmdep.appendOutput=true", "-Dmdep.includeScope=test")
+                    "-Dmdep.outputFile=" + outputs.resolve("${project.groupId}.${project.artifactId}.txt"), "-DincludeScope=test")
                     .directory(folder.toFile()).redirectErrorStream(true).start();
             var said = new String(process.getInputStream().readAllBytes());
             if (!process.waitFor(MINUTES, TimeUnit.MINUTES)) {
                 process.destroyForcibly();
                 return Classpath.none("Maven did not answer in " + MINUTES + " minutes");
             }
-            var entries = Arrays.stream(Files.readString(output).split(File.pathSeparator)).map(String::strip)
-                    .filter(entry -> !entry.isEmpty()).distinct().map(Path::of).toList();
-            return new Classpath(entries, process.exitValue() == 0 ? null : errors(said));
+            var entries = new LinkedHashSet<Path>();
+            try (var files = Files.list(outputs)) {
+                for (var file : files.sorted().toList()) {
+                    Arrays.stream(Files.readString(file).split(File.pathSeparator)).map(String::strip)
+                            .filter(entry -> !entry.isEmpty()).map(Path::of).forEach(entries::add);
+                }
+            }
+            return new Classpath(List.copyOf(entries), process.exitValue() == 0 ? null : errors(said));
         } catch (IOException notThere) {
             return Classpath.none("Maven could not be run (is mvn on the PATH?): " + notThere.getMessage());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Classpath.none("interrupted while Maven ran");
         } finally {
-            Files.deleteIfExists(output);
+            try (var files = Files.list(outputs)) {
+                for (var file : files.toList()) Files.deleteIfExists(file);
+            }
+            Files.deleteIfExists(outputs);
         }
     }
 

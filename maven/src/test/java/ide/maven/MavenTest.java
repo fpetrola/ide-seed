@@ -61,6 +61,41 @@ class MavenTest {
                 .contains("javaparser-symbol-solver-core-3.26.2.jar", "javaparser-core-3.26.2.jar").doesNotContain("remembered.jar");
     }
 
+    /** Each module's, with its tests': the plugin writes one file per module, which a reactor would overwrite. */
+    @Test
+    void theClasspathOfAReactorIsEveryModulesWithItsTests() throws IOException {
+        Files.writeString(folder.resolve("pom.xml"), """
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>t</groupId>
+                    <artifactId>root</artifactId>
+                    <version>1</version>
+                    <packaging>pom</packaging>
+                    <modules>
+                        <module>a</module>
+                        <module>b</module>
+                    </modules>
+                </project>
+                """);
+        Files.createDirectories(folder.resolve("a"));
+        Files.createDirectories(folder.resolve("b"));
+        Files.writeString(folder.resolve("a/pom.xml"), pom(JAVAPARSER + "<scope>test</scope>").replace("<artifactId>t</artifactId>", "<artifactId>a</artifactId>"));
+        Files.writeString(folder.resolve("b/pom.xml"), pom("<groupId>junit</groupId><artifactId>junit</artifactId><version>4.13.2</version>")
+                .replace("<artifactId>t</artifactId>", "<artifactId>b</artifactId>"));
+
+        var cache = folder.resolve(".ide/classpath.txt");
+        var maven = Maven.project(folder).orElseThrow();
+        var classpath = maven.classpath(cache);
+
+        assertThat(classpath.problem()).isNull();
+        assertThat(classpath.entries()).extracting(jar -> jar.getFileName().toString())
+                .contains("javaparser-core-3.26.2.jar", "junit-4.13.2.jar");
+
+        // one remembered before modules were asked apart had only the last one's: it is asked again
+        Files.write(cache, Files.readAllLines(cache).stream().filter(line -> line.startsWith("pom ")).toList());
+        assertThat(maven.classpath(cache).entries()).extracting(jar -> jar.getFileName().toString()).contains("junit-4.13.2.jar");
+    }
+
     @Test
     void whatMavenCannotResolveIsSaid() throws IOException {
         Files.writeString(folder.resolve("pom.xml"), pom("<groupId>does.not</groupId><artifactId>exist</artifactId><version>1</version>"));

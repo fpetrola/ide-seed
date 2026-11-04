@@ -2350,6 +2350,10 @@ Los pasos, cada uno medido:
    *Abierto, para decidir:* lo que queda es por elemento, y las sentencias son las tres cuartas partes; cada una tiene
    elemento, id, dirección, nombre calificado, declaración y dos entradas de identidad, unos 500 bytes (~300 MB en
    oozx). Bajarlo en serio es no tener las sentencias de un método como elementos hasta que algo las pida.
+   Los 1581 errores que ECJ daba en oozx no eran del proyecto: el classpath era solo el del último módulo del reactor
+   (`translator`). `-Dmdep.appendOutput` no existe para `build-classpath` (el parámetro no tiene propiedad), así que
+   cada módulo pisaba el archivo; ahora cada uno escribe el suyo (`${project.artifactId}` en la ruta, que Maven
+   evalúa), y un classpath recordado antes se vuelve a pedir.
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

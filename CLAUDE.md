@@ -156,7 +156,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   counting toward the 4; the cheapest plan that keeps meaning runs on the Run, with no mended one the want alone, and
   the repairer after.
 - `maven` (nothing) — what Maven says about a project: `Maven.project(folder)` is the nearest folder with a pom.xml,
-  and `classpath(cache)` is what `dependency:build-classpath` answers (test scope, every module of a reactor),
+  and `classpath(cache)` is what `dependency:build-classpath` answers (test scope, every module of a reactor, each
+  written to a file of its own: the goal cannot append from the command line, and one file kept only the last module's),
   remembered in a file while the POMs' sizes and times do not change; what Maven cannot resolve is said, not thrown.
   Its tests run Maven (dependencies already in `~/.m2`).
 - `session` (java, engine, refactoring, knowledge, maven; JavaParser only at run time) — parts over a `JavaProjection`:
