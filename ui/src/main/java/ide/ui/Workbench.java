@@ -49,17 +49,45 @@ final class Workbench extends JPanel {
         }
     }
 
-    /** A package or a file, with its icon, marked at its bottom left with what is wrong in it. */
-    private static final class FileRenderer extends DefaultTreeCellRenderer {
+    /**
+     * A package or a file, with its icon, marked at its bottom left with what is wrong in it; its name underlined with a
+     * red wave when it has errors, as IntelliJ shows it (a folder has what its files have).
+     */
+    static final class FileRenderer extends DefaultTreeCellRenderer {
+        private boolean underlined;
+
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded,
                                                       boolean leaf, int row, boolean focus) {
             super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
+            underlined = false;
             if (((DefaultMutableTreeNode) value).getUserObject() instanceof Node node) {
                 setIcon(Icons.marked(Icons.of(node.file() ? "CLASS" : "PACKAGE"), node.severity()));
                 setToolTipText(node.severity() == null ? null : node.path() + (node.severity().equals("ERROR") ? " has errors" : " has warnings"));
+                underlined = "ERROR".equals(node.severity());
             }
             return this;
+        }
+
+        boolean underlined() {
+            return underlined;
+        }
+
+        @Override
+        protected void paintComponent(java.awt.Graphics g) {
+            super.paintComponent(g);
+            if (!underlined || getText() == null || getText().isEmpty()) return;
+            var metrics = g.getFontMetrics(getFont());
+            var x = (getIcon() == null ? 0 : getIcon().getIconWidth() + getIconTextGap()) + getInsets().left;
+            var width = metrics.stringWidth(getText());
+            var y = Math.min(getHeight() - 2, (getHeight() + metrics.getAscent()) / 2 + 1);
+            var g2 = (java.awt.Graphics2D) g.create();
+            g2.setColor(new java.awt.Color(0xE05555));
+            for (var at = x; at < x + width; at += 4) { // a wave, two pixels up and down
+                g2.drawLine(at, y + 1, at + 2, y - 1);
+                g2.drawLine(at + 2, y - 1, at + 4, y + 1);
+            }
+            g2.dispose();
         }
     }
 
@@ -151,7 +179,6 @@ final class Workbench extends JPanel {
 
             @Override
             public void moved() {
-                shownInTree();
                 position.setText(editors().current().map(path -> editors().line() + ":" + editors().column()).orElse(" "));
                 bulbs.restart();
             }
@@ -857,7 +884,6 @@ final class Workbench extends JPanel {
         }
         tree.setRoot(root);
         for (var row = 0; row < project.getRowCount(); row++) project.expandRow(row);
-        shownInTree();
         for (var path : editors.open()) {
             if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
             else editors.close(path); // the program no longer has it: undone, deleted, moved
@@ -868,29 +894,6 @@ final class Workbench extends JPanel {
         views.problems(problems);
         plans.refresh();
         views.changes(ide.text("diff", Map.of()));
-    }
-
-    /** The file being edited, selected in the project's tree and scrolled to, as IDEs show it. */
-    private void shownInTree() {
-        var path = editors().current().orElse(null);
-        if (path == null || path.equals(inTree())) return;
-        var all = ((DefaultMutableTreeNode) tree.getRoot()).depthFirstEnumeration();
-        while (all.hasMoreElements()) {
-            var node = (DefaultMutableTreeNode) all.nextElement();
-            if (node.getUserObject() instanceof Node file && file.file() && file.path().equals(path)) {
-                var shown = new javax.swing.tree.TreePath(node.getPath());
-                project.setSelectionPath(shown);
-                project.scrollPathToVisible(shown);
-                return;
-            }
-        }
-    }
-
-    /** The file selected in the project's tree, if one is. */
-    String inTree() {
-        var selected = project.getSelectionPath();
-        return selected != null && ((DefaultMutableTreeNode) selected.getLastPathComponent()).getUserObject() instanceof Node file
-                && file.file() ? file.path() : null;
     }
 
     /** The problems of what the current editor says and the program does not yet: shown, not applied. */
