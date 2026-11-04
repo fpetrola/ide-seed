@@ -27,13 +27,13 @@ public final class Positions {
 
     /** The whole stretch of an element's declaration (its comment left out); nowhere for what the sources do not declare. */
     public static Optional<Range> declared(Reader.Reading reading, ElementId element) {
-        if (!reading.program().contains(element) || !reading.declarations().containsKey(element)) return Optional.empty();
+        if (!reading.declares(element)) return Optional.empty();
         return Optional.of(reading.declaration(element).range());
     }
 
     /** Where the name of an element's declaration starts; nowhere for what the sources do not declare. */
     public static Optional<Location> of(Reader.Reading reading, ElementId element) {
-        if (!reading.program().contains(element) || !reading.declarations().containsKey(element)) return Optional.empty();
+        if (!reading.declares(element)) return Optional.empty();
         var declaration = reading.declaration(element);
         return name(declaration.node(), reading.program().element(element).name())
                 .map(range -> new Location(declaration.unit().path(), range.begin.line, range.begin.column));
@@ -42,8 +42,8 @@ public final class Positions {
     /** The element whose name is at a line and column of the file at {@code path}: declared there, or bound by a use. */
     public static Optional<ElementId> at(Reader.Reading reading, Sources sources, String path, int line, int column) {
         var position = new Position(line, column);
-        var use = reading.uses().entrySet().stream()
-                .filter(entry -> entry.getValue().unit().path().equals(path) && entry.getValue().contains(position))
+        var use = reading.usesIn(path).entrySet().stream()
+                .filter(entry -> entry.getValue().contains(position))
                 .map(entry -> Map.entry(entry.getKey(), entry.getValue().node()))
                 .filter(entry -> name(entry.getValue(), null).filter(range -> range.contains(position)).isPresent())
                 .min(Comparator.comparing((Map.Entry<String, Node> entry) -> size(name(entry.getValue(), null).orElseThrow())));
@@ -51,8 +51,8 @@ public final class Positions {
             var id = use.get().getKey();
             return reading.program().unresolved(id).isPresent() ? Optional.empty() : Optional.of(reading.program().reference(id).target());
         }
-        return reading.declarations().entrySet().stream()
-                .filter(entry -> entry.getValue().unit().path().equals(path) && entry.getValue().contains(position))
+        return reading.declarationsIn(path).entrySet().stream()
+                .filter(entry -> entry.getValue().contains(position))
                 .filter(entry -> name(entry.getValue().node(), reading.program().element(entry.getKey()).name())
                         .filter(range -> range.contains(position)).isPresent())
                 .map(Map.Entry::getKey).findFirst();
@@ -61,8 +61,7 @@ public final class Positions {
     /** The innermost element whose declaration a place of a file is inside: a statement, a local, a method, a type... */
     public static Optional<ElementId> inside(Reader.Reading reading, String path, int line, int column) {
         var position = new Position(line, column);
-        return reading.declarations().entrySet().stream()
-                .filter(entry -> entry.getValue().unit().path().equals(path))
+        return reading.declarationsIn(path).entrySet().stream()
                 .filter(entry -> entry.getValue().contains(position))
                 .min(Comparator.comparing((Map.Entry<ElementId, ide.java.syntax.Decl> entry) -> size(entry.getValue().range())))
                 .map(Map.Entry::getKey);

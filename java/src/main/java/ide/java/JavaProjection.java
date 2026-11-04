@@ -236,8 +236,8 @@ public final class JavaProjection implements Projection {
     /** What each statement of a file says, as last read. */
     private Map<ElementId, String> said(String path) {
         var said = new java.util.HashMap<ElementId, String>();
-        reading().declarations().forEach((id, declaration) -> {
-            if (declaration.unit().path().equals(path) && program().element(id).kind() == Kind.STATEMENT) said.put(id, text(declaration));
+        reading().declarationsIn(path).forEach((id, declaration) -> {
+            if (program().element(id).kind() == Kind.STATEMENT) said.put(id, text(declaration));
         });
         return said;
     }
@@ -258,7 +258,7 @@ public final class JavaProjection implements Projection {
             var olds = before.children(callable).stream().filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList();
             var news = program.children(callable).stream().filter(e -> e.kind() == Kind.STATEMENT).map(Element::id).toList();
             var paired = Reconciliation.statements(olds, olds.stream().map(said::get).toList(),
-                    news.stream().map(id -> text(reading().declarations().get(id))).toList());
+                    news.stream().map(id -> text(reading().declaration(id))).toList());
             if (paired.equals(news)) continue;
             for (var id : olds) if (!paired.contains(id)) ids.forget(id);
             for (var id : news) if (!paired.contains(id)) ids.forget(id);

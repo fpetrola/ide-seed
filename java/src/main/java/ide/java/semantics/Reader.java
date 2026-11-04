@@ -72,21 +72,45 @@ import static ide.java.semantics.Resolution.*;
 public final class Reader {
 
     /**
-     * What a reading gives: the program, the node behind each reference, where each element is declared, and the files
-     * whose uses this reading resolved.
+     * What a reading gives: the program, the node behind each reference and where each element is declared, by file (a
+     * file's own maps, not one copy of all of them: a program may have millions), and the files whose uses this
+     * reading resolved.
      */
-    public record Reading(Program program, Map<String, Located> uses, Map<ElementId, Decl> declarations, Set<String> resolved) {
+    public record Reading(Program program, Map<String, Map<String, Located>> uses, Map<String, Map<ElementId, Decl>> declared,
+                          Set<String> resolved) {
+
+        public boolean declares(ElementId element) {
+            return program.contains(element) && fileOf(element).map(declared::get).filter(in -> in.containsKey(element)).isPresent();
+        }
 
         public Decl declaration(ElementId element) {
-            var declaration = declarations.get(element);
+            var declaration = program.contains(element) ? fileOf(element).map(declared::get).map(in -> in.get(element)).orElse(null) : null;
             if (declaration == null) throw new IllegalArgumentException("no declaration of " + element);
             return declaration;
         }
 
         public Node use(String reference) {
-            var use = uses.get(reference);
+            var site = program.unresolved(reference).map(Unresolved::site).orElseGet(() -> program.reference(reference).site());
+            var use = fileOf(site).map(uses::get).map(in -> in.get(reference)).orElse(null);
             if (use == null) throw new IllegalArgumentException("no use " + reference);
             return use.node();
+        }
+
+        public Map<ElementId, Decl> declarationsIn(String path) {
+            return declared.getOrDefault(path, Map.of());
+        }
+
+        public Map<String, Located> usesIn(String path) {
+            return uses.getOrDefault(path, Map.of());
+        }
+
+        /** The file of an element of the sources: its top-level type's. */
+        private Optional<String> fileOf(ElementId element) {
+            for (var at = element; at != null && program.contains(at); at = program.element(at).parent()) {
+                var file = program.element(at).fact(Fact.FILE);
+                if (file != null) return Optional.of(file);
+            }
+            return Optional.empty();
         }
     }
 
@@ -153,19 +177,20 @@ public final class Reader {
         var resolve = affected(units, fresh, previous, declared);
         var bound = new LinkedHashMap<String, Bound>();
         for (var unit : units) bound.put(unit.path(), resolve.contains(unit.path()) ? bind(unit) : previous.get(unit.path()).bound());
-        var declarations = new HashMap<ElementId, Decl>();
-        declared.values().forEach(d -> {
+        var declarations = new HashMap<String, Map<ElementId, Decl>>();
+        declared.forEach((path, d) -> {
             elements.addAll(d.elements());
-            declarations.putAll(d.declarations());
+            declarations.put(path, Collections.unmodifiableMap(d.declarations()));
         });
         var references = new ArrayList<Reference>();
         var unresolved = new ArrayList<Unresolved>();
-        var nodes = new HashMap<String, Located>();
+        var nodes = new HashMap<String, Map<String, Located>>();
         var named = new LinkedHashMap<String, Element>(); // the library types named, with their packages, in order
-        for (var b : bound.values()) {
+        for (var entry : bound.entrySet()) {
+            var b = entry.getValue();
             references.addAll(b.references());
             unresolved.addAll(b.unresolved());
-            nodes.putAll(b.nodes());
+            nodes.put(entry.getKey(), Collections.unmodifiableMap(b.nodes()));
             b.library().forEach(qualified -> name(qualified, named));
         }
         for (var use : unresolved) { // what a written type that binds nothing may mean joins the program too
