@@ -49,6 +49,21 @@ class WorkbenchTest {
         return new Workbench(new Ide(Workspace.open(root)), dialogs);
     }
 
+    /** As IntelliJ's: everything folded, or unfolded, at once; what is folded stays so when the tree is shown again. */
+    @Test
+    void collapseAllLastsThroughTheTreeShownAgainAndExpandAllUndoesIt() throws IOException {
+        var workbench = workbench();
+        assertThat(workbench.expandedFolders()).containsExactly("a");
+
+        workbench.treeButton("collapse-all").doClick(); // the button above the tree
+        assertThat(workbench.expandedFolders()).isEmpty();
+        workbench.refresh(); // an edit, an undo, a save
+        assertThat(workbench.expandedFolders()).isEmpty();
+
+        workbench.treeButton("expand-all").doClick();
+        assertThat(workbench.expandedFolders()).containsExactly("a");
+    }
+
     @Test
     void theProjectShowsItsFilesAndAFileOpensInAnEditor() throws IOException {
         var workbench = workbench();

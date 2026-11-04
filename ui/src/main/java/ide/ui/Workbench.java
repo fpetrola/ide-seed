@@ -111,6 +111,10 @@ final class Workbench extends JPanel {
     private final Shown shown = Shown.remembered();
     private boolean flat = shown.is("flatten-packages", true);
     private final FileRenderer fileRenderer = new FileRenderer();
+    /** The folders of the project's tree folded, by hand or all at once: kept as the tree is shown again. */
+    private final java.util.Set<String> folded = new java.util.HashSet<>();
+    private boolean unfolding; // while the window unfolds what it shows, not someone folding
+    private final Map<String, javax.swing.JButton> treeButtons = new java.util.HashMap<>(); // above the tree: expand, collapse
     /** The menus' items that say whether errors are underlined. */
     private final List<javax.swing.JCheckBoxMenuItem> underlineItems = new java.util.ArrayList<>();
     /** The menus' items that say whether it is. */
@@ -228,8 +232,35 @@ final class Workbench extends JPanel {
         center = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editors, views);
         center.setResizeWeight(0.85);
         center.setBorder(BorderFactory.createEmptyBorder());
-        var projectScroll = new JScrollPane(project);
-        projectScroll.setBorder(BorderFactory.createEmptyBorder());
+        var projectTree = new JScrollPane(Code.sideways(project)); // a touchpad's sideways swipe, as in a diff
+        projectTree.setBorder(BorderFactory.createEmptyBorder());
+        project.addTreeExpansionListener(new javax.swing.event.TreeExpansionListener() {
+            @Override
+            public void treeExpanded(javax.swing.event.TreeExpansionEvent event) {
+                if (!unfolding) folded.remove(folderOf(event.getPath()));
+            }
+
+            @Override
+            public void treeCollapsed(javax.swing.event.TreeExpansionEvent event) {
+                if (!unfolding) folded.add(folderOf(event.getPath()));
+            }
+        });
+        var treeBar = new javax.swing.JToolBar();
+        treeBar.setFloatable(false);
+        treeBar.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
+        treeBar.add(javax.swing.Box.createHorizontalGlue());
+        for (var action : List.of("expand-all", "collapse-all")) {
+            var button = new javax.swing.JButton();
+            button.addActionListener(event -> act(action));
+            treeButtons.put(action, button);
+            button.setIcon(Icons.of(action.equals("expand-all") ? "EXPAND_ALL" : "COLLAPSE_ALL"));
+            button.setToolTipText(Keymap.of(action).name());
+            button.setFocusable(false);
+            treeBar.add(button);
+        }
+        var projectScroll = new JPanel(new BorderLayout());
+        projectScroll.add(treeBar, BorderLayout.PAGE_START);
+        projectScroll.add(projectTree, BorderLayout.CENTER);
         withPlans = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, center, plans); // the plans beside the editors, seen with the terminal
         withPlans.setResizeWeight(1);
         withPlans.setBorder(BorderFactory.createEmptyBorder());
@@ -356,6 +387,13 @@ final class Workbench extends JPanel {
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
                 case "maximize-views" -> maximizeViews();
+                case "expand-all" -> {
+                    folded.clear();
+                    unfold();
+                }
+                case "collapse-all" -> {
+                    for (var row = project.getRowCount() - 1; row >= 0; row--) project.collapseRow(row); // each, folded, noted
+                }
                 case "underline-errors" -> {
                     var on = !shown.is("underline-errors", false);
                     shown.set("underline-errors", on);
@@ -911,7 +949,7 @@ final class Workbench extends JPanel {
         }
         if (!flat) foldersFirst(root);
         tree.setRoot(root);
-        for (var row = 0; row < project.getRowCount(); row++) project.expandRow(row);
+        unfold();
         shownInTree();
         for (var path : editors.open()) {
             if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
@@ -963,6 +1001,39 @@ final class Workbench extends JPanel {
             rows.add("  ".repeat(node.getLevel() - 1) + node);
         }
         return rows;
+    }
+
+    /** Every folder of the project's tree unfolded, but those folded (and what they hold). */
+    private void unfold() {
+        unfolding = true;
+        try {
+            for (var row = 0; row < project.getRowCount(); row++) {
+                if (!folded.contains(folderOf(project.getPathForRow(row)))) project.expandRow(row);
+            }
+        } finally {
+            unfolding = false;
+        }
+    }
+
+    /** The folder a path of the tree ends at, or null. */
+    private static String folderOf(javax.swing.tree.TreePath path) {
+        return path != null && ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject() instanceof Node node && !node.file()
+                ? node.path() : null;
+    }
+
+    /** A button above the project's tree, by its action. */
+    javax.swing.JButton treeButton(String action) {
+        return treeButtons.get(action);
+    }
+
+    /** The folders of the project's tree unfolded, from the top. */
+    List<String> expandedFolders() {
+        var expanded = new java.util.ArrayList<String>();
+        for (var row = 0; row < project.getRowCount(); row++) {
+            var folder = folderOf(project.getPathForRow(row));
+            if (folder != null && project.isExpanded(row)) expanded.add(folder);
+        }
+        return expanded;
     }
 
     /** The file being edited, selected in the project's tree and scrolled to, as IDEs show it. */

@@ -32,6 +32,8 @@ final class Icons {
             Map.entry("PARAM", letter("p", new Color(0x8C8C8C))),
             Map.entry("LOCAL", letter("v", new Color(0x8C8C8C))),
             Map.entry("PACKAGE", folder()),
+            Map.entry("EXPAND_ALL", chevrons(true)),
+            Map.entry("COLLAPSE_ALL", chevrons(false)),
             Map.entry("FIX", bulb(new Color(0xE05555))),
             Map.entry("INTENTION", bulb(new Color(0xF2C55C))),
             Map.entry("REFACTORING", wrench()),
@@ -165,6 +167,19 @@ final class Icons {
             g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
             var metrics = g.getFontMetrics();
             g.drawString(sign, 8 - metrics.stringWidth(sign) / 2, 12);
+        });
+    }
+
+    /** IntelliJ's Expand All (two chevrons down) and Collapse All (two up). */
+    private static Icon chevrons(boolean down) {
+        return icon(g -> {
+            g.setColor(new Color(0xAFB1B3));
+            g.setStroke(new java.awt.BasicStroke(1.5f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+            for (var top : new int[]{3, 8}) {
+                var tip = down ? top + 4 : top;
+                var ends = down ? top : top + 4;
+                g.drawPolyline(new int[]{4, 8, 12}, new int[]{ends, tip, ends}, 3);
+            }
         });
     }
 

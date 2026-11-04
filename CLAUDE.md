@@ -212,7 +212,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
 - Adapters (session, core; each with an `AdapterTest` that keeps it from anything else): they talk to the IDE only
   through capabilities, in JSON, and decide nothing. `cli` (Command binds words to a capability's schema, Text writes
   JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea, IntelliJ's menus, both IDEs' keys; the project's files on the left (packages flat, or as a tree of folders: View, Flatten Packages; the file being edited selected), what is wrong in a file marked at its icon, as Eclipse does, or also a red wave under a file with
-  errors and each folder it is in, as IntelliJ does (View, Underline Errors); Shown keeps such choices from one window
+  errors and each folder it is in, as IntelliJ does (View, Underline Errors); above it, Expand All and Collapse All, what is folded staying so
+  as the tree is shown again; a touchpad's sideways swipe scrolls it sideways, as code; Shown keeps such choices from one window
   to the next, in `~/.ideseed/shown.properties`; with no folder it
   opens the last one it opened, kept in `~/.ideseed/last`: Workbench, Editors, Views, Form from a capability's schema, Dialogs as an interface the tests script, Keymap, Terminal:
   JediTerm over pty4j, the user's shell in the project's folder, started when first shown, Alt+F12; tested with no
