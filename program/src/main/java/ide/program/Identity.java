@@ -137,10 +137,15 @@ public final class Identity {
 
     /** Forgets an element and everything addressed under it: members, parameters, nested types. */
     public void forget(ElementId id) {
-        var gone = new HashSet<ElementId>();
-        gone.add(id);
+        forget(List.of(id));
+    }
+
+    /** Forgets elements and everything addressed under them, all in one pass: a program may have a million addresses. */
+    public void forget(java.util.Collection<ElementId> forgotten) {
+        if (forgotten.isEmpty()) return;
+        var gone = new HashSet<ElementId>(forgotten);
         var prefixes = new ArrayList<String>();
-        if (address(id) instanceof Address.Type type) prefixes.add(type.qualified() + ".");
+        for (var id : forgotten) if (address(id) instanceof Address.Type type) prefixes.add(type.qualified() + ".");
         var more = true;
         while (more) {
             more = false;

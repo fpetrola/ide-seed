@@ -269,12 +269,14 @@ public final class Reader {
         var changed = new HashSet<Shape.Member>();
         var paths = new TreeSet<>(fresh);
         paths.addAll(previous.keySet().stream().filter(path -> !declared.containsKey(path)).toList()); // files removed
+        var typesGone = new HashSet<String>(); // types added or removed (a rename is both), by qualified name
         for (var path : paths) {
             var before = previous.containsKey(path) ? previous.get(path).declared().shape() : Shape.NONE;
             var after = declared.containsKey(path) ? declared.get(path).shape() : Shape.NONE;
-            var members = before.changedMembers(after);
-            if (members == null) return all;
-            changed.addAll(members);
+            var types = before.typesAddedOrRemoved(after);
+            if (types == null) return all; // a type that is still there changed: what it extends, anything
+            typesGone.addAll(types);
+            changed.addAll(before.membersChanged(after));
         }
         var names = new HashSet<String>();
         var owners = new HashSet<ElementId>(); // the types whose members changed, their supertypes and their subtypes
@@ -293,6 +295,7 @@ public final class Reader {
             });
         }
         var affected = new TreeSet<>(fresh);
+        affected.addAll(namingTypes(units, typesGone));
         for (var unit : units) {
             if (affected.contains(unit.path())) continue;
             var bound = previous.get(unit.path()).bound();
@@ -303,6 +306,51 @@ public final class Reader {
             if (touched) affected.add(unit.path());
         }
         return affected;
+    }
+
+    /**
+     * The files a type added or removed can change: those that write its simple name (a use, an import, what a class
+     * extends) or the name of a type below it, and those with a use of what it declared. A project of hundreds of
+     * files is not resolved again whole for one renamed type.
+     */
+    private Set<String> namingTypes(Collection<Unit> units, Set<String> types) {
+        if (types.isEmpty()) return Set.of();
+        var names = new HashSet<String>();
+        var gone = new HashSet<ElementId>(); // the types removed, and those below them
+        for (var qualified : types) {
+            names.add(qualified.substring(qualified.lastIndexOf('.') + 1));
+            last.find(qualified).ifPresent(type -> {
+                for (var pending = new ArrayDeque<>(List.of(type)); !pending.isEmpty(); ) {
+                    var below = pending.poll();
+                    if (gone.add(below.id())) {
+                        names.add(below.name());
+                        pending.addAll(last.subtypes(below));
+                    }
+                }
+            });
+        }
+        var written = java.util.regex.Pattern.compile("\\b(" + String.join("|", names.stream().map(java.util.regex.Pattern::quote).toList()) + ")\\b");
+        var naming = new TreeSet<String>();
+        for (var unit : units) if (written.matcher(unit.text()).find()) naming.add(unit.path());
+        for (var type : gone) { // and the files with a use of what it declared, found by the index, not by every use
+            var targets = new ArrayList<ElementId>(List.of(type));
+            last.children(type).forEach(member -> targets.add(member.id()));
+            for (var target : targets) {
+                for (var use : last.referencesTo(target)) {
+                    for (var at = last.contains(use.site()) ? last.element(use.site()) : null; at != null;
+                         at = at.parent() == null || !last.contains(at.parent()) ? null : last.element(at.parent())) {
+                        if (at.fact(Fact.FILE) != null) {
+                            naming.add(at.fact(Fact.FILE));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        var there = new HashSet<String>();
+        units.forEach(unit -> there.add(unit.path()));
+        naming.retainAll(there); // a file the type was in may be gone with it
+        return naming;
     }
 
     private ElementId ownerOf(ElementId element) {

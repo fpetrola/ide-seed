@@ -71,11 +71,29 @@ public record Shape(Map<String, String> types, Map<String, String> members, java
      */
     public Set<Member> changedMembers(Shape after) {
         if (!types.equals(after.types)) return null;
+        return membersChanged(after);
+    }
+
+    /** The members whose declarations differ in {@code after}, whatever happened to the types. */
+    public Set<Member> membersChanged(Shape after) {
         var changed = new HashSet<Member>();
         var renamed = !imports.equals(after.imports);
         for (var key : union(members.keySet(), after.members.keySet())) {
             if (renamed || !Objects.equals(members.get(key), after.members.get(key))) {
                 changed.add(new Member(key.substring(0, key.indexOf('#')), simpleName(key)));
+            }
+        }
+        return changed;
+    }
+
+    /** The types added or removed in {@code after}, by qualified name; null when one there before and after changed. */
+    public Set<String> typesAddedOrRemoved(Shape after) {
+        var changed = new HashSet<String>();
+        for (var key : union(types.keySet(), after.types.keySet())) {
+            if (types.containsKey(key) && after.types.containsKey(key)) {
+                if (!types.get(key).equals(after.types.get(key))) return null; // what it extends, what it is: anything
+            } else {
+                changed.add(key.substring(0, key.length() - 1)); // without its '#'
             }
         }
         return changed;

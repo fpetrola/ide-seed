@@ -277,8 +277,10 @@ public final class JavaProjection implements Projection {
             var paired = Reconciliation.statements(olds, olds.stream().map(said::get).toList(),
                     news.stream().map(id -> text(reading().declaration(id))).toList());
             if (paired.equals(news)) continue;
-            for (var id : olds) if (!paired.contains(id)) ids.forget(id);
-            for (var id : news) if (!paired.contains(id)) ids.forget(id);
+            var unpaired = new java.util.ArrayList<ElementId>();
+            for (var id : olds) if (!paired.contains(id)) unpaired.add(id);
+            for (var id : news) if (!paired.contains(id)) unpaired.add(id);
+            ids.forget(unpaired);
             ids.placeStatements(callable, paired);
             placed = true;
         }
@@ -302,9 +304,11 @@ public final class JavaProjection implements Projection {
             invalidate(Set.of());
         }
         var after = program();
+        var removed = new java.util.ArrayList<ElementId>();
         for (var element : before.elements()) {
-            if (!element.inLibrary() && !after.contains(element.id())) ids.forget(element.id());
+            if (!element.inLibrary() && !after.contains(element.id())) removed.add(element.id());
         }
+        ids.forget(removed); // in one pass: one by one, each went over every address
     }
 
     @Override

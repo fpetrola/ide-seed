@@ -122,7 +122,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   was named through that type is named as its own (so is a field made one each object has). A new type's file, created or moved, goes in a source root (a file's folder without its
   package's) with files of its package, else in the one with most files. Nested types are deleted like members; a member merged
   into another has its uses renamed in the same edit that removes it. A reading after a change re-reads the files changed and
-  re-resolves only the uses that can bind differently (every file when a type changed; else by member name, through
+  re-resolves only the uses that can bind differently (every file when what a type extends or implements changed; the
+  files that write the name of a type added, removed or renamed, of a type below it, or use what it declared; else by member name, through
   the changed member's type, supertypes and subtypes; a file's imports changed, every member of it); `resolvedLastTime()` tells which. The AST is never edited.
   Other modules use
   only the facade (ArchitectureTest). Runs ProjectionContract in its tests.

@@ -12,8 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * After a change the program is read again, but the uses of a file are resolved again only when the change can
- * affect them: the files it touched, the files that name a member whose declaration it changed, and every file when
- * it changed a type itself.
+ * affect them: the files it touched, the files that name a member whose declaration it changed, the files that name a
+ * type it added, removed or renamed, and every file when it changed what a type extends or implements.
  */
 class InvalidationTest {
 
@@ -102,14 +102,27 @@ class InvalidationTest {
                 .contains("a.T#m(int)");
     }
 
+    /** A project of hundreds of files is not resolved again whole: only where the old name or the new one is written. */
     @Test
-    void changingATypeResolvesEveryFile() {
+    void renamingATypeResolvesTheFilesThatNameIt() {
         var projection = JavaProjection.of(SOURCES);
 
         projection.apply(new Primitive.Rename(id(projection.program(), "a.A"), "Base")); // its file is renamed too
         projection.program();
 
-        assertThat(projection.resolvedLastTime()).containsExactly("a/B.java", "a/Base.java", "a/C.java", "a/D.java");
+        assertThat(projection.resolvedLastTime()).containsExactly("a/B.java", "a/Base.java", "a/C.java");
+    }
+
+    /** What a type extends changes what every use of what it inherits binds: every file. */
+    @Test
+    void changingWhatATypeExtendsResolvesEveryFile() {
+        var projection = JavaProjection.of(SOURCES);
+        projection.program();
+
+        projection.edit("a/B.java", projection.source("a/B.java").replace("class B {", "class B extends C {"));
+        projection.program();
+
+        assertThat(projection.resolvedLastTime()).containsExactly("a/A.java", "a/B.java", "a/C.java", "a/D.java");
     }
 
     /** An import changes what the declarations of its file name: their uses elsewhere are resolved again. */

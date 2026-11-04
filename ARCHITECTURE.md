@@ -2375,6 +2375,11 @@ Los pasos, cada uno medido:
    abrir dejó de parsear con JavaParser: si un texto parsea lo dice el parser de Eclipse, cada archivo en un núcleo, y
    el árbol de JavaParser se lee cuando alguien lo pide. Abrir oozx: 3 s; abrirlo, leerlo y compilarlo: 26 s (eran más
    de 5 minutos).
+8. *Una edición a mano.* Renombrar a mano un tipo de oozx tardaba 21 s: un tipo agregado, quitado o renombrado volvía a
+   resolver todos los archivos. Ahora, los que escriben su nombre (o el de un tipo debajo de él) y los que usaban lo
+   que declaraba; todos, solo si cambió lo que un tipo que sigue estando extiende o implementa. Y la identidad olvida
+   lo que una edición quitó en una pasada (era una por elemento, cada una sobre el millón de direcciones). Unos 2,5 s
+   por edición; lo que queda es armar el programa (`new Program`, ~1 s con 800 mil elementos).
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.
