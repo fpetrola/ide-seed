@@ -64,11 +64,12 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   tests over a fixture each driver writes in its language) and MemoryProjection (a projection with no language,
   with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,
   refactoring and knowledge).
-- `java` (projection, JavaParser) — the Java driver, in layers that only know the ones below (LayersTest):
+- `java` (projection, JavaParser, Eclipse's compiler and DOM) — the Java driver, in layers that only know the ones below (LayersTest):
   `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses; a tree
   keeps each node's range, not the tokens it was read from; restoring parses only the files whose text differs; a
   unit holds its tree weakly and Trees keeps those used last while their texts add up to 1 MB: another is parsed again from the text, the same one while
-  anything holds a node of it; going over units in turn, the next ones' trees are parsed ahead on other threads),
+  anything holds a node of it; going over units in turn, the next ones' trees are parsed ahead on other threads; a unit is also read as Eclipse's
+  DOM, `dom()`, with its comments, kept the same way: what the driver moves to, leaving JavaParser),
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
   `ide.java.semantics` (Reader: program + where each declaration and use is (text.Located: unit, range and kind, its node
   found in the unit's tree when asked, so a reading keeps no tree; what resolving cached in the nodes is forgotten

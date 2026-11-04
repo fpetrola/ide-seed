@@ -21,6 +21,7 @@ public final class Unit {
     private final String text;
     private final Trees trees;
     private WeakReference<CompilationUnit> tree;
+    private WeakReference<org.eclipse.jdt.core.dom.CompilationUnit> dom = new WeakReference<>(null);
     private int[] lineStarts;
 
     private static final DataKey<Unit> UNIT = new DataKey<>() {
@@ -51,6 +52,17 @@ public final class Unit {
         var held = tree.get();
         if (held == null) held = hold(trees.again(this));
         trees.used(this, held);
+        return held;
+    }
+
+    /** The text read as Eclipse's DOM: the same one while anything holds a node of it, else read again. */
+    public org.eclipse.jdt.core.dom.CompilationUnit dom() {
+        var held = dom.get();
+        if (held == null) {
+            held = Trees.dom(text);
+            dom = new WeakReference<>(held);
+        }
+        trees.usedDom(this, held);
         return held;
     }
 

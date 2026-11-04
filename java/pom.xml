@@ -27,6 +27,11 @@
             <groupId>org.eclipse.jdt</groupId>
             <artifactId>ecj</artifactId>
         </dependency>
+        <!-- Eclipse's Java DOM: a source read and bound in one pass, the trees the driver works on -->
+        <dependency>
+            <groupId>org.eclipse.jdt</groupId>
+            <artifactId>org.eclipse.jdt.core</artifactId>
+        </dependency>
         <!-- the driver proves it honors the contract -->
         <dependency>
             <groupId>ide</groupId>

@@ -150,6 +150,32 @@ class SourcesTest {
     }
 
     /**
+     * A unit is also read as Eclipse's DOM, with its comments: what is where, in the same text. It is the same tree while
+     * anything holds a node of it, and parsed again when asked for after it was let go.
+     */
+    @Test
+    void aUnitIsAlsoReadAsEclipsesDomWithItsComments() {
+        sources.put(Map.of("a/A.java", """
+                package a;
+
+                /** A. */
+                class A {
+                    int x; // x
+                }
+                """));
+        var unit = sources.unit("a/A.java");
+        var dom = unit.dom();
+        var type = (org.eclipse.jdt.core.dom.TypeDeclaration) dom.types().getFirst();
+
+        assertThat(dom.getPackage().getName().getFullyQualifiedName()).isEqualTo("a");
+        assertThat(type.getName().getIdentifier()).isEqualTo("A");
+        assertThat(unit.text().substring(type.getFields()[0].getStartPosition(),
+                type.getFields()[0].getStartPosition() + type.getFields()[0].getLength())).isEqualTo("int x;");
+        assertThat(dom.getCommentList()).hasSize(2);
+        assertThat(unit.dom()).isSameAs(dom);
+    }
+
+    /**
      * Only the trees used last stay in memory, as many as fit in so much source text (a generated file of megabytes has
      * a tree of tens of times that); another is parsed again from its text when asked for. While a node of it is held,
      * its tree is that same one: what a change looks at never comes from two readings of a file.

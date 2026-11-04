@@ -19,6 +19,17 @@ final class Trees {
     private final int keeping;
     private final LinkedHashMap<Unit, CompilationUnit> kept = new LinkedHashMap<>(16, 0.75f, true);
     private long size; // the length of the texts of the trees kept
+    private final LinkedHashMap<Unit, org.eclipse.jdt.core.dom.CompilationUnit> doms = new LinkedHashMap<>(16, 0.75f, true);
+    private long domSize; // the same, for Eclipse's DOM
+
+    /** How Eclipse's parser reads a text: Java as the compiler takes it. */
+    private static final java.util.Map<String, String> DOM_OPTIONS = domOptions();
+
+    private static java.util.Map<String, String> domOptions() {
+        var options = org.eclipse.jdt.core.JavaCore.getOptions();
+        org.eclipse.jdt.core.JavaCore.setComplianceOptions("21", options);
+        return options;
+    }
 
     Trees(ParserConfiguration configuration, int keeping) {
         this.configuration = configuration;
@@ -47,6 +58,25 @@ final class Trees {
 
     void drop(Unit unit) {
         if (kept.remove(unit) != null) size -= unit.text().length();
+        if (doms.remove(unit) != null) domSize -= unit.text().length();
+    }
+
+    /** A text read as Eclipse's DOM, with its comments; no names bound. */
+    static org.eclipse.jdt.core.dom.CompilationUnit dom(String text) {
+        var parser = org.eclipse.jdt.core.dom.ASTParser.newParser(org.eclipse.jdt.core.dom.AST.getJLSLatest());
+        parser.setKind(org.eclipse.jdt.core.dom.ASTParser.K_COMPILATION_UNIT);
+        parser.setCompilerOptions(DOM_OPTIONS);
+        parser.setSource(text.toCharArray());
+        return (org.eclipse.jdt.core.dom.CompilationUnit) parser.createAST(null);
+    }
+
+    void usedDom(Unit unit, org.eclipse.jdt.core.dom.CompilationUnit tree) {
+        if (doms.put(unit, tree) == null) domSize += unit.text().length();
+        var eldest = doms.entrySet().iterator();
+        while (domSize > keeping && eldest.hasNext()) {
+            domSize -= eldest.next().getKey().text().length();
+            eldest.remove();
+        }
     }
 
     /** Each node and comment keeps its range; the tokens, kept by any of them, would hold as much memory as the tree. */
