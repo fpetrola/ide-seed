@@ -7,7 +7,6 @@ import com.github.javaparser.ast.Node;
 import ide.projection.PrimitiveRejected;
 
 import java.util.Collection;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +26,6 @@ public final class Sources {
     private final JavaParser parser;
     private final Consumer<Set<String>> changed;
     private final Map<String, Unit> units = new TreeMap<>();
-    private final Map<CompilationUnit, Unit> byTree = new IdentityHashMap<>();
 
     /**
      * @param configuration how to parse (and resolve names in) the trees
@@ -60,8 +58,8 @@ public final class Sources {
 
     /** The unit a node of one of the trees belongs to. */
     public Unit unitOf(Node node) {
-        var unit = byTree.get(node.findCompilationUnit().orElseThrow());
-        if (unit == null) throw new IllegalArgumentException("not in the sources: " + node);
+        var unit = Unit.of(node.findCompilationUnit().orElseThrow());
+        if (unit == null || units.get(unit.path()) != unit) throw new IllegalArgumentException("not in the sources: " + node);
         return unit;
     }
 
@@ -158,12 +156,9 @@ public final class Sources {
     private void keep(Unit unit) {
         forget(unit.path());
         units.put(unit.path(), unit);
-        byTree.put(unit.tree(), unit);
     }
 
     private Unit forget(String path) {
-        var unit = units.remove(path);
-        if (unit != null) byTree.remove(unit.tree());
-        return unit;
+        return units.remove(path);
     }
 }

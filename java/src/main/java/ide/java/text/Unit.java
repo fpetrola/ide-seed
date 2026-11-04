@@ -2,6 +2,7 @@ package ide.java.text;
 
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.DataKey;
 import com.github.javaparser.ast.Node;
 
 import java.util.ArrayList;
@@ -17,10 +18,19 @@ public final class Unit {
     private final CompilationUnit tree;
     private int[] lineStarts;
 
+    private static final DataKey<Unit> UNIT = new DataKey<>() {
+    };
+
     Unit(String path, String text, CompilationUnit tree) {
         this.path = path;
         this.text = text;
         this.tree = tree;
+        tree.setData(UNIT, this);
+    }
+
+    /** The unit a tree was read for, if any. */
+    static Unit of(CompilationUnit tree) {
+        return tree.containsData(UNIT) ? tree.getData(UNIT) : null;
     }
 
     public String path() {
