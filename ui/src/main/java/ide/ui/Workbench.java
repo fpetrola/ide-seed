@@ -50,11 +50,17 @@ final class Workbench extends JPanel {
     }
 
     /**
-     * A package or a file, with its icon, marked at its bottom left with what is wrong in it; its name underlined with a
-     * red wave when it has errors, as IntelliJ shows it (a folder has what its files have).
+     * A package or a file, with its icon, marked at its bottom left with what is wrong in it, as Eclipse shows it; with
+     * underlining chosen, its name underlined with a red wave when it has errors too, as IntelliJ does (a folder has
+     * what its files have).
      */
     static final class FileRenderer extends DefaultTreeCellRenderer {
+        private boolean underlining;
         private boolean underlined;
+
+        void underlining(boolean on) {
+            underlining = on;
+        }
 
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded,
@@ -64,7 +70,7 @@ final class Workbench extends JPanel {
             if (((DefaultMutableTreeNode) value).getUserObject() instanceof Node node) {
                 setIcon(Icons.marked(Icons.of(node.file() ? "CLASS" : "PACKAGE"), node.severity()));
                 setToolTipText(node.severity() == null ? null : node.path() + (node.severity().equals("ERROR") ? " has errors" : " has warnings"));
-                underlined = "ERROR".equals(node.severity());
+                underlined = underlining && "ERROR".equals(node.severity());
             }
             return this;
         }
@@ -102,7 +108,11 @@ final class Workbench extends JPanel {
     private final DefaultTreeModel tree = new DefaultTreeModel(new DefaultMutableTreeNode("project"));
     private final JTree project = new JTree(tree);
     /** Whether the project's packages are each on one line, as now, or nested as a tree of folders. */
-    private boolean flat = true;
+    private final Shown shown = Shown.remembered();
+    private boolean flat = shown.is("flatten-packages", true);
+    private final FileRenderer fileRenderer = new FileRenderer();
+    /** The menus' items that say whether errors are underlined. */
+    private final List<javax.swing.JCheckBoxMenuItem> underlineItems = new java.util.ArrayList<>();
     /** The menus' items that say whether it is. */
     private final List<javax.swing.JCheckBoxMenuItem> flatItems = new java.util.ArrayList<>();
     private final Editors editors;
@@ -243,7 +253,8 @@ final class Workbench extends JPanel {
         add(bar, BorderLayout.PAGE_END);
         project.setRootVisible(false);
         project.setShowsRootHandles(true);
-        project.setCellRenderer(new FileRenderer());
+        fileRenderer.underlining(shown.is("underline-errors", false)); // as Eclipse, unless chosen
+        project.setCellRenderer(fileRenderer);
         javax.swing.ToolTipManager.sharedInstance().registerComponent(project);
         project.addMouseListener(new MouseAdapter() {
             @Override
@@ -267,6 +278,7 @@ final class Workbench extends JPanel {
         }
         var treeMenu = new javax.swing.JPopupMenu();
         treeMenu.add(item("flatten-packages"));
+        treeMenu.add(item("underline-errors"));
         project.setComponentPopupMenu(treeMenu);
         refresh();
         var classpath = ide.record("classpath", Map.of());
@@ -344,8 +356,16 @@ final class Workbench extends JPanel {
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
                 case "maximize-views" -> maximizeViews();
+                case "underline-errors" -> {
+                    var on = !shown.is("underline-errors", false);
+                    shown.set("underline-errors", on);
+                    fileRenderer.underlining(on);
+                    underlineItems.forEach(checked -> checked.setSelected(on));
+                    project.repaint();
+                }
                 case "flatten-packages" -> {
                     flat = !flat;
+                    shown.set("flatten-packages", flat);
                     flatItems.forEach(checked -> checked.setSelected(flat));
                     refresh();
                 }
@@ -1008,7 +1028,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", "maximize-views", "flatten-packages", null, "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", "maximize-views", "flatten-packages", "underline-errors", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");
@@ -1101,6 +1121,11 @@ final class Workbench extends JPanel {
             var checked = new javax.swing.JCheckBoxMenuItem(getActionMap().get(action));
             checked.setSelected(flat);
             flatItems.add(checked);
+            item = checked;
+        } else if (action.equals("underline-errors")) {
+            var checked = new javax.swing.JCheckBoxMenuItem(getActionMap().get(action));
+            checked.setSelected(shown.is("underline-errors", false));
+            underlineItems.add(checked);
             item = checked;
         } else {
             item = new JMenuItem(getActionMap().get(action));

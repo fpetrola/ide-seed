@@ -53,6 +53,7 @@ final class Keymap {
             key("forward", "Forward", "Go forward again", "ctrl alt RIGHT", "alt RIGHT"),
             key("terminal", "Terminal", "The terminal, in the project's folder", "alt F12"),
             key("flatten-packages", "Flatten Packages", "The project's packages each on one line, or nested as a tree of folders"),
+            key("underline-errors", "Underline Errors", "A file with errors, and each folder it is in, underlined with a red wave as IntelliJ shows them; else marked only at its icon, as Eclipse does"),
             key("maximize-views", "Maximize Views", "The views below take the whole window; again, back", "ctrl shift QUOTE"),
             key("replay", "Replay Plan", "The plan shown, step by step as it was done: what each step takes, then what it changed", "ctrl alt shift R"),
             key("run", "Run Current File", "Runs the program of the current file's class, saved first", "ctrl shift F10"),

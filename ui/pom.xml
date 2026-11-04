@@ -92,7 +92,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>-Djava.awt.headless=true</argLine>
+                    <argLine>-Djava.awt.headless=true -Dide.ui.home=${project.build.directory}/home</argLine>
                 </configuration>
             </plugin>
             <!-- mvn package -pl ui -am: target/ide-ui.jar runs on its own (java -jar target/ide-ui.jar [folder]) -->

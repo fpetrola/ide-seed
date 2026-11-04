@@ -211,8 +211,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `OrdersSampleTest` and `ShopSampleTest`), and the two ArchUnit rules Maven cannot state.
 - Adapters (session, core; each with an `AdapterTest` that keeps it from anything else): they talk to the IDE only
   through capabilities, in JSON, and decide nothing. `cli` (Command binds words to a capability's schema, Text writes
-  JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea, IntelliJ's menus, both IDEs' keys; the project's files on the left (packages flat, or as a tree of folders: View, Flatten Packages; the file being edited selected), a file with
-  errors and each folder it is in underlined with a red wave, as IntelliJ does; with no folder it
+  JSON as text, Cli: one command, a script, or a shell), `ui` (Swing with RSyntaxTextArea, IntelliJ's menus, both IDEs' keys; the project's files on the left (packages flat, or as a tree of folders: View, Flatten Packages; the file being edited selected), what is wrong in a file marked at its icon, as Eclipse does, or also a red wave under a file with
+  errors and each folder it is in, as IntelliJ does (View, Underline Errors); Shown keeps such choices from one window
+  to the next, in `~/.ideseed/shown.properties`; with no folder it
   opens the last one it opened, kept in `~/.ideseed/last`: Workbench, Editors, Views, Form from a capability's schema, Dialogs as an interface the tests script, Keymap, Terminal:
   JediTerm over pty4j, the user's shell in the project's folder, started when first shown, Alt+F12; tested with no
   screen; the one adapter that uses another: the window serves its own IDE over mcp's Http, each call on Swing's
