@@ -8,6 +8,10 @@ package ide.program;
 public record Reference(String id, ElementId site, ElementId target, String name, Mode mode, Receiver receiver,
                         ElementId statement) {
 
+    public Reference {
+        if (name != null) name = name.intern(); // a program has millions of uses and a few thousand names
+    }
+
     /**
      * What a use is made on: the object its site belongs to ({@code SELF}: written alone, or through this or super), a
      * type ({@code TYPE}), or another object ({@code OTHER}). A link, a type used or a new object is made on nothing.

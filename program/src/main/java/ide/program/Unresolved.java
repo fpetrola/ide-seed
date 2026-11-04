@@ -8,6 +8,10 @@ package ide.program;
  */
 public record Unresolved(String id, ElementId site, String name, Mode mode, ElementId scope, ElementId statement) {
 
+    public Unresolved {
+        if (name != null) name = name.intern(); // as a reference's
+    }
+
     /** A use that names no member, or one whose type is not known. */
     public Unresolved(String id, ElementId site, String name, Mode mode) {
         this(id, site, name, mode, null);

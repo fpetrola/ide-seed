@@ -10,6 +10,10 @@ import java.util.Map;
 public record Element(ElementId id, Kind kind, String name, ElementId parent, Address address, String qualified,
                       Map<Fact, String> facts) {
 
+    public Element {
+        if (name != null) name = name.intern(); // locals and parameters by the hundred thousand, of few names
+    }
+
     public String fact(Fact fact) {
         return facts.get(fact);
     }
