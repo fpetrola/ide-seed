@@ -24,6 +24,7 @@ import java.util.Set;
 public final class Sources {
 
     private final JavaParser parser;
+    private final Trees trees;
     private final Consumer<Set<String>> changed;
     private final Map<String, Unit> units = new TreeMap<>();
 
@@ -32,7 +33,13 @@ public final class Sources {
      * @param changed       told after every change, with the paths of the files it added, replaced or removed
      */
     public Sources(ParserConfiguration configuration, Consumer<Set<String>> changed) {
+        this(configuration, changed, 16);
+    }
+
+    /** @param keeping how many of the trees used last stay in memory though nothing holds them */
+    public Sources(ParserConfiguration configuration, Consumer<Set<String>> changed, int keeping) {
         this.parser = new JavaParser(configuration);
+        this.trees = new Trees(parser, keeping);
         this.changed = changed;
     }
 
@@ -63,8 +70,9 @@ public final class Sources {
         return unit;
     }
 
+    /** The trees in memory, the only ones anything was cached in. */
     public Collection<CompilationUnit> trees() {
-        return units.values().stream().map(Unit::tree).toList();
+        return units.values().stream().flatMap(unit -> unit.parsed().stream()).toList();
     }
 
     /** Path → text of every file, sorted by path. */
@@ -99,7 +107,7 @@ public final class Sources {
     /** A file moves to another path; its text and tree stay. */
     public void rename(String from, String to) {
         var unit = forget(from);
-        keep(new Unit(to, unit.text(), unit.tree()));
+        keep(new Unit(to, unit.text(), unit.tree(), trees));
         changed.accept(Set.of(from, to));
     }
 
@@ -133,24 +141,13 @@ public final class Sources {
     private Map<String, Unit> parse(Map<String, String> texts) {
         var parsed = new LinkedHashMap<String, Unit>();
         texts.forEach((path, text) -> {
-            var result = parser.parse(text);
+            var result = trees.parse(text);
             if (!result.isSuccessful()) {
                 throw new PrimitiveRejected("projection.unparsable", path + ": " + result.getProblems().getFirst().getVerboseMessage());
             }
-            parsed.put(path, new Unit(path, text, withoutTokens(result.getResult().orElseThrow())));
+            parsed.put(path, new Unit(path, text, result.getResult().orElseThrow(), trees));
         });
         return parsed;
-    }
-
-    /** Each node and comment keeps its range; the tokens, kept by any of them, would hold as much memory as the tree. */
-    private static CompilationUnit withoutTokens(CompilationUnit tree) {
-        tree.walk(Sources::forgetTokens);
-        tree.getAllComments().forEach(Sources::forgetTokens);
-        return tree;
-    }
-
-    private static void forgetTokens(Node node) {
-        node.getRange().ifPresent(range -> node.setTokenRange(null).setRange(range));
     }
 
     private void keep(Unit unit) {
@@ -159,6 +156,8 @@ public final class Sources {
     }
 
     private Unit forget(String path) {
-        return units.remove(path);
+        var unit = units.remove(path);
+        if (unit != null) trees.drop(unit);
+        return unit;
     }
 }

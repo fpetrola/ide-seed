@@ -385,6 +385,7 @@ public final class JavaProjection implements Projection {
             reading = reader.read(sources.units(), emptyPackages, afresh ? null : Set.copyOf(changed));
             changed.clear();
             afresh = false;
+            forgetResolved(); // what resolving cached holds nodes of other files: their trees could not be let go
         }
         return reading;
     }
@@ -396,11 +397,15 @@ public final class JavaProjection implements Projection {
     /** After any change: what was resolved before describes another program, and the files at {@code paths} changed. */
     private void invalidate(Set<String> paths) {
         changed.addAll(paths);
-        JavaParserFacade.clearInstances(); // resolution caches point into replaced trees
-        sources.trees().forEach(JavaProjection::forgetResolvedTypes);
+        forgetResolved(); // resolution caches point into replaced trees
         typeSolver.reset();
         reading = null;
         diagnostics = null;
+    }
+
+    private void forgetResolved() {
+        JavaParserFacade.clearInstances();
+        sources.trees().forEach(JavaProjection::forgetResolvedTypes);
     }
 
     /**

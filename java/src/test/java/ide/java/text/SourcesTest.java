@@ -149,6 +149,29 @@ class SourcesTest {
         assertThat(sources.texts()).isEqualTo(Map.of("a/A.java", A));
     }
 
+    /**
+     * Only the trees used last stay in memory; another is parsed again from its text when asked for. While a node of it
+     * is held, its tree is that same one: what a change looks at never comes from two readings of a file.
+     */
+    @Test
+    void aTreeNobodyUsesIsLetGoAndParsedAgainWhenAskedFor() {
+        var few = new Sources(new ParserConfiguration(), paths -> { }, 1);
+        few.put(Map.of("a/A.java", A, "a/B.java", B));
+        var a = few.unit("a/A.java");
+        var held = field(a, 0);
+        var gone = new java.lang.ref.WeakReference<>(few.unit("a/B.java").tree());
+        few.unit("a/A.java").tree(); // the one kept
+
+        for (var i = 0; i < 10 && gone.get() != null; i++) System.gc();
+
+        assertThat(gone.get()).isNull();
+        assertThat(type(few.unit("a/B.java")).getNameAsString()).isEqualTo("B");
+        assertThat(few.unitOf(type(few.unit("a/B.java")))).isSameAs(few.unit("a/B.java"));
+        few.unit("a/B.java").tree(); // now A's is not kept, but a node of it is held
+        System.gc();
+        assertThat(field(few.unit("a/A.java"), 0)).isSameAs(held);
+    }
+
     /** Coming back parses only the files whose text differs: a rollback would otherwise hold two trees of each. */
     @Test
     void restoringKeepsTheTreesOfTheFilesThatDidNotChange() {

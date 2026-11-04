@@ -66,10 +66,13 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   refactoring and knowledge).
 - `java` (projection, JavaParser) — the Java driver, in layers that only know the ones below (LayersTest):
   `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses; a tree
-  keeps each node's range, not the tokens it was read from; restoring parses only the files whose text differs),
+  keeps each node's range, not the tokens it was read from; restoring parses only the files whose text differs; a
+  unit holds its tree weakly and Trees keeps the 16 used last: another is parsed again from the text, the same one while
+  anything holds a node of it),
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
   `ide.java.semantics` (Reader: program + where each declaration and use is (text.Located: unit, range and kind, its node
-  found in the unit's tree when asked, so a reading keeps no tree); Resolution, Keys, WorkspaceTypeSolver,
+  found in the unit's tree when asked, so a reading keeps no tree; what resolving cached in the nodes is forgotten
+  after each reading); Resolution, Keys, WorkspaceTypeSolver,
   EcjCheck: Eclipse's compiler, incremental, errors and warnings with their range; Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a
   statement in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code

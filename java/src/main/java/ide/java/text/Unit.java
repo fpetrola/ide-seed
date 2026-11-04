@@ -6,27 +6,31 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.DataKey;
 import com.github.javaparser.ast.Node;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Optional;
 
 /**
  * A source file: its path, its text, and the syntax tree parsed from that text. The text is the truth; the tree is
- * a reading of it, never edited. Offsets live only here: everyone else names places by nodes, positions and lines.
+ * a reading of it, never edited, let go when nothing uses it and parsed again when asked for. Offsets live only here:
+ * everyone else names places by nodes, positions and lines.
  */
 public final class Unit {
 
     private final String path;
     private final String text;
-    private final CompilationUnit tree;
+    private final Trees trees;
+    private WeakReference<CompilationUnit> tree;
     private int[] lineStarts;
 
     private static final DataKey<Unit> UNIT = new DataKey<>() {
     };
 
-    Unit(String path, String text, CompilationUnit tree) {
+    Unit(String path, String text, CompilationUnit tree, Trees trees) {
         this.path = path;
         this.text = text;
-        this.tree = tree;
-        tree.setData(UNIT, this);
+        this.trees = trees;
+        hold(tree);
     }
 
     /** The unit a tree was read for, if any. */
@@ -42,8 +46,24 @@ public final class Unit {
         return text;
     }
 
+    /** The tree, the same one while anything holds a node of it, else read again from the text. */
     public CompilationUnit tree() {
-        return tree;
+        var held = tree.get();
+        if (held == null) held = hold(trees.again(this));
+        trees.used(this, held);
+        return held;
+    }
+
+    /** The tree if it is in memory: what was cached in it is there only. */
+    public Optional<CompilationUnit> parsed() {
+        return Optional.ofNullable(tree.get());
+    }
+
+    private CompilationUnit hold(CompilationUnit parsed) {
+        parsed.setData(UNIT, this);
+        tree = new WeakReference<>(parsed);
+        trees.used(this, parsed);
+        return parsed;
     }
 
     /**

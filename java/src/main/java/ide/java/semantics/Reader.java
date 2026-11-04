@@ -102,7 +102,7 @@ public final class Reader {
     }
 
     /** What the last reading knew of a file, to keep what a change cannot have affected. */
-    private record Part(Unit unit, Declared declared, Bound bound) {
+    private record Part(Unit unit, String pkg, Declared declared, Bound bound) {
     }
 
     private final Identity ids;
@@ -136,8 +136,12 @@ public final class Reader {
         }
         var elements = new ArrayList<Element>();
         var packages = new LinkedHashMap<String, ElementId>();
+        var packageOf = new HashMap<String, String>(); // a file read before keeps its package: its tree may be gone
         for (var unit : units) {
-            unit.tree().getPackageDeclaration().ifPresent(p -> packages.computeIfAbsent(p.getNameAsString(), n -> addPackage(elements, n)));
+            var pkg = fresh.contains(unit.path()) ? unit.tree().getPackageDeclaration().map(p -> p.getNameAsString()).orElse("")
+                    : previous.get(unit.path()).pkg();
+            packageOf.put(unit.path(), pkg);
+            if (!pkg.isEmpty()) packages.computeIfAbsent(pkg, n -> addPackage(elements, n));
         }
         for (var name : emptyPackages) packages.computeIfAbsent(name, n -> addPackage(elements, n));
         var declared = new LinkedHashMap<String, Declared>();
@@ -171,7 +175,7 @@ public final class Reader {
         }
         elements.addAll(named.values());
         var next = new HashMap<String, Part>();
-        for (var unit : units) next.put(unit.path(), new Part(unit, declared.get(unit.path()), bound.get(unit.path())));
+        for (var unit : units) next.put(unit.path(), new Part(unit, packageOf.get(unit.path()), declared.get(unit.path()), bound.get(unit.path())));
         parts = next;
         last = new Program(elements, references, unresolved);
         return new Reading(last, nodes, declarations, Collections.unmodifiableSet(new TreeSet<>(resolve)));

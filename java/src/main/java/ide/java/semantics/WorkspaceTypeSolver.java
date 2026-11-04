@@ -82,7 +82,7 @@ public final class WorkspaceTypeSolver implements TypeSolver {
     /** Forgets the index and the declarations made from the trees; called whenever units are replaced. */
     public void reset() {
         index = null;
-        units.get().forEach(unit -> unit.tree().removeData(DECLARED));
+        units.get().forEach(unit -> unit.parsed().ifPresent(tree -> tree.removeData(DECLARED)));
     }
 
     @Override

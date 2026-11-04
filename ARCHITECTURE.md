@@ -2315,8 +2315,24 @@ Los pasos, cada uno medido:
    el índice dice qué `Unit` declara cada tipo (la declaración de JavaParser queda con su árbol) y la lectura guarda
    `Located`. Un hijo puede quedar fuera del rango de su padre (el tipo de `C c;` es hijo del declarador, que cubre
    solo `c`): se busca podando por rango y, si no aparece, en todo el árbol.
-4. *Árboles a demanda.* Un caché acotado, más los archivos que una transacción toca (un primitivo tiene que ver
-   siempre el mismo árbol de un archivo) y los abiertos en un editor. La apertura lee y suelta archivo por archivo.
+4. *Árboles a demanda.* Hecho: una `Unit` tiene su árbol por una referencia débil, y `Sources` guarda los 16 usados
+   últimos (`Trees`); otro se vuelve a parsear de su texto. Mientras algo tiene un nodo de un árbol, el nodo lo alcanza
+   y el árbol es ese mismo: un primitivo nunca ve dos lecturas de un archivo, sin tener que fijar nada por
+   transacción. El lector guarda el paquete de cada archivo, y lo que resolver deja en los nodos (y en el facade de
+   JavaParser) se olvida al terminar cada lectura: tenía nodos de otros archivos. La suite pasa con 0 árboles guardados
+   y una generación joven de 2 MB (el GC suelta los árboles todo el tiempo). Medido sobre la misma copia:
+
+   | Árboles guardados | Abierto | Leído | Compilado | Abrir y leer | Rename |
+   |---|---|---|---|---|---|
+   | todos (antes) | 63 MB | 117 MB | 127 MB | 31 s | 1,1 s |
+   | 100 | 47 MB | 97 MB | 107 MB | 33 s | 1,9 s |
+   | 16 | 22 MB | 69 MB | 80 MB | 36 s | 3,1 s |
+   | 0 | 13 MB | 63 MB | 73 MB | 40 s | 3,4 s |
+
+   Sin árboles quedan unos 60 MB: el lector (grafo, ubicadores, formas) 23 MB, las librerías (javassist) 18 MB, el
+   último archivo que el parser leyó 6 MB, identidad y ECJ 7 MB. Lo que el lector guarda crece con el programa; lo de
+   las librerías, con las librerías. El rename más lento es releer: tras un cambio de tipo, o al deshacer, se vuelven
+   a resolver todos los archivos, y ahora también a parsear.
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.
