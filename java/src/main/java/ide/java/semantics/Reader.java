@@ -116,7 +116,7 @@ public final class Reader {
     }
 
     /** What one file declares: its shape, its elements, and where each is declared. */
-    private record Declared(Shape shape, List<Element> elements, Map<ElementId, Decl> declarations) {
+    private record Declared(Shape shape, List<Element> elements, Map<ElementId, Decl> declarations, Map<Integer, ElementId> variables) {
     }
 
     /**
@@ -158,6 +158,12 @@ public final class Reader {
         this.compiled = compiled;
     }
 
+    /**
+     * Whether the program is read from Eclipse's DOM and compiler, with no JavaParser: the default; the reading that
+     * parses with JavaParser stays to compare with ({@code -Dide.java.reader=javaparser}, see ParityProbe).
+     */
+    private final boolean dom = !"javaparser".equals(System.getProperty("ide.java.reader", "dom"));
+
     public Reader(Identity ids, Keys keys, WorkspaceTypeSolver typeSolver) {
         this.ids = ids;
         this.keys = keys;
@@ -182,8 +188,13 @@ public final class Reader {
         var typesOf = new HashMap<String, List<String>>();
         var declaring = new HashMap<String, Unit>();
         var all = List.copyOf(units);
-        inTurn.over(all, unit -> fresh.contains(unit.path()), unit -> { // types first: members key their parameter types by type id
-            if (fresh.contains(unit.path())) {
+        inTurn.over(all, unit -> fresh.contains(unit.path()) && !dom, unit -> { // types first: members key their parameter types by type id
+            if (fresh.contains(unit.path()) && dom) {
+                var tree = unit.dom();
+                packageOf.put(unit.path(), tree.getPackage() == null ? "" : tree.getPackage().getName().getFullyQualifiedName());
+                typesOf.put(unit.path(), DomSyntax.types(tree).stream().map(DomSyntax::qualified).toList());
+                for (var type : typesOf.get(unit.path())) ids.of(new Address.Type(type), Kind.CLASS);
+            } else if (fresh.contains(unit.path())) {
                 var tree = unit.tree();
                 packageOf.put(unit.path(), tree.getPackageDeclaration().map(p -> p.getNameAsString()).orElse(""));
                 typesOf.put(unit.path(), types(tree).stream().map(Reader::qualifiedOf).toList());
@@ -199,14 +210,20 @@ public final class Reader {
         typeSolver.declaredIn(declaring); // what the solver looks types up in, without reading every tree again
         for (var name : emptyPackages) packages.computeIfAbsent(name, n -> addPackage(elements, n));
         var declared = new LinkedHashMap<String, Declared>();
-        inTurn.over(all, unit -> fresh.contains(unit.path()), unit ->
-                declared.put(unit.path(), fresh.contains(unit.path()) ? declare(unit, packages) : previous.get(unit.path()).declared()));
+        var bindings = new HashMap<String, EcjBindings.File>(); // with the DOM, what the compiler says comes first: keys too
+        if (dom && !fresh.isEmpty()) bindings.putAll(compiled.apply(fresh));
+        inTurn.over(all, unit -> fresh.contains(unit.path()) && !dom, unit -> declared.put(unit.path(), !fresh.contains(unit.path())
+                ? previous.get(unit.path()).declared() : dom ? declareDom(unit, packages, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE))
+                : declare(unit, packages)));
         // uses only once every element has its id: a use may point into a file read later
         var resolve = affected(units, fresh, previous, declared);
         var bound = new LinkedHashMap<String, Bound>();
-        var bindings = resolve.isEmpty() ? Map.<String, EcjBindings.File>of() : compiled.apply(resolve);
-        inTurn.over(all, unit -> resolve.contains(unit.path()), unit -> bound.put(unit.path(), resolve.contains(unit.path())
-                ? bind(unit, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE)) : previous.get(unit.path()).bound()));
+        var missing = new TreeSet<>(resolve);
+        missing.removeAll(bindings.keySet());
+        if (!missing.isEmpty()) bindings.putAll(compiled.apply(missing));
+        inTurn.over(all, unit -> resolve.contains(unit.path()) && !dom, unit -> bound.put(unit.path(), !resolve.contains(unit.path())
+                ? previous.get(unit.path()).bound() : dom ? bindDom(unit, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE),
+                declared.get(unit.path()).variables()) : bind(unit, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE))));
         Compare.report();
         var declarations = new HashMap<String, Map<ElementId, Decl>>();
         declared.forEach((path, d) -> {
@@ -354,7 +371,396 @@ public final class Reader {
                 addStatements(elements, declarations, unit, method, id);
             }
         }
-        return new Declared(Shape.of(unit), elements, declarations);
+        return new Declared(Shape.of(unit), elements, declarations, Map.of());
+    }
+
+    // ---- read from Eclipse's DOM, with what the compiler bound: no JavaParser
+
+    /** The JavaParser node a DOM node stands for, where primitives still find it: by its kind and where it is. */
+    private static Located at(Unit unit, int start, int end, Class<? extends Node> kind) {
+        return new Located(unit, start, end, kind);
+    }
+
+    /** The JavaParser kind of a type declaration. */
+    private static Class<? extends Node> javaParserKind(org.eclipse.jdt.core.dom.AbstractTypeDeclaration type) {
+        return switch (type) {
+            case org.eclipse.jdt.core.dom.EnumDeclaration e -> com.github.javaparser.ast.body.EnumDeclaration.class;
+            case org.eclipse.jdt.core.dom.RecordDeclaration r -> com.github.javaparser.ast.body.RecordDeclaration.class;
+            case org.eclipse.jdt.core.dom.AnnotationTypeDeclaration a -> com.github.javaparser.ast.body.AnnotationDeclaration.class;
+            default -> ClassOrInterfaceDeclaration.class;
+        };
+    }
+
+    /** A callable's parameter keys, as the compiler resolved them; as written if it could not. */
+    private List<String> keysOf(org.eclipse.jdt.core.dom.MethodDeclaration method, EcjBindings.File file) {
+        var name = method.getName();
+        var declared = file.declaration(name.getStartPosition(), DomSyntax.end(name));
+        if (declared != null) return keys.described(declared.parameters());
+        var written = new ArrayList<String>();
+        for (var parameter : method.parameters()) written.add(DomSyntax.written((org.eclipse.jdt.core.dom.SingleVariableDeclaration) parameter));
+        return keys.described(written);
+    }
+
+    private Declared declareDom(Unit unit, Map<String, ElementId> packages, EcjBindings.File file) {
+        var elements = new ArrayList<Element>();
+        var declarations = new HashMap<ElementId, Decl>();
+        var variables = new HashMap<Integer, ElementId>();
+        var text = unit.text();
+        var tree = unit.dom();
+        var pkg = tree.getPackage() == null ? null : packages.get(tree.getPackage().getName().getFullyQualifiedName());
+        for (var type : DomSyntax.types(tree)) {
+            var typeName = DomSyntax.qualified(type);
+            var typeId = ids.get(new Address.Type(typeName));
+            var parent = type.getParent() instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration outer
+                    ? ids.get(new Address.Type(DomSyntax.qualified(outer))) : pkg;
+            var typeFacts = new HashMap<>(DomSyntax.attributes(type, text));
+            if (type.isPackageMemberTypeDeclaration()) typeFacts.put(Fact.FILE, unit.path());
+            if (type instanceof org.eclipse.jdt.core.dom.TypeDeclaration c && !c.isInterface() && c.getSuperclassType() != null) {
+                typeFacts.put(Fact.SUPERCLASS, DomSyntax.written(c.getSuperclassType()));
+            }
+            var kind = DomSyntax.kindOf(type);
+            elements.add(new Element(typeId, kind, type.getName().getIdentifier(), parent, new Address.Type(typeName), typeName,
+                    Map.copyOf(typeFacts)));
+            declarations.put(typeId, new Decl(at(unit, DomSyntax.start(type, text), DomSyntax.end(type), javaParserKind(type))));
+            for (var field : DomSyntax.fields(type)) {
+                for (var fragment : field.fragments()) {
+                    var variable = (org.eclipse.jdt.core.dom.VariableDeclarationFragment) fragment;
+                    var facts = new HashMap<>(DomSyntax.attributes(field, text));
+                    facts.put(Fact.TYPE, DomSyntax.written(field.getType(), variable.getExtraDimensions()));
+                    facts.put(Fact.INITIALIZED, String.valueOf(variable.getInitializer() != null));
+                    var name = variable.getName().getIdentifier();
+                    var id = add(elements, new Address.Field(typeId, name), Kind.FIELD, name, typeId, facts);
+                    declarations.put(id, new Decl(at(unit, DomSyntax.start(field, text), DomSyntax.end(field), FieldDeclaration.class)));
+                }
+            }
+            for (var constructor : DomSyntax.constructors(type)) {
+                var id = add(elements, new Address.Callable(typeId, "new", keysOf(constructor, file)), Kind.CONSTRUCTOR,
+                        type.getName().getIdentifier(), typeId, thrownDom(constructor, new HashMap<>(DomSyntax.attributes(constructor, text))));
+                declarations.put(id, new Decl(at(unit, DomSyntax.start(constructor, text), DomSyntax.end(constructor),
+                        com.github.javaparser.ast.body.ConstructorDeclaration.class)));
+                addBodyDom(elements, declarations, variables, unit, constructor, id);
+            }
+            for (var method : DomSyntax.methods(type)) {
+                var facts = thrownDom(method, new HashMap<>(DomSyntax.attributes(method, text)));
+                facts.put(Fact.TYPE, method.getReturnType2() == null ? "void" : DomSyntax.written(method.getReturnType2()));
+                if (method.getBody() != null) facts.put(Fact.BODY, DomSyntax.textOf(method.getBody(), text));
+                if (kind == Kind.INTERFACE && (method.getModifiers() & (org.eclipse.jdt.core.dom.Modifier.PUBLIC
+                        | org.eclipse.jdt.core.dom.Modifier.PROTECTED | org.eclipse.jdt.core.dom.Modifier.PRIVATE)) == 0) {
+                    facts.put(Fact.VISIBILITY, "public"); // interface members are implicitly public
+                }
+                if (kind == Kind.INTERFACE && method.getBody() == null && !org.eclipse.jdt.core.dom.Modifier.isStatic(method.getModifiers())) {
+                    facts.put(Fact.ABSTRACT, "true"); // and abstract, unless they have a body
+                }
+                var name = method.getName().getIdentifier();
+                var id = add(elements, new Address.Callable(typeId, name, keysOf(method, file)), Kind.METHOD, name, typeId, facts);
+                declarations.put(id, new Decl(at(unit, DomSyntax.start(method, text), DomSyntax.end(method), com.github.javaparser.ast.body.MethodDeclaration.class)));
+                addBodyDom(elements, declarations, variables, unit, method, id);
+            }
+        }
+        return new Declared(DomSyntax.shape(unit), elements, declarations, variables);
+    }
+
+    /** A callable's parameters, locals and statements, as the JavaParser reading has them. */
+    private void addBodyDom(List<Element> elements, Map<ElementId, Decl> declarations, Map<Integer, ElementId> variables, Unit unit,
+                            org.eclipse.jdt.core.dom.MethodDeclaration callable, ElementId owner) {
+        var text = unit.text();
+        for (var each : callable.parameters()) {
+            var parameter = (org.eclipse.jdt.core.dom.SingleVariableDeclaration) each;
+            var name = parameter.getName().getIdentifier();
+            var id = add(elements, new Address.Param(owner, name), Kind.PARAM, name, owner, Map.of(Fact.TYPE, DomSyntax.written(parameter)));
+            declarations.put(id, new Decl(at(unit, parameter.getStartPosition(), DomSyntax.end(parameter), com.github.javaparser.ast.body.Parameter.class)));
+            variables.put(parameter.getName().getStartPosition(), id);
+        }
+        var seen = new HashMap<String, Integer>();
+        for (var local : DomSyntax.locals(callable, text)) {
+            var ordinal = seen.merge(local.name(), 1, Integer::sum) - 1;
+            var id = add(elements, new Address.Local(owner, local.name(), ordinal), Kind.LOCAL, local.name(), owner, Map.of(Fact.TYPE, local.type()));
+            declarations.put(id, new Decl(at(unit, local.start(), local.end(), VariableDeclarator.class)));
+            variables.put(local.nameStart(), id);
+        }
+        addStatementsDom(elements, declarations, unit, DomSyntax.statements(callable), owner);
+    }
+
+    private void addStatementsDom(List<Element> elements, Map<ElementId, Decl> declarations, Unit unit,
+                                  List<org.eclipse.jdt.core.dom.Statement> statements, ElementId owner) {
+        for (var i = 0; i < statements.size(); i++) {
+            var statement = statements.get(i);
+            var id = add(elements, new Address.Statement(owner, i), Kind.STATEMENT, "", owner, Map.of());
+            declarations.put(id, new Decl(at(unit, statement.getStartPosition(), DomSyntax.end(statement), Statement.class)));
+            addStatementsDom(elements, declarations, unit, DomSyntax.nested(statement), id);
+        }
+    }
+
+    /** What the uses of one file bind, read from the DOM with what the compiler bound: as {@link #bind} does with JavaParser. */
+    private Bound bindDom(Unit unit, EcjBindings.File file, Map<Integer, ElementId> variables) {
+        var references = new ArrayList<Reference>();
+        var unresolved = new ArrayList<Unresolved>();
+        var nodes = new HashMap<String, Located>();
+        var named = new LinkedHashSet<String>();
+        var untracked = new HashSet<String>();
+        var ordinals = new HashMap<ElementId, Integer>();
+        var callables = new IdentityHashMap<org.eclipse.jdt.core.dom.MethodDeclaration, ElementId>();
+        var text = unit.text();
+        var tree = unit.dom();
+        for (var use : DomSyntax.uses(tree)) {
+            var typeName = false;
+            var bindsNothing = false;
+            ElementId target = null;
+            ElementId scope = null;
+            var bound = switch (use.category()) {
+                case DomSyntax.TYPE -> use.typeExpression() && file.type(use.nameStart(), use.nameEnd()) == null
+                        ? file.name(use.nameStart(), use.nameEnd()) : file.type(use.nameStart(), use.nameEnd()); // before ::, a name to the compiler
+                case DomSyntax.NEW -> file.constructor(use.nameStart(), use.nameEnd());
+                case DomSyntax.CONSTRUCTOR_CALL -> file.constructor(use.start(), use.start());
+                case DomSyntax.METHOD_REFERENCE -> file.name(use.nameStart(), use.end());
+                default -> file.name(use.nameStart(), use.nameEnd());
+            };
+            if (bound == null && use.category() == DomSyntax.TYPE && !use.prefix()) { // the compiler said nothing: one it cannot reach from here
+                target = writtenType(tree, use.name());
+            }
+            if (bound != null) switch (bound.kind()) {
+                case TYPE -> {
+                    target = typeOrLibrary(bound, named);
+                    typeName = use.category() == DomSyntax.NAME || use.category() == DomSyntax.FIELD_ACCESS;
+                }
+                case FIELD -> target = memberOf(bound, owner -> new Address.Field(owner, bound.name()));
+                case METHOD -> target = memberOf(bound, owner -> new Address.Callable(owner, bound.name(), keys.described(bound.parameters())));
+                case CONSTRUCTOR -> target = memberOf(bound, owner -> new Address.Callable(owner, "new", keys.described(bound.parameters())));
+                case LOCAL, PARAM -> target = variables.get(bound.declaredAt());
+                case NOTHING -> {
+                    var written = use.category() == DomSyntax.TYPE ? writtenType(tree, use.name()) : null;
+                    if (written != null) target = written; // a type of the workspace its import names, one it cannot reach
+                    else {
+                        bindsNothing = nothingHere(use);
+                        scope = bound.owner() == null ? null : type(bound.owner());
+                    }
+                }
+            }
+            var name = use.category() == DomSyntax.CONSTRUCTOR_CALL ? constructedDom(use) : use.name();
+            var place = target == null && !bindsNothing ? null : placeDom(use, file, callables);
+            var site = place == null ? null : place.member();
+            if (site == null) { // members of libraries, locals, what does not compile, in declarations it cannot read
+                untracked.add(name);
+                continue;
+            }
+            var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
+            nodes.put(id, at(unit, use.start(), use.end(), javaParserKind(use)));
+            var mode = typeName ? Mode.TYPE : modeDom(use);
+            var receiver = target != null && (target.value().startsWith(Kind.LOCAL.prefix()) || target.value().startsWith(Kind.PARAM.prefix()))
+                    ? Reference.Receiver.NONE : receiverDom(use, mode, file);
+            if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use.category() == DomSyntax.TYPE ? null : scope, place.statement()));
+            else references.add(new Reference(id, site, target, name, mode, receiver, place.statement()));
+        }
+        return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
+    }
+
+    /** A workspace type a simple name names in a file, as its imports and its package say; null if none. */
+    private ElementId writtenType(org.eclipse.jdt.core.dom.CompilationUnit tree, String simple) {
+        for (var each : tree.imports()) {
+            var imported = (org.eclipse.jdt.core.dom.ImportDeclaration) each;
+            var name = imported.getName().getFullyQualifiedName();
+            if (!imported.isOnDemand() && !imported.isStatic() && name.endsWith("." + simple)) return type(name);
+        }
+        var pkg = tree.getPackage() == null ? "" : tree.getPackage().getName().getFullyQualifiedName() + ".";
+        return type(pkg + simple);
+    }
+
+    private ElementId typeOrLibrary(EcjBindings.Bound bound, Set<String> named) {
+        var workspace = type(bound.owner());
+        if (workspace != null || bound.pkg() == null) return workspace;
+        var simple = bound.pkg().isEmpty() ? bound.owner() : bound.owner().substring(bound.pkg().length() + 1);
+        var kind = switch (bound.name()) {
+            case "interface", "annotation" -> Kind.INTERFACE;
+            case "enum" -> Kind.ENUM;
+            default -> Kind.CLASS;
+        };
+        var qualified = library(bound.owner(), bound.pkg(), simple, kind);
+        named.add(qualified);
+        return library.get(qualified).id();
+    }
+
+    /** A member the compiler bound: its id, or null for a library's (or one whose id is not found). */
+    private ElementId memberOf(EcjBindings.Bound bound, java.util.function.Function<ElementId, Address> address) {
+        var owner = type(bound.owner());
+        return owner == null ? null : ids.get(address.apply(owner));
+    }
+
+    /** Whether a use that binds nothing is one the program keeps: not a receiver, a switch's label or an annotation's. */
+    private static boolean nothingHere(DomSyntax.Use use) {
+        if (use.category() == DomSyntax.TYPE) return !use.prefix() && !use.typeExpression();
+        if (use.category() != DomSyntax.NAME && use.category() != DomSyntax.FIELD_ACCESS) return true;
+        var node = use.node();
+        var location = node.getLocationInParent();
+        if (location == org.eclipse.jdt.core.dom.QualifiedName.QUALIFIER_PROPERTY || location == org.eclipse.jdt.core.dom.FieldAccess.EXPRESSION_PROPERTY
+                || location == org.eclipse.jdt.core.dom.MethodInvocation.EXPRESSION_PROPERTY || node.getParent() instanceof org.eclipse.jdt.core.dom.SwitchCase) {
+            return false;
+        }
+        for (var at = node.getParent(); at != null; at = at.getParent()) if (at instanceof org.eclipse.jdt.core.dom.Annotation) return false;
+        return true;
+    }
+
+    private static Class<? extends Node> javaParserKind(DomSyntax.Use use) {
+        return switch (use.category()) {
+            case DomSyntax.NAME -> NameExpr.class;
+            case DomSyntax.FIELD_ACCESS -> FieldAccessExpr.class;
+            case DomSyntax.CALL -> MethodCallExpr.class;
+            case DomSyntax.TYPE -> ClassOrInterfaceType.class;
+            case DomSyntax.NEW -> ObjectCreationExpr.class;
+            case DomSyntax.CONSTRUCTOR_CALL -> ExplicitConstructorInvocationStmt.class;
+            default -> MethodReferenceExpr.class;
+        };
+    }
+
+    /** The simple name of the type a {@code super(...)} or {@code this(...)} makes, as its constructor is named. */
+    private static String constructedDom(DomSyntax.Use use) {
+        org.eclipse.jdt.core.dom.TypeDeclaration type = null;
+        for (var at = use.node().getParent(); at != null && type == null; at = at.getParent()) {
+            if (at instanceof org.eclipse.jdt.core.dom.TypeDeclaration t) type = t;
+        }
+        if (use.name().equals("this") || type == null) return type == null ? "this" : type.getName().getIdentifier();
+        var superclass = type.getSuperclassType() == null ? null : DomSyntax.typeName(type.getSuperclassType());
+        return superclass == null ? "Object" : DomSyntax.simple(superclass);
+    }
+
+    private static Mode modeDom(DomSyntax.Use use) {
+        return switch (use.category()) {
+            case DomSyntax.CALL, DomSyntax.METHOD_REFERENCE, DomSyntax.CONSTRUCTOR_CALL -> Mode.CALL;
+            case DomSyntax.NEW -> Mode.NEW;
+            case DomSyntax.TYPE -> linkModeDom(use);
+            default -> {
+                var node = use.node();
+                if (node.getParent() instanceof org.eclipse.jdt.core.dom.Assignment assign && assign.getLeftHandSide() == node) {
+                    yield assign.getOperator() == org.eclipse.jdt.core.dom.Assignment.Operator.ASSIGN ? Mode.WRITE : Mode.UPDATE;
+                }
+                if (node.getParent() instanceof org.eclipse.jdt.core.dom.PostfixExpression) yield Mode.UPDATE;
+                if (node.getParent() instanceof org.eclipse.jdt.core.dom.PrefixExpression prefix
+                        && (prefix.getOperator() == org.eclipse.jdt.core.dom.PrefixExpression.Operator.INCREMENT
+                        || prefix.getOperator() == org.eclipse.jdt.core.dom.PrefixExpression.Operator.DECREMENT)) {
+                    yield Mode.UPDATE;
+                }
+                yield Mode.READ;
+            }
+        };
+    }
+
+    /** A type mention is a link when it extends, implements, or is the whole declared type of a field, parameter or method. */
+    private static Mode linkModeDom(DomSyntax.Use use) {
+        if (use.prefix() || use.typeExpression()) return Mode.TYPE;
+        var node = use.node();
+        var location = node.getLocationInParent();
+        var parent = node.getParent();
+        if (location == org.eclipse.jdt.core.dom.TypeDeclaration.SUPERCLASS_TYPE_PROPERTY) return Mode.EXTENDS;
+        if (location == org.eclipse.jdt.core.dom.TypeDeclaration.SUPER_INTERFACE_TYPES_PROPERTY) {
+            return ((org.eclipse.jdt.core.dom.TypeDeclaration) parent).isInterface() ? Mode.EXTENDS : Mode.IMPLEMENTS;
+        }
+        if (location == org.eclipse.jdt.core.dom.EnumDeclaration.SUPER_INTERFACE_TYPES_PROPERTY
+                || location == org.eclipse.jdt.core.dom.RecordDeclaration.SUPER_INTERFACE_TYPES_PROPERTY) {
+            return Mode.IMPLEMENTS;
+        }
+        if (location == org.eclipse.jdt.core.dom.SingleVariableDeclaration.TYPE_PROPERTY) { // what JavaParser calls a parameter
+            var holder = parent.getParent();
+            return holder instanceof org.eclipse.jdt.core.dom.MethodDeclaration || holder instanceof org.eclipse.jdt.core.dom.LambdaExpression
+                    || holder instanceof org.eclipse.jdt.core.dom.CatchClause || holder instanceof org.eclipse.jdt.core.dom.RecordDeclaration
+                    ? Mode.DECLARED : Mode.TYPE;
+        }
+        if (location == org.eclipse.jdt.core.dom.MethodDeclaration.RETURN_TYPE2_PROPERTY || location == org.eclipse.jdt.core.dom.FieldDeclaration.TYPE_PROPERTY) {
+            return Mode.DECLARED;
+        }
+        return Mode.TYPE;
+    }
+
+    /** What a use is made on, as it is written, the compiler saying whether a name before it is a type. */
+    private static Reference.Receiver receiverDom(DomSyntax.Use use, Mode mode, EcjBindings.File file) {
+        if (mode.isTypeUse() || mode == Mode.NEW) return Reference.Receiver.NONE;
+        var scope = use.scope();
+        if (use.category() == DomSyntax.METHOD_REFERENCE) {
+            if (scope instanceof org.eclipse.jdt.core.dom.Name || scope instanceof org.eclipse.jdt.core.dom.Type) return Reference.Receiver.TYPE;
+        }
+        if (scope == null || scope == use.node() || scope instanceof org.eclipse.jdt.core.dom.ThisExpression
+                || use.node() instanceof org.eclipse.jdt.core.dom.SuperMethodReference) {
+            return Reference.Receiver.SELF;
+        }
+        if (scope instanceof org.eclipse.jdt.core.dom.Name name) {
+            var last = DomSyntax.last(name);
+            var bound = file.name(last.getStartPosition(), DomSyntax.end(last));
+            if (bound != null && bound.kind() == EcjBindings.Kind.TYPE) return Reference.Receiver.TYPE;
+            if (bound != null && bound.kind() != EcjBindings.Kind.NOTHING) return Reference.Receiver.OTHER;
+            return name instanceof org.eclipse.jdt.core.dom.QualifiedName ? Reference.Receiver.TYPE : Reference.Receiver.OTHER;
+        }
+        return Reference.Receiver.OTHER;
+    }
+
+    /** Where a use is made: the member, parameter or type that makes it, and the statement of a body it is in. */
+    private Place placeDom(DomSyntax.Use use, EcjBindings.File file, Map<org.eclipse.jdt.core.dom.MethodDeclaration, ElementId> callables) {
+        var node = use.node();
+        var type = DomSyntax.typeOf(node);
+        if (type == null) return null;
+        var owner = ids.get(new Address.Type(DomSyntax.qualified(type)));
+        if (use.of() != null && use.of().getParent() instanceof org.eclipse.jdt.core.dom.FieldDeclaration) { // a field's declared type
+            return new Place(ids.get(new Address.Field(owner, use.of().getName().getIdentifier())), null);
+        }
+        org.eclipse.jdt.core.dom.MethodDeclaration method = null;
+        for (var at = node.getParent(); at != null && at != type && method == null; at = at.getParent()) {
+            if (at instanceof org.eclipse.jdt.core.dom.MethodDeclaration m && nearestType(m) == type && !m.isCompactConstructor()) method = m;
+        }
+        if (method != null) {
+            var found = method;
+            var callable = callables.computeIfAbsent(method, m -> ids.get(new Address.Callable(owner,
+                    m.isConstructor() ? "new" : m.getName().getIdentifier(), keysOf(m, file))));
+            for (var at = node; at != null && at != method; at = at.getParent()) {
+                if (at instanceof org.eclipse.jdt.core.dom.SingleVariableDeclaration parameter) {
+                    if (parameter.getParent() == found) return new Place(ids.get(new Address.Param(callable, parameter.getName().getIdentifier())), null);
+                    break;
+                }
+            }
+            return new Place(callable, callable == null ? null : statementOfDom(node, method, callable));
+        }
+        for (var at = node.getParent(); at != null && at != type; at = at.getParent()) {
+            if (at instanceof org.eclipse.jdt.core.dom.VariableDeclarationFragment fragment) {
+                return new Place(fragment.getParent() instanceof org.eclipse.jdt.core.dom.FieldDeclaration
+                        ? ids.get(new Address.Field(owner, fragment.getName().getIdentifier())) : owner, null);
+            }
+        }
+        return new Place(owner, null);
+    }
+
+    private static org.eclipse.jdt.core.dom.AbstractTypeDeclaration nearestType(org.eclipse.jdt.core.dom.ASTNode node) {
+        for (var at = node.getParent(); at != null; at = at.getParent()) {
+            if (at instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration type) return type;
+        }
+        return null;
+    }
+
+    /** The innermost statement of a callable's body a node is in, or null. */
+    private ElementId statementOfDom(org.eclipse.jdt.core.dom.ASTNode node, org.eclipse.jdt.core.dom.MethodDeclaration method, ElementId callable) {
+        var above = Collections.newSetFromMap(new IdentityHashMap<org.eclipse.jdt.core.dom.ASTNode, Boolean>());
+        for (var at = node; at != null && at != method; at = at.getParent()) above.add(at);
+        var statements = DomSyntax.statements(method);
+        ElementId statement = null;
+        while (true) {
+            int low = 0, high = statements.size() - 1, found = -1;
+            while (low <= high) {
+                var middle = (low + high) >>> 1;
+                if (statements.get(middle).getStartPosition() > node.getStartPosition()) high = middle - 1;
+                else {
+                    found = middle;
+                    low = middle + 1;
+                }
+            }
+            if (found < 0 || !above.contains(statements.get(found))) return statement;
+            var held = ids.get(new Address.Statement(statement == null ? callable : statement, found));
+            if (held == null) return statement;
+            statement = held;
+            statements = DomSyntax.nested(statements.get(found));
+        }
+    }
+
+    private static HashMap<Fact, String> thrownDom(org.eclipse.jdt.core.dom.MethodDeclaration callable, HashMap<Fact, String> facts) {
+        if (!callable.thrownExceptionTypes().isEmpty()) {
+            facts.put(Fact.THROWS, String.join(", ", callable.thrownExceptionTypes().stream()
+                    .map(t -> DomSyntax.written((org.eclipse.jdt.core.dom.Type) t)).toList()));
+        }
+        return facts;
     }
 
     /** The facts of a callable, with what it declares it throws, as written. */
@@ -505,6 +911,7 @@ public final class Reader {
                 case FIELD -> member(bound, owner -> new Address.Field(owner, bound.name()));
                 case METHOD -> member(bound, owner -> new Address.Callable(owner, bound.name(), keys.described(bound.parameters())));
                 case CONSTRUCTOR -> member(bound, owner -> new Address.Callable(owner, "new", keys.described(bound.parameters())));
+                case NOTHING -> null; // the solver says
                 case LOCAL, PARAM -> {
                     var declaration = declared().get(bound.declaredAt());
                     // a lambda's parameter, or a local of a class inside a method: as untracked as the solver leaves them

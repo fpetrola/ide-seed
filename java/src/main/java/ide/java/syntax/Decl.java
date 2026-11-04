@@ -18,6 +18,10 @@ public final class Decl {
         this.at = new Located(unit, node);
     }
 
+    public Decl(Located at) {
+        this.at = at;
+    }
+
     public Unit unit() {
         return at.unit();
     }

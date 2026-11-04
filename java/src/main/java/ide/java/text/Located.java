@@ -24,6 +24,18 @@ public final class Located {
         this.kind = node.getClass();
     }
 
+    /** A node of a kind (or of a kind's kinds) from its first character to its last, as offsets of the unit's text. */
+    public Located(Unit unit, int start, int end, Class<? extends Node> kind) {
+        var begin = unit.position(start);
+        var last = unit.position(end);
+        this.unit = unit;
+        this.beginLine = begin.line;
+        this.beginColumn = begin.column;
+        this.endLine = last.line;
+        this.endColumn = last.column;
+        this.kind = kind;
+    }
+
     public Unit unit() {
         return unit;
     }

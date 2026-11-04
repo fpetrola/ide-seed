@@ -2361,6 +2361,17 @@ Los pasos, cada uno medido:
    archivo se parseaba hasta cinco veces por lectura; ahora tres (tipos y paquete en una pasada, y el índice de tipos
    del solver sale de esa pasada, no de leer los árboles otra vez), y al recorrer los archivos los siguientes se parsean
    en otros hilos, de a pocos: 99 s con 1,5 GB de heap, 90 s con 2 GB (con 1,5 GB, 59 s de GC: lo vivo pesa).
+7. *Leer sin JavaParser (decisión 39, fase A).* El lector lee el DOM de Eclipse (`DomSyntax`: tipos, hechos,
+   sentencias, locales y usos como el programa siempre los tuvo, con el tipo de nodo de JavaParser que corresponde) y
+   toma de ECJ lo que liga cada nombre, las claves de los parámetros de cada declaración y lo que seguro no liga nada.
+   Cada ubicador apunta al nodo de JavaParser que los primitivos todavía usan: se parsea solo si lo piden. Comparado
+   programa contra programa sobre IdeSeed (`ParityProbe`): los elementos iguales (salvo `BODY`, ahora el texto como
+   está escrito), 39.861 usos iguales, 67 que solo el anterior tenía (usos en clases anónimas que atribuía al método de
+   afuera del mismo nombre, variables de patrones que daba por no resueltas) y 140 que solo el nuevo tiene (los que
+   el solver no resolvía). La suite pasa con los dos. Lo que hizo falta: ECJ liga lo que no aplica al método que casi
+   llama (solo esos errores se descartan: los de código inalcanzable o de un `return` que falta no), inventa un tipo
+   para el que falta, guarda lo no visible como su candidato más cercano, y resuelve una lambda pasada donde se infiere
+   un tipo como copias, una por tipo probado. Leer oozx: 27 s (con JavaParser, 90 a 100); abrirlo, 16 s más.
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

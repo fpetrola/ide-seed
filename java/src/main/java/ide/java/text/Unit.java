@@ -84,19 +84,19 @@ public final class Unit {
     }
 
     /**
-     * The outermost node of a kind with exactly this range: what a {@link Located} names. Looked for down the nodes whose
+     * The outermost node of a kind (or of one of its kinds) with exactly this range: what a {@link Located} names. Looked for down the nodes whose
      * range holds it; a node may lie outside its parent's (the type of a variable is its declarator's child), so failing
      * that, in the whole tree.
      */
     Node find(Range range, Class<? extends Node> kind) {
         var found = find(tree(), range, kind);
         if (found != null) return found;
-        return tree().findFirst(Node.class, node -> node.getClass() == kind && node.getRange().filter(range::equals).isPresent())
+        return tree().findFirst(Node.class, node -> kind.isInstance(node) && node.getRange().filter(range::equals).isPresent())
                 .orElseThrow(() -> new IllegalStateException("no " + kind.getSimpleName() + " at " + range + " in " + path));
     }
 
     private static Node find(Node at, Range range, Class<? extends Node> kind) {
-        if (at.getClass() == kind && at.getRange().filter(range::equals).isPresent()) return at;
+        if (kind.isInstance(at) && at.getRange().filter(range::equals).isPresent()) return at;
         for (var child : at.getChildNodes()) {
             if (child.getRange().filter(r -> r.contains(range)).isEmpty()) continue;
             var found = find(child, range, kind);
@@ -177,8 +177,8 @@ public final class Unit {
 
     Position position(int offset) {
         var starts = lineStarts();
-        var line = 0;
-        while (line + 1 < starts.length && starts[line + 1] <= offset) line++;
+        var found = java.util.Arrays.binarySearch(starts, offset); // a generated file has tens of thousands of lines
+        var line = found >= 0 ? found : -found - 2;
         return new Position(line + 1, offset - starts[line] + 1);
     }
 

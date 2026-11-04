@@ -1,6 +1,14 @@
 package ide.java.semantics;
 
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
+import org.eclipse.jdt.internal.compiler.ast.LambdaExpression;
+import org.eclipse.jdt.internal.compiler.lookup.SourceTypeBinding;
+import org.eclipse.jdt.internal.compiler.lookup.ProblemReferenceBinding;
+import org.eclipse.jdt.internal.compiler.lookup.ProblemReasons;
+import org.eclipse.jdt.internal.compiler.lookup.ProblemMethodBinding;
+import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.ConstructorDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.AllocationExpression;
 import org.eclipse.jdt.internal.compiler.ast.ArrayQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ArrayTypeReference;
@@ -60,13 +68,20 @@ public final class EcjBindings {
         /** {@code declaredAt} is where the local's name is declared. */
         LOCAL,
         /** {@code declaredAt} is where the parameter's name is declared. */
-        PARAM
+        PARAM,
+        /** It surely binds nothing: {@code owner} is the type it is looked up in, if known. */
+        NOTHING
     }
 
-    /** The bindings of one file. */
-    public record File(Map<Long, Bound> names, Map<Long, Bound> types, Map<Long, Bound> constructors) {
+    /** The bindings of one file, and the methods and constructors it declares, by where their names are. */
+    public record File(Map<Long, Bound> names, Map<Long, Bound> types, Map<Long, Bound> constructors, Map<Long, Bound> declared) {
 
-        public static final File NONE = new File(Map.of(), Map.of(), Map.of());
+        public static final File NONE = new File(Map.of(), Map.of(), Map.of(), Map.of());
+
+        /** A method or constructor this file declares, with its parameters' types, by where its name is. */
+        public Bound declaration(int start, int end) {
+            return declared.get(key(start, end));
+        }
 
         public Bound name(int start, int end) {
             return names.get(key(start, end));
@@ -94,12 +109,18 @@ public final class EcjBindings {
         var names = new HashMap<Long, Bound>();
         var types = new HashMap<Long, Bound>();
         var constructors = new HashMap<Long, Bound>();
-        var errors = new ArrayList<long[]>();
+        var declared = new HashMap<Long, Bound>();
+        var errors = new ArrayList<long[]>(); // where the compiler bound what does not apply to what it almost calls, to go on
+        var missingTypes = new ArrayList<long[]>(); // where a type is nowhere
         var result = unit.compilationResult;
         if (result != null && result.problems != null) {
             for (var i = 0; i < result.problemCount; i++) {
                 var problem = result.problems[i];
-                if (problem != null && problem.isError()) errors.add(new long[]{problem.getSourceStart(), problem.getSourceEnd()});
+                if (problem == null || !problem.isError()) continue;
+                if (APPLIES_NOT.contains(problem.getID())) errors.add(new long[]{problem.getSourceStart(), problem.getSourceEnd()});
+                if (problem.getID() == org.eclipse.jdt.core.compiler.IProblem.UndefinedType) {
+                    missingTypes.add(new long[]{problem.getSourceStart(), problem.getSourceEnd()});
+                }
             }
         }
         unit.traverse(new ASTVisitor() {
@@ -115,13 +136,56 @@ public final class EcjBindings {
 
             @Override
             public boolean visit(MessageSend send, BlockScope scope) {
-                if (!wrong(send.sourceStart, send.sourceEnd)) put(names, send.nameSourcePosition, method(send.binding));
+                if (!wrong((int) (send.nameSourcePosition >>> 32), (int) send.nameSourcePosition)) put(names, send.nameSourcePosition, method(send.binding));
+                else if (send.binding instanceof ProblemMethodBinding problem && problem.problemId() == ProblemReasons.NotFound
+                        && problem.closestMatch == null) { // no method of that name where it is looked up
+                    EcjBindings.put(names, send.nameSourcePosition, nothing(send.actualReceiverType, scope));
+                }
                 return true;
+            }
+
+            /**
+             * A lambda passed where a type is inferred is resolved as copies, one for each type tried: the one for its
+             * type says what its names bind (the same text, the same places); what the lambda itself bound fills the rest.
+             */
+            @Override
+            public boolean visit(LambdaExpression lambda, BlockScope scope) {
+                var copy = resolvedCopy(lambda);
+                if (copy != null && copy != lambda) copy.traverse(this, scope);
+                return true;
+            }
+
+            @Override
+            public boolean visit(MethodDeclaration method, ClassScope scope) {
+                declare(method);
+                return true;
+            }
+
+            @Override
+            public boolean visit(ConstructorDeclaration constructor, ClassScope scope) {
+                if (!constructor.isDefaultConstructor()) declare(constructor);
+                return true;
+            }
+
+            private void declare(AbstractMethodDeclaration declaration) {
+                var bound = method(declaration.binding);
+                if (bound == null && declaration.binding != null && declaration.binding.declaringClass != null) { // a type that is not there
+                    var parameters = parameters(declaration.binding);
+                    var owner = qualified(declaration.binding.declaringClass);
+                    if (parameters != null && owner != null) {
+                        bound = new Bound(declaration.isConstructor() ? Kind.CONSTRUCTOR : Kind.METHOD, owner,
+                                new String(declaration.selector), parameters, -1, null);
+                    }
+                }
+                EcjBindings.put(declared, key(declaration.sourceStart, declaration.sourceStart + declaration.selector.length - 1), bound);
             }
 
             @Override
             public boolean visit(FieldReference reference, BlockScope scope) {
                 put(names, reference.nameSourcePosition, field(reference.binding));
+                if (notFound(reference.binding) && reference.actualReceiverType instanceof ReferenceBinding receiver) {
+                    EcjBindings.put(names, reference.nameSourcePosition, nothing(receiver, scope));
+                }
                 return true;
             }
 
@@ -133,6 +197,9 @@ public final class EcjBindings {
             @Override
             public boolean visit(SingleNameReference reference, BlockScope scope) {
                 put(names, key(reference.sourceStart, reference.sourceEnd), value(reference.binding));
+                if (notFound(reference.binding)) {
+                    EcjBindings.put(names, key(reference.sourceStart, reference.sourceEnd), nothing(null, scope));
+                }
                 return true;
             }
 
@@ -146,12 +213,26 @@ public final class EcjBindings {
                 var first = reference.indexOfFirstFieldBinding - 1; // the token the binding is for
                 if (first < 0 || first >= reference.sourcePositions.length) return true;
                 put(names, reference.sourcePositions[first], value(reference.binding));
+                if (first > 0 && reference.binding instanceof ReferenceBinding named) { // a type's name: Outer in Outer.Inner
+                    var enclosing = named.enclosingType();
+                    for (var i = first - 1; i >= 0 && enclosing != null; i--, enclosing = enclosing.enclosingType()) {
+                        put(names, reference.sourcePositions[i], type(enclosing));
+                    }
+                }
                 if (first > 0 && reference.actualReceiverType instanceof ReferenceBinding owner && reference.binding instanceof FieldBinding) {
                     put(names, reference.sourcePositions[first - 1], type(owner));
+                    var enclosing = owner.enclosingType(); // Outer in Outer.Inner.X
+                    for (var i = first - 2; i >= 0 && enclosing != null; i--, enclosing = enclosing.enclosingType()) {
+                        put(names, reference.sourcePositions[i], type(enclosing));
+                    }
                 }
                 if (reference.otherBindings != null) {
+                    var receiver = reference.binding instanceof org.eclipse.jdt.internal.compiler.lookup.VariableBinding variable ? variable.type : null;
                     for (var i = 0; i < reference.otherBindings.length && first + 1 + i < reference.sourcePositions.length; i++) {
-                        put(names, reference.sourcePositions[first + 1 + i], field(reference.otherBindings[i]));
+                        var other = reference.otherBindings[i];
+                        put(names, reference.sourcePositions[first + 1 + i], field(other));
+                        if (notFound(other)) EcjBindings.put(names, reference.sourcePositions[first + 1 + i], nothing(receiver, scope));
+                        receiver = other == null ? null : other.type;
                     }
                 }
                 return true;
@@ -164,15 +245,18 @@ public final class EcjBindings {
 
             @Override
             public boolean visit(AllocationExpression allocation, BlockScope scope) {
-                if (allocation.type != null && !wrong(allocation.sourceStart, allocation.sourceEnd)) {
+                if (allocation.type != null && !wrong((int) (nameOf(allocation.type) >>> 32), (int) nameOf(allocation.type))) {
                     put(constructors, nameOf(allocation.type), constructor(allocation.binding));
+                } else if (allocation.type != null && allocation.resolvedType instanceof SourceTypeBinding made && made.isValidBinding()
+                        && noneTakes(made, allocation.arguments == null ? 0 : allocation.arguments.length)) {
+                    EcjBindings.put(constructors, nameOf(allocation.type), nothing(made, scope)); // a workspace type no constructor of which takes as many
                 }
                 return true;
             }
 
             @Override
             public boolean visit(QualifiedAllocationExpression allocation, BlockScope scope) {
-                if (allocation.anonymousType == null && allocation.type != null && !wrong(allocation.sourceStart, allocation.sourceEnd)) {
+                if (allocation.anonymousType == null && allocation.type != null && !wrong((int) (nameOf(allocation.type) >>> 32), (int) nameOf(allocation.type))) {
                     put(constructors, nameOf(allocation.type), constructor(allocation.binding));
                 }
                 return true;
@@ -188,7 +272,7 @@ public final class EcjBindings {
 
             @Override
             public boolean visit(ReferenceExpression reference, BlockScope scope) {
-                if (!wrong(reference.sourceStart, reference.sourceEnd)) {
+                if (!wrong(reference.nameSourceStart, reference.sourceEnd)) {
                     put(names, key(reference.nameSourceStart, reference.sourceEnd), method(reference.getMethodBinding()));
                 }
                 return true;
@@ -270,9 +354,81 @@ public final class EcjBindings {
                 var resolved = reference.resolvedType;
                 if (resolved instanceof ArrayBinding array) resolved = array.leafComponentType;
                 if (resolved instanceof ReferenceBinding type) put(types, nameOf(reference), type(type));
+                if (reference instanceof QualifiedTypeReference qualified && resolved instanceof ReferenceBinding type) { // Outer in Outer.Inner
+                    var enclosing = type.enclosingType();
+                    for (var i = qualified.sourcePositions.length - 2; i >= 0 && enclosing != null; i--, enclosing = enclosing.enclosingType()) {
+                        put(types, qualified.sourcePositions[i], type(enclosing));
+                    }
+                }
+                var at = nameOf(reference);
+                var missing = false;
+                for (var type : missingTypes) missing |= type[0] <= (int) at && type[1] >= (int) (at >>> 32);
+                if (resolved instanceof ProblemReferenceBinding problem && problem.problemId() == ProblemReasons.NotFound
+                        || resolved instanceof org.eclipse.jdt.internal.compiler.lookup.MissingTypeBinding || missing && !(resolved instanceof ReferenceBinding found && found.isValidBinding()
+                        && !(found instanceof org.eclipse.jdt.internal.compiler.lookup.MissingTypeBinding))) { // what the compiler makes up to go on
+                    EcjBindings.put(types, nameOf(reference), new Bound(Kind.NOTHING, null, null, List.of(), -1, null));
+                }
             }
-        }, unit.scope);
-        return new File(names, types, constructors);
+        }, unit.scope, false); // a unit with errors too: what binds nothing is where they are
+        return new File(names, types, constructors, declared);
+    }
+
+    /** What a call or a new object does not apply to, or applies to more than one: what it is bound to is a guess. */
+    private static final java.util.Set<Integer> APPLIES_NOT = java.util.Set.of(org.eclipse.jdt.core.compiler.IProblem.ParameterMismatch,
+            org.eclipse.jdt.core.compiler.IProblem.UndefinedMethod, org.eclipse.jdt.core.compiler.IProblem.UndefinedConstructor,
+            org.eclipse.jdt.core.compiler.IProblem.AmbiguousMethod, org.eclipse.jdt.core.compiler.IProblem.AmbiguousConstructor,
+            org.eclipse.jdt.core.compiler.IProblem.ParameterizedMethodArgumentTypeMismatch,
+            org.eclipse.jdt.core.compiler.IProblem.ParameterizedConstructorArgumentTypeMismatch,
+            org.eclipse.jdt.core.compiler.IProblem.GenericMethodTypeArgumentMismatch,
+            org.eclipse.jdt.core.compiler.IProblem.GenericConstructorTypeArgumentMismatch,
+            org.eclipse.jdt.core.compiler.IProblem.IncorrectArityForParameterizedMethod,
+            org.eclipse.jdt.core.compiler.IProblem.IncorrectArityForParameterizedConstructor);
+
+    private static final java.lang.reflect.Field COPIES = copies();
+
+    private static java.lang.reflect.Field copies() {
+        try {
+            var field = LambdaExpression.class.getDeclaredField("copiesPerTargetType");
+            field.setAccessible(true);
+            return field;
+        } catch (ReflectiveOperationException | RuntimeException none) {
+            return null;
+        }
+    }
+
+    /** The copy of a lambda resolved for the type it has, if the compiler made copies. */
+    private static LambdaExpression resolvedCopy(LambdaExpression lambda) {
+        if (COPIES == null) return null;
+        try {
+            var copies = (Map<?, ?>) COPIES.get(lambda);
+            if (copies == null || copies.isEmpty()) return null;
+            var copy = lambda.resolvedType == null ? null : copies.get(lambda.resolvedType);
+            return (LambdaExpression) (copy != null ? copy : copies.values().iterator().next());
+        } catch (ReflectiveOperationException | RuntimeException unreadable) {
+            return null;
+        }
+    }
+
+    /** Whether nothing of that name was found. */
+    private static boolean notFound(Binding binding) {
+        return binding != null && !binding.isValidBinding() && binding.problemId() == ProblemReasons.NotFound;
+    }
+
+    /** What binds nothing, looked up in a type: the receiver's, else the one it is written in. */
+    private static Bound nothing(TypeBinding receiver, BlockScope scope) {
+        var in = receiver instanceof ReferenceBinding type ? type : scope == null ? null : scope.enclosingSourceType();
+        return new Bound(Kind.NOTHING, in == null ? null : qualified(in), null, List.of(), -1, null);
+    }
+
+    /** Whether no constructor of a type takes as many arguments; with none declared, the one Java gives takes none. */
+    private static boolean noneTakes(ReferenceBinding type, int passed) {
+        var constructors = type.getMethods(org.eclipse.jdt.internal.compiler.lookup.TypeConstants.INIT);
+        if (constructors == null || constructors.length == 0) return passed > 0;
+        for (var constructor : constructors) {
+            var takes = constructor.parameters.length;
+            if (takes == passed || constructor.isVarargs() && passed >= takes - 1) return false;
+        }
+        return true;
     }
 
     /** Where the last name of a written type is: {@code B} in {@code a.B<C>[]}. */
@@ -298,6 +454,10 @@ public final class EcjBindings {
     }
 
     private static Bound field(FieldBinding field) {
+        if (field instanceof org.eclipse.jdt.internal.compiler.lookup.ProblemFieldBinding problem && problem.problemId() == ProblemReasons.NotVisible
+                && problem.closestMatch != null) {
+            field = problem.closestMatch; // it is that one, which cannot be reached from here: an access to open, not nothing
+        }
         if (field == null || !field.isValidBinding() || field.declaringClass == null) return null; // an array's length
         var owner = qualified(field.declaringClass);
         return owner == null ? null : new Bound(Kind.FIELD, owner, new String(field.name), List.of(), -1, null);
@@ -318,6 +478,10 @@ public final class EcjBindings {
     }
 
     private static Bound type(ReferenceBinding type) {
+        if (type instanceof ProblemReferenceBinding problem && problem.problemId() == ProblemReasons.NotVisible
+                && problem.closestMatch() instanceof ReferenceBinding seen) {
+            type = seen; // as for a field: it is that one, not visible from here
+        }
         if (!type.isValidBinding()) return null;
         var qualified = qualified(type);
         if (qualified == null) return null;
@@ -325,9 +489,12 @@ public final class EcjBindings {
         return new Bound(Kind.TYPE, qualified, kind, List.of(), -1, new String(((ReferenceBinding) type.erasure()).qualifiedPackageName()));
     }
 
+    /** A method's parameters' types; a variable arity one as its elements' type, as the program has always keyed it. */
     private static List<String> parameters(MethodBinding method) {
         var described = new ArrayList<String>();
-        for (var parameter : method.parameters) {
+        for (var i = 0; i < method.parameters.length; i++) {
+            var parameter = method.parameters[i];
+            if (method.isVarargs() && i == method.parameters.length - 1 && parameter instanceof ArrayBinding array) parameter = array.elementsType();
             var one = describe(parameter);
             if (one == null) return null;
             described.add(one);
