@@ -37,11 +37,17 @@ final class LinkType {
     private static Reference localType(Primitive.Link link, Context c, Program before) {
         var local = before.element(link.element());
         if (link.mode() != Mode.DECLARED || local.kind() != ide.program.Kind.LOCAL) return null;
-        var declared = c.declaration(local).as(com.github.javaparser.ast.body.VariableDeclarator.class).getParentNode()
-                .map(d -> ((com.github.javaparser.ast.expr.VariableDeclarationExpr) d).getElementType()).orElseThrow();
-        var range = declared.getRange().orElseThrow();
+        var declared = switch (c.declaration(local).dom()) {
+            case org.eclipse.jdt.core.dom.VariableDeclarationFragment fragment -> switch (fragment.getParent()) {
+                case org.eclipse.jdt.core.dom.VariableDeclarationStatement statement -> statement.getType();
+                case org.eclipse.jdt.core.dom.VariableDeclarationExpression expression -> expression.getType();
+                default -> throw new IllegalStateException("not a local: " + fragment);
+            };
+            case org.eclipse.jdt.core.dom.SimpleName loop -> ((org.eclipse.jdt.core.dom.SingleVariableDeclaration) loop.getParent()).getType();
+            default -> throw new IllegalStateException("not a local: " + local);
+        };
         return before.referencesFrom(local.parent()).stream().filter(r -> r.mode().isTypeUse())
-                .filter(r -> c.use(r.id()).getRange().filter(range::contains).isPresent()).findFirst().orElse(null);
+                .filter(r -> holds(declared, c.useDom(r.id()))).findFirst().orElse(null);
     }
 
     /** The uses written inside the type a link replaces, such as its type arguments: they go with it. */
@@ -49,8 +55,14 @@ final class LinkType {
         if (link.mode() == Mode.IMPLEMENTS) return List.of(); // implements adds a type, it replaces none
         var old = before.link(link.element(), link.mode());
         if (old.isEmpty()) return List.of();
-        var type = c.use(old.get().id());
+        var type = c.useDom(old.get().id());
         return before.referencesFrom(link.element()).stream()
-                .filter(use -> !use.equals(old.get()) && type.isAncestorOf(c.use(use.id()))).toList();
+                .filter(use -> !use.equals(old.get()) && holds(type, c.useDom(use.id())) && !holds(c.useDom(use.id()), type)).toList();
+    }
+
+    /** Whether one node of a text is within another, as where they are written says. */
+    private static boolean holds(org.eclipse.jdt.core.dom.ASTNode outer, org.eclipse.jdt.core.dom.ASTNode inner) {
+        return outer.getStartPosition() <= inner.getStartPosition()
+                && inner.getStartPosition() + inner.getLength() <= outer.getStartPosition() + outer.getLength();
     }
 }
