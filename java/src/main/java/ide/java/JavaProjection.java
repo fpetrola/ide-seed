@@ -168,29 +168,35 @@ public final class JavaProjection implements Projection {
         return found;
     }
 
-    /** The main a file has, if any: read from its tree only when its text says main at all. */
+    /** The main a file has, if any: read from its DOM only when its text says main at all. */
     private static List<Main> mainsOf(Unit file) {
         if (!file.text().contains("main")) return List.of();
-        var unit = file.tree();
-        return unit.getTypes().stream().findFirst()
-                .filter(type -> type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declared && !declared.isInterface()
-                        || type instanceof com.github.javaparser.ast.body.RecordDeclaration || type instanceof com.github.javaparser.ast.body.EnumDeclaration)
-                .flatMap(type -> type.getMethodsByName("main").stream()
-                        .filter(method -> method.getType().isVoidType() && !method.isPrivate() && runsWith(method))
-                        .findFirst()
-                        .map(method -> new Main(unit.getPackageDeclaration().map(p -> p.getNameAsString() + ".").orElse("")
-                                + type.getNameAsString(), file.path(), type.getName().getBegin().map(b -> b.line).orElse(1),
-                                method.getName().getBegin().map(b -> b.line).orElse(1))))
-                .map(List::of).orElse(List.of());
+        var unit = file.dom();
+        if (unit.types().isEmpty() || !(unit.types().getFirst() instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration type)) return List.of();
+        if (type instanceof org.eclipse.jdt.core.dom.TypeDeclaration declared && declared.isInterface()
+                || type instanceof org.eclipse.jdt.core.dom.AnnotationTypeDeclaration) {
+            return List.of();
+        }
+        for (var member : type.bodyDeclarations()) {
+            if (member instanceof org.eclipse.jdt.core.dom.MethodDeclaration method && !method.isConstructor()
+                    && method.getName().getIdentifier().equals("main") && method.getReturnType2() != null
+                    && method.getReturnType2().isPrimitiveType() && method.getReturnType2().toString().equals("void")
+                    && !org.eclipse.jdt.core.dom.Modifier.isPrivate(method.getModifiers()) && runsWith(method)) {
+                var pkg = unit.getPackage() == null ? "" : unit.getPackage().getName().getFullyQualifiedName() + ".";
+                return List.of(new Main(pkg + type.getName().getIdentifier(), file.path(),
+                        unit.getLineNumber(type.getName().getStartPosition()), unit.getLineNumber(method.getName().getStartPosition())));
+            }
+        }
+        return List.of();
     }
 
-    private static boolean runsWith(com.github.javaparser.ast.body.MethodDeclaration method) {
-        if (method.getParameters().isEmpty()) return true;
-        if (method.getParameters().size() != 1) return false;
-        var parameter = method.getParameter(0);
-        var type = parameter.getType().asString();
+    private static boolean runsWith(org.eclipse.jdt.core.dom.MethodDeclaration method) {
+        if (method.parameters().isEmpty()) return true;
+        if (method.parameters().size() != 1) return false;
+        var parameter = (org.eclipse.jdt.core.dom.SingleVariableDeclaration) method.parameters().getFirst();
+        var type = parameter.getType().toString() + "[]".repeat(parameter.getExtraDimensions());
         return type.equals("String[]") || type.equals("java.lang.String[]")
-                || parameter.isVarArgs() && (type.equals("String") || type.equals("java.lang.String"));
+                || parameter.isVarargs() && (type.equals("String") || type.equals("java.lang.String"));
     }
 
     /** A stretch of a file, from the first character to the last, each as line and column from 1. */
