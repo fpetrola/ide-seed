@@ -2335,7 +2335,11 @@ Los pasos, cada uno medido:
    a resolver todos los archivos, y ahora también a parsear.
    Lo que se guarda se mide en texto, no en árboles: oozx creció a 847 archivos y 31 MB con traducciones generadas
    de juegos de hasta 2,4 MB por archivo, cuyo árbol ronda los 70 MB; 16 de esos eran 1,3 GB recién abierto. Con 1 MB
-   de texto guardado abre en 20 s con 78 MB vivos.
+   de texto guardado abre en 20 s con 78 MB vivos. Al leerlo aparecieron dos cosas más: el lugar de un uso en su
+   método recorría cada sentencia con `isAncestorOf` (cuadrático en los métodos generados, de miles de sentencias),
+   ahora es una búsqueda binaria por posición; y el solver de JavaParser se va en recursión sin fin con una clase
+   anónima de una interna hecha sobre lo que contesta una llamada (`outer().new Inner() { ... }`): un
+   `StackOverflowError` ahí es un uso que no se sabe, como cualquier otra falla del solver.
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

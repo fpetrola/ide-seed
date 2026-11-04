@@ -48,6 +48,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -401,7 +402,7 @@ public final class Reader {
             try {
                 name.resolve();
                 return Reference.Receiver.OTHER;
-            } catch (RuntimeException notAValue) {
+            } catch (RuntimeException | StackOverflowError notAValue) {
                 return resolveTypeDeclaration(name) != null ? Reference.Receiver.TYPE : Reference.Receiver.OTHER;
             }
         }
@@ -409,7 +410,7 @@ public final class Reader {
             try {
                 qualified.calculateResolvedType();
                 return Reference.Receiver.OTHER;
-            } catch (RuntimeException notAValue) { // a qualified name of a type
+            } catch (RuntimeException | StackOverflowError notAValue) { // a qualified name of a type
                 return Reference.Receiver.TYPE;
             }
         }
@@ -426,7 +427,7 @@ public final class Reader {
         if (use instanceof ObjectCreationExpr creation) {
             try {
                 return type(creation.getType().resolve().asReferenceType().getQualifiedName());
-            } catch (RuntimeException unknown) {
+            } catch (RuntimeException | StackOverflowError unknown) {
                 return null;
             }
         }
@@ -439,7 +440,7 @@ public final class Reader {
         try {
             var type = receiver.get().calculateResolvedType();
             return type.isReferenceType() ? type(type.asReferenceType().getQualifiedName()) : null;
-        } catch (RuntimeException unknown) {
+        } catch (RuntimeException | StackOverflowError unknown) {
             return null;
         }
     }
@@ -582,7 +583,7 @@ public final class Reader {
         try {
             var type = JavaParserFactory.getContext(name, typeSolver).solveType(name.getNameAsString());
             return type.isSolved() ? type.getCorrespondingDeclaration() : null;
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -614,7 +615,7 @@ public final class Reader {
                 }
             }
             return candidates.size() == 1 ? candidates.getFirst() : null;
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -648,19 +649,36 @@ public final class Reader {
 
     /** The innermost statement of a callable's body a node is in, or null: in its signature, or in no statement of it. */
     private ElementId statementOf(Node node, CallableDeclaration<?> method, ElementId callable) {
+        var above = Collections.newSetFromMap(new IdentityHashMap<Node, Boolean>()); // the node and what holds it
+        for (Node at = node; at != null && at != method; at = at.getParentNode().orElse(null)) above.add(at);
         List<Statement> statements = Bodies.statements(method);
         ElementId statement = null;
         while (true) {
-            var place = -1;
-            for (var i = 0; i < statements.size() && place < 0; i++) {
-                if (statements.get(i) == node || statements.get(i).isAncestorOf(node)) place = i;
-            }
+            var place = placeAmong(statements, node, above);
             if (place < 0) return statement;
             var held = ids.get(new Address.Statement(statement == null ? callable : statement, place));
             if (held == null) return statement;
             statement = held;
             statements = Bodies.nested(statements.get(place));
         }
+    }
+
+    /**
+     * Which of statements in written order holds the node, or -1: the last one starting at or before it, if it holds
+     * it. A generated method may have thousands, and a file hundreds of thousands of uses.
+     */
+    private static int placeAmong(List<Statement> statements, Node node, Set<Node> above) {
+        var begin = node.getBegin().orElseThrow();
+        int low = 0, high = statements.size() - 1, found = -1;
+        while (low <= high) {
+            var middle = (low + high) >>> 1;
+            if (statements.get(middle).getBegin().orElseThrow().isAfter(begin)) high = middle - 1;
+            else {
+                found = middle;
+                low = middle + 1;
+            }
+        }
+        return found >= 0 && above.contains(statements.get(found)) ? found : -1;
     }
 
     static String nameOf(CallableDeclaration<?> callable) {

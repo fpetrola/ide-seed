@@ -54,7 +54,7 @@ public final class Resolution {
     public static ResolvedConstructorDeclaration resolveConstructor(ObjectCreationExpr creation) {
         try {
             return creation.resolve();
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -63,7 +63,7 @@ public final class Resolution {
     public static ResolvedConstructorDeclaration resolveConstructor(ExplicitConstructorInvocationStmt invocation) {
         try {
             return invocation.resolve();
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -72,7 +72,7 @@ public final class Resolution {
     public static String resolveType(ClassOrInterfaceType type) {
         try {
             return type.resolve().asReferenceType().getQualifiedName();
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -81,7 +81,7 @@ public final class Resolution {
     public static ResolvedReferenceTypeDeclaration resolveDeclaration(ClassOrInterfaceType type) {
         try {
             return type.resolve().asReferenceType().getTypeDeclaration().orElse(null);
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -100,7 +100,7 @@ public final class Resolution {
             return false;
         } catch (UnsolvedSymbolException unresolved) {
             return true;
-        } catch (RuntimeException unknown) { // what the solver cannot model is not known to bind nothing
+        } catch (RuntimeException | StackOverflowError unknown) { // what the solver cannot model is not known to bind nothing
             return false;
         }
     }
@@ -155,7 +155,7 @@ public final class Resolution {
     public static VariableDeclarator resolveLocal(NameExpr name) {
         try {
             return name.resolve() instanceof JavaParserVariableDeclaration variable ? variable.getVariableDeclarator() : null;
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -165,7 +165,7 @@ public final class Resolution {
         try {
             return name.resolve() instanceof com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration parameter
                     ? parameter.getWrappedNode() : null;
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -174,7 +174,7 @@ public final class Resolution {
     public static ResolvedMethodDeclaration resolveMethodReference(MethodReferenceExpr reference) {
         try {
             return reference.resolve();
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -183,7 +183,7 @@ public final class Resolution {
     public static ResolvedMethodDeclaration resolveMethodStrictly(MethodCallExpr call) {
         try {
             return call.resolve();
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -207,7 +207,7 @@ public final class Resolution {
         if (parent instanceof SwitchEntry || use.findAncestor(AnnotationExpr.class).isPresent()) return false;
         try {
             if (use instanceof FieldAccessExpr access && !access.getScope().calculateResolvedType().isReferenceType()) return false;
-        } catch (RuntimeException unknown) {
+        } catch (RuntimeException | StackOverflowError unknown) {
             return false; // a receiver of no known type: its members are not known either
         }
         try {
@@ -216,7 +216,7 @@ public final class Resolution {
             return false;
         } catch (UnsolvedSymbolException unresolved) {
             return true;
-        } catch (RuntimeException unknown) {
+        } catch (RuntimeException | StackOverflowError unknown) {
             return false;
         }
     }
@@ -246,7 +246,7 @@ public final class Resolution {
                 }
             }
             return true;
-        } catch (RuntimeException unknown) {
+        } catch (RuntimeException | StackOverflowError unknown) {
             return false;
         }
     }
@@ -274,7 +274,7 @@ public final class Resolution {
             var constructors = type.getConstructors();
             return constructors.isEmpty() ? passed > 0 : constructors.stream().noneMatch(c -> c.getNumberOfParams() == passed
                     || c.hasVariadicParameter() && passed >= c.getNumberOfParams() - 1);
-        } catch (RuntimeException unknown) {
+        } catch (RuntimeException | StackOverflowError unknown) {
             return false;
         }
     }
@@ -284,7 +284,7 @@ public final class Resolution {
         try {
             ResolvedValueDeclaration decl = expr.isNameExpr() ? expr.asNameExpr().resolve() : expr.asFieldAccessExpr().resolve();
             return decl.isField() ? (ResolvedFieldDeclaration) decl : null;
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return null;
         }
     }
@@ -293,7 +293,7 @@ public final class Resolution {
     public static String describe(Type type) {
         try {
             return type.resolve().describe();
-        } catch (RuntimeException unresolved) {
+        } catch (RuntimeException | StackOverflowError unresolved) {
             return type.asString();
         }
     }
