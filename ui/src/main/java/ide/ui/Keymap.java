@@ -14,8 +14,9 @@ final class Keymap {
     /** An action of the window, its name in a menu, the keys that do it (the first one shown), and what it does. */
     record Key(String action, String name, List<KeyStroke> strokes, String description) {
 
+        /** The key shown; none for an action with no key. */
         KeyStroke stroke() {
-            return strokes.getFirst();
+            return strokes.isEmpty() ? null : strokes.getFirst();
         }
     }
 
@@ -51,6 +52,7 @@ final class Keymap {
             key("back", "Back", "Go back to where the caret was", "ctrl alt LEFT", "alt LEFT"),
             key("forward", "Forward", "Go forward again", "ctrl alt RIGHT", "alt RIGHT"),
             key("terminal", "Terminal", "The terminal, in the project's folder", "alt F12"),
+            key("flatten-packages", "Flatten Packages", "The project's packages each on one line, or nested as a tree of folders"),
             key("maximize-views", "Maximize Views", "The views below take the whole window; again, back", "ctrl shift QUOTE"),
             key("replay", "Replay Plan", "The plan shown, step by step as it was done: what each step takes, then what it changed", "ctrl alt shift R"),
             key("run", "Run Current File", "Runs the program of the current file's class, saved first", "ctrl shift F10"),

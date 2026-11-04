@@ -101,6 +101,10 @@ final class Workbench extends JPanel {
     private final Dialogs dialogs;
     private final DefaultTreeModel tree = new DefaultTreeModel(new DefaultMutableTreeNode("project"));
     private final JTree project = new JTree(tree);
+    /** Whether the project's packages are each on one line, as now, or nested as a tree of folders. */
+    private boolean flat = true;
+    /** The menus' items that say whether it is. */
+    private final List<javax.swing.JCheckBoxMenuItem> flatItems = new java.util.ArrayList<>();
     private final Editors editors;
     private final Views views = new Views(this::openProblem, this::openResult);
     private final PlansView plans;
@@ -179,6 +183,7 @@ final class Workbench extends JPanel {
 
             @Override
             public void moved() {
+                shownInTree();
                 position.setText(editors().current().map(path -> editors().line() + ":" + editors().column()).orElse(" "));
                 bulbs.restart();
             }
@@ -260,6 +265,9 @@ final class Workbench extends JPanel {
                 }
             });
         }
+        var treeMenu = new javax.swing.JPopupMenu();
+        treeMenu.add(item("flatten-packages"));
+        project.setComponentPopupMenu(treeMenu);
         refresh();
         var classpath = ide.record("classpath", Map.of());
         var jars = strings(classpath.get("entries"));
@@ -310,7 +318,7 @@ final class Workbench extends JPanel {
                 case "find-action" -> {
                     var offered = new java.util.ArrayList<Dialogs.Option>();
                     Keymap.KEYS.forEach(key -> offered.add(new Dialogs.Option(key.description(), "STEP",
-                            key.stroke().toString().replace("pressed ", ""))));
+                            key.stroke() == null ? "" : key.stroke().toString().replace("pressed ", ""))));
                     ide.list("library", Map.of()).stream().map(line -> line.substring(line.indexOf(' ') + 1))
                             .forEach(id -> offered.add(new Dialogs.Option(label(id), "REFACTORING", ide.capability(id).description())));
                     dialogs.choose("Find Action", offered, null).ifPresent(chosen -> Keymap.KEYS.stream()
@@ -336,6 +344,11 @@ final class Workbench extends JPanel {
                 case "forward" -> travel(forward, back);
                 case "terminal" -> terminal();
                 case "maximize-views" -> maximizeViews();
+                case "flatten-packages" -> {
+                    flat = !flat;
+                    flatItems.forEach(checked -> checked.setSelected(flat));
+                    refresh();
+                }
                 case "replay" -> {
                     replay.load(plans.shownPlan());
                     views.setSelectedComponent(replay);
@@ -872,18 +885,14 @@ final class Workbench extends JPanel {
         var folders = new LinkedHashMap<String, DefaultMutableTreeNode>();
         for (var path : files) {
             var slash = path.lastIndexOf('/');
-            var folder = slash < 0 ? root : folders.computeIfAbsent(path.substring(0, slash), name -> {
-                var inside = name + "/";
-                var node = new DefaultMutableTreeNode(new Node(name, name.replace('/', '.'), false,
-                        worst(problems.stream().filter(p -> String.valueOf(p.get("path")).startsWith(inside)))));
-                root.add(node);
-                return node;
-            });
+            var folder = slash < 0 ? root : folder(path.substring(0, slash), root, folders);
             var name = path.substring(slash + 1, path.length() - (path.endsWith(".java") ? 5 : 0));
             folder.add(new DefaultMutableTreeNode(new Node(path, name, true, worst(problems.stream().filter(p -> path.equals(p.get("path")))))));
         }
+        if (!flat) foldersFirst(root);
         tree.setRoot(root);
         for (var row = 0; row < project.getRowCount(); row++) project.expandRow(row);
+        shownInTree();
         for (var path : editors.open()) {
             if (files.contains(path)) editors.applied(path, ide.text("show", Map.of("path", path)));
             else editors.close(path); // the program no longer has it: undone, deleted, moved
@@ -894,6 +903,69 @@ final class Workbench extends JPanel {
         views.problems(problems);
         plans.refresh();
         views.changes(ide.text("diff", Map.of()));
+    }
+
+    /**
+     * A folder's node in the project's tree, made the first time: flat, a package on one line under the root; else
+     * inside its parent's, named by its last part.
+     */
+    private DefaultMutableTreeNode folder(String name, DefaultMutableTreeNode root, Map<String, DefaultMutableTreeNode> folders) {
+        var known = folders.get(name);
+        if (known != null) return known;
+        var slash = name.lastIndexOf('/');
+        var inside = name + "/";
+        var node = new DefaultMutableTreeNode(new Node(name, flat ? name.replace('/', '.') : name.substring(slash + 1), false,
+                worst(problems.stream().filter(p -> String.valueOf(p.get("path")).startsWith(inside)))));
+        (flat || slash < 0 ? root : folder(name.substring(0, slash), root, folders)).add(node);
+        folders.put(name, node);
+        return node;
+    }
+
+    /** As IDEs show a tree of folders: in each folder, its folders before its files. */
+    private static void foldersFirst(DefaultMutableTreeNode folder) {
+        var children = new java.util.ArrayList<DefaultMutableTreeNode>();
+        for (var i = 0; i < folder.getChildCount(); i++) children.add((DefaultMutableTreeNode) folder.getChildAt(i));
+        folder.removeAllChildren();
+        children.stream().filter(child -> !child.isLeaf()).forEach(child -> {
+            foldersFirst(child);
+            folder.add(child);
+        });
+        children.stream().filter(DefaultMutableTreeNode::isLeaf).forEach(folder::add);
+    }
+
+    /** The project's tree as it is shown, a row a line, indented by how deep it is. */
+    List<String> tree() {
+        var rows = new java.util.ArrayList<String>();
+        var all = ((DefaultMutableTreeNode) tree.getRoot()).preorderEnumeration();
+        all.nextElement(); // the root, not shown
+        while (all.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) all.nextElement();
+            rows.add("  ".repeat(node.getLevel() - 1) + node);
+        }
+        return rows;
+    }
+
+    /** The file being edited, selected in the project's tree and scrolled to, as IDEs show it. */
+    private void shownInTree() {
+        var path = editors().current().orElse(null);
+        if (path == null || path.equals(inTree())) return;
+        var all = ((DefaultMutableTreeNode) tree.getRoot()).depthFirstEnumeration();
+        while (all.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) all.nextElement();
+            if (node.getUserObject() instanceof Node file && file.file() && file.path().equals(path)) {
+                var shown = new javax.swing.tree.TreePath(node.getPath());
+                project.setSelectionPath(shown);
+                project.scrollPathToVisible(shown);
+                return;
+            }
+        }
+    }
+
+    /** The file selected in the project's tree, if one is. */
+    String inTree() {
+        var selected = project.getSelectionPath();
+        return selected != null && ((DefaultMutableTreeNode) selected.getLastPathComponent()).getUserObject() instanceof Node file
+                && file.file() ? file.path() : null;
     }
 
     /** The problems of what the current editor says and the program does not yet: shown, not applied. */
@@ -936,7 +1008,7 @@ final class Workbench extends JPanel {
         file.add(item("close-editor"));
         bar.add(file);
         menu(bar, "Edit", "undo-change", null, "extend-selection", "shrink-selection", null, "references");
-        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", "maximize-views", null, "zoom-in", "zoom-out", "zoom-reset");
+        menu(bar, "View", "terminal", "claude", "claude-new", null, "replay", "maximize-views", "flatten-packages", null, "zoom-in", "zoom-out", "zoom-reset");
         menu(bar, "Navigate", "open-type", "open-declaration", "outline", "go-to-line", null, "hierarchy", "callers", null,
                 "next-problem", "previous-problem", null, "back", "forward");
         menu(bar, "Code", "context-actions", "complete", "generate");
@@ -1024,7 +1096,15 @@ final class Workbench extends JPanel {
     }
 
     private JMenuItem item(String action) {
-        var item = new JMenuItem(getActionMap().get(action));
+        JMenuItem item;
+        if (action.equals("flatten-packages")) {
+            var checked = new javax.swing.JCheckBoxMenuItem(getActionMap().get(action));
+            checked.setSelected(flat);
+            flatItems.add(checked);
+            item = checked;
+        } else {
+            item = new JMenuItem(getActionMap().get(action));
+        }
         item.setText(Keymap.of(action).name());
         item.setToolTipText(Keymap.of(action).description());
         item.setAccelerator(Keymap.of(action).stroke());

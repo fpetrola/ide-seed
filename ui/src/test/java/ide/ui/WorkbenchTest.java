@@ -77,6 +77,22 @@ class WorkbenchTest {
     }
 
     @Test
+    void thePackagesAreShownFlatOrAsATree() throws IOException {
+        Files.createDirectories(root.resolve("a/b"));
+        Files.writeString(root.resolve("a/b/C.java"), "package a.b;\n\nclass C {\n}\n");
+        var workbench = workbench();
+        workbench.open("a/b/C.java", 1, 1);
+        assertThat(workbench.tree()).containsExactly("a", "  A", "  B", "a.b", "  C");
+
+        workbench.act("flatten-packages");
+
+        assertThat(workbench.tree()).containsExactly("a", "  b", "    C", "  A", "  B");
+        assertThat(workbench.inTree()).isEqualTo("a/b/C.java");
+        workbench.act("flatten-packages");
+        assertThat(workbench.tree()).containsExactly("a", "  A", "  B", "a.b", "  C");
+    }
+
+    @Test
     void renamingTheElementUnderTheCaretChangesTheEditorsThatShowIt() throws IOException {
         var workbench = workbench();
         workbench.open("a/B.java", 5, 18);
@@ -287,8 +303,10 @@ class WorkbenchTest {
         var workbench = workbench();
 
         for (var key : Keymap.KEYS) {
-            assertThat(workbench.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key.stroke())).as(key.action())
-                    .isEqualTo(key.action());
+            for (var stroke : key.strokes()) { // an action may have no key, as Flatten Packages has none in IntelliJ
+                assertThat(workbench.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(stroke)).as(key.action())
+                        .isEqualTo(key.action());
+            }
             assertThat(workbench.getActionMap().get(key.action())).as(key.action()).isNotNull();
         }
     }
