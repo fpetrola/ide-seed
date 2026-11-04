@@ -73,7 +73,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   `ide.java.semantics` (Reader: program + where each declaration and use is (text.Located: unit, range and kind, its node
   found in the unit's tree when asked, so a reading keeps no tree; what resolving cached in the nodes is forgotten
   after each reading; what the solver cannot model, even recursing without end, leaves a use unknown); Resolution, Keys, WorkspaceTypeSolver,
-  EcjCheck: Eclipse's compiler, incremental, errors and warnings with their range; Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a
+  EcjCheck: Eclipse's compiler, incremental, errors and warnings with their range, and what each name binds as it
+  compiled it (EcjBindings: by where the name is written; nothing an error touches): the reader takes that first and the
+  JavaParser solver only for what the compiler leaves unbound (`-Dide.java.names=solver|compare` to use or compare it alone); Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a
   statement in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);

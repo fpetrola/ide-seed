@@ -37,6 +37,11 @@ public final class Keys {
         return keys;
     }
 
+    /** Types as JavaParser's solver describes them ({@code java.util.List<T>}), keyed. */
+    public List<String> described(List<String> types) {
+        return types.stream().map(this::of).toList();
+    }
+
     public String of(Type type) {
         return of(Resolution.describe(type));
     }

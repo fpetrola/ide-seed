@@ -56,6 +56,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 import static ide.java.semantics.Resolution.*;
 
@@ -138,6 +139,14 @@ public final class Reader {
     private Map<String, Part> parts = Map.of();
     private Program last;
 
+    /** What compiling some files says their names bind (none, until told how to compile). */
+    private Function<Set<String>, Map<String, EcjBindings.File>> compiled = paths -> Map.of();
+
+    /** How to learn what the names of some files bind from compiling them. */
+    public void compiledBy(Function<Set<String>, Map<String, EcjBindings.File>> compiled) {
+        this.compiled = compiled;
+    }
+
     public Reader(Identity ids, Keys keys, WorkspaceTypeSolver typeSolver) {
         this.ids = ids;
         this.keys = keys;
@@ -176,7 +185,12 @@ public final class Reader {
         // uses only once every element has its id: a use may point into a file read later
         var resolve = affected(units, fresh, previous, declared);
         var bound = new LinkedHashMap<String, Bound>();
-        for (var unit : units) bound.put(unit.path(), resolve.contains(unit.path()) ? bind(unit) : previous.get(unit.path()).bound());
+        var bindings = resolve.isEmpty() ? Map.<String, EcjBindings.File>of() : compiled.apply(resolve);
+        for (var unit : units) {
+            bound.put(unit.path(), resolve.contains(unit.path())
+                    ? bind(unit, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE)) : previous.get(unit.path()).bound());
+        }
+        Compare.report();
         var declarations = new HashMap<String, Map<ElementId, Decl>>();
         declared.forEach((path, d) -> {
             elements.addAll(d.elements());
@@ -335,7 +349,17 @@ public final class Reader {
     }
 
     /** What the uses of one file bind; a use's id is its site and its place among the site's uses. */
-    private Bound bind(Unit unit) {
+    private Bound bind(Unit unit, EcjBindings.File file) {
+        ordinals = new IdentityHashMap<>();
+        try {
+            return bound(unit, file);
+        } finally {
+            ordinals = null;
+        }
+    }
+
+    private Bound bound(Unit unit, EcjBindings.File file) {
+        var compiler = new Compiled(unit, file);
         var references = new ArrayList<Reference>();
         var unresolved = new ArrayList<Unresolved>();
         var nodes = new HashMap<String, Located>();
@@ -355,7 +379,11 @@ public final class Reader {
             var typeName = false;
             var bindsNothing = false;
             ElementId target;
-            switch (use) {
+            var known = Compare.MODE == Compare.Mode.SOLVER ? null : compiler.target(use, named);
+            if (known != null && Compare.MODE == Compare.Mode.COMPILER) {
+                target = known.target();
+                typeName = known.typeName();
+            } else switch (use) {
                 case MethodCallExpr call -> {
                     target = resolveMethod(call);
                     bindsNothing = target == null && callBindsNothing(call);
@@ -381,6 +409,7 @@ public final class Reader {
                     bindsNothing = field == null && local == null && type == null && valueBindsNothing((Expression) use);
                 }
             }
+            if (known != null && Compare.MODE == Compare.Mode.COMPARE) Compare.count(use, unit, known.target(), target);
             var name = use instanceof ObjectCreationExpr creation ? creation.getType().getNameAsString()
                     : use instanceof ExplicitConstructorInvocationStmt invocation ? constructed(invocation)
                     : use instanceof MethodReferenceExpr reference ? reference.getIdentifier()
@@ -395,11 +424,147 @@ public final class Reader {
             nodes.put(id, new Located(unit, use));
             var mode = typeName ? Mode.TYPE : modeOf(use);
             var receiver = target != null && (target.value().startsWith(Kind.LOCAL.prefix()) || target.value().startsWith(Kind.PARAM.prefix()))
-                    ? Reference.Receiver.NONE : receiver(use, mode);
+                    ? Reference.Receiver.NONE : receiver(use, mode, compiler);
             if (bindsNothing) unresolved.add(new Unresolved(id, site, name, mode, use instanceof ClassOrInterfaceType ? null : scopeOf(use), place.statement()));
             else references.add(new Reference(id, site, target, name, mode, receiver, place.statement()));
         }
         return new Bound(references, unresolved, nodes, List.copyOf(named), Set.copyOf(untracked));
+    }
+
+    /** What the compiler says a use binds: a target (null: what the program does not follow), and whether a name is a type. */
+    private record Known(ElementId target, boolean typeName) {
+    }
+
+    /**
+     * What the compiler bound the names of one file to, as ids. A use it bound to something of the workspace whose id
+     * is not found (a key written otherwise) is not known: the solver decides it, rather than a reference lost.
+     */
+    private final class Compiled {
+
+        private final Unit unit;
+        private final EcjBindings.File file;
+        private Map<Integer, Node> declared; // where each local's or parameter's name is declared, once asked
+        private final Map<Integer, Optional<ElementId>> variables = new HashMap<>(); // each one's id, once: a method may have thousands
+
+        Compiled(Unit unit, EcjBindings.File file) {
+            this.unit = unit;
+            this.file = file;
+        }
+
+        Known target(Node use, Set<String> named) {
+            if (file == EcjBindings.File.NONE) return null;
+            var bound = switch (use) {
+                case MethodCallExpr call -> at(call.getName(), file.names());
+                case ObjectCreationExpr creation -> at(creation.getType().getName(), file.constructors());
+                case ExplicitConstructorInvocationStmt invocation -> {
+                    var at = unit.offsetOf(invocation.getBegin().orElseThrow());
+                    yield file.constructor(at, at);
+                }
+                case MethodReferenceExpr reference -> {
+                    var end = unit.offsetOf(reference.getEnd().orElseThrow());
+                    yield file.name(end - reference.getIdentifier().length() + 1, end);
+                }
+                case ClassOrInterfaceType type -> at(type.getName(), file.types());
+                case NameExpr name -> at(name.getName(), file.names());
+                case FieldAccessExpr access -> at(access.getName(), file.names());
+                default -> null;
+            };
+            if (bound == null) return null;
+            return switch (bound.kind()) {
+                case TYPE -> {
+                    var workspace = type(bound.owner());
+                    if (workspace != null) yield new Known(workspace, use instanceof NameExpr || use instanceof FieldAccessExpr);
+                    if (bound.owner().equals(bound.pkg()) || bound.pkg() == null) yield null;
+                    var simple = bound.pkg().isEmpty() ? bound.owner() : bound.owner().substring(bound.pkg().length() + 1);
+                    var kind = switch (bound.name()) {
+                        case "interface", "annotation" -> Kind.INTERFACE;
+                        case "enum" -> Kind.ENUM;
+                        default -> Kind.CLASS;
+                    };
+                    var qualified = library(bound.owner(), bound.pkg(), simple, kind);
+                    named.add(qualified);
+                    yield new Known(library.get(qualified).id(), use instanceof NameExpr || use instanceof FieldAccessExpr);
+                }
+                case FIELD -> member(bound, owner -> new Address.Field(owner, bound.name()));
+                case METHOD -> member(bound, owner -> new Address.Callable(owner, bound.name(), keys.described(bound.parameters())));
+                case CONSTRUCTOR -> member(bound, owner -> new Address.Callable(owner, "new", keys.described(bound.parameters())));
+                case LOCAL, PARAM -> {
+                    var declaration = declared().get(bound.declaredAt());
+                    // a lambda's parameter, or a local of a class inside a method: as untracked as the solver leaves them
+                    yield declaration == null ? null : new Known(variables.computeIfAbsent(bound.declaredAt(), at ->
+                            Optional.ofNullable(declaration instanceof VariableDeclarator v ? local(v)
+                                    : declaration instanceof com.github.javaparser.ast.body.Parameter p ? param(p) : null)).orElse(null), false);
+                }
+            };
+        }
+
+        /** What a scope is, as the compiler says: a type, or another object; null when it does not say. */
+        Reference.Receiver receiver(Expression scope) {
+            var name = scope instanceof NameExpr n ? n.getName() : scope instanceof FieldAccessExpr f ? f.getName() : null;
+            var bound = name == null || file == EcjBindings.File.NONE ? null : at(name, file.names());
+            if (bound == null) return null;
+            return bound.kind() == EcjBindings.Kind.TYPE ? Reference.Receiver.TYPE : Reference.Receiver.OTHER;
+        }
+
+        private Known member(EcjBindings.Bound bound, java.util.function.Function<ElementId, Address> address) {
+            var owner = type(bound.owner());
+            if (owner == null) return new Known(null, false); // a library's: not followed
+            var id = ids.get(address.apply(owner));
+            return id == null ? null : new Known(id, false);
+        }
+
+        private EcjBindings.Bound at(Node name, Map<Long, EcjBindings.Bound> in) {
+            var range = name.getRange().orElse(null);
+            if (range == null) return null;
+            return in.get(EcjBindings.key(unit.offsetOf(range.begin), unit.offsetOf(range.end)));
+        }
+
+        private Map<Integer, Node> declared() {
+            if (declared == null) {
+                declared = new HashMap<>();
+                var cu = unit.tree();
+                for (var v : cu.findAll(VariableDeclarator.class)) v.getName().getBegin().ifPresent(b -> declared.put(unit.offsetOf(b), v));
+                for (var p : cu.findAll(com.github.javaparser.ast.body.Parameter.class)) {
+                    p.getName().getBegin().ifPresent(b -> declared.put(unit.offsetOf(b), p));
+                }
+            }
+            return declared;
+        }
+    }
+
+    /**
+     * Which resolves names: the compiler, the solver when it does not know (the default), the solver alone, or both,
+     * counting where they differ ({@code -Dide.java.names=compiler|solver|compare}).
+     */
+    static final class Compare {
+
+        enum Mode { COMPILER, SOLVER, COMPARE }
+
+        static final Mode MODE = switch (System.getProperty("ide.java.names", "compiler")) {
+            case "solver" -> Mode.SOLVER;
+            case "compare" -> Mode.COMPARE;
+            default -> Mode.COMPILER;
+        };
+
+        private static final Map<String, Integer> COUNTS = new java.util.TreeMap<>();
+        private static final List<String> SAMPLES = new ArrayList<>();
+
+        static void count(Node use, Unit unit, ElementId compiler, ElementId solver) {
+            var what = use.getClass().getSimpleName() + (java.util.Objects.equals(compiler, solver) ? " same"
+                    : compiler == null ? " solver-only" : solver == null ? " compiler-only" : " different");
+            COUNTS.merge(what, 1, Integer::sum);
+            if (!what.endsWith(" same") && SAMPLES.size() < 60) {
+                SAMPLES.add(what + " " + unit.path() + ":" + use.getBegin().map(b -> b.line).orElse(0) + " " + use + " compiler=" + compiler + " solver=" + solver);
+            }
+        }
+
+        static void report() {
+            if (MODE != Mode.COMPARE || COUNTS.isEmpty()) return;
+            COUNTS.forEach((what, n) -> System.out.println("NAMES " + what + " " + n));
+            SAMPLES.forEach(sample -> System.out.println("NAMES sample " + sample));
+            COUNTS.clear();
+            SAMPLES.clear();
+        }
     }
 
     /** The simple name of the type a {@code super(...)} or {@code this(...)} makes, as its constructor is named. */
@@ -413,7 +578,7 @@ public final class Reader {
      * What a use is made on, as it is written: alone or through {@code this} or {@code super}, the object itself;
      * through a name that is a type and no value, the type; through anything else, another object.
      */
-    private Reference.Receiver receiver(Node use, Mode mode) {
+    private Reference.Receiver receiver(Node use, Mode mode, Compiled compiler) {
         if (mode.isTypeUse() || mode == Mode.NEW) return Reference.Receiver.NONE;
         Expression scope = switch (use) {
             case MethodCallExpr call -> call.getScope().orElse(null);
@@ -423,6 +588,8 @@ public final class Reader {
         };
         if (scope == null || scope instanceof ThisExpr || scope instanceof SuperExpr) return Reference.Receiver.SELF;
         if (scope instanceof TypeExpr) return Reference.Receiver.TYPE;
+        var said = Compare.MODE == Compare.Mode.COMPILER ? compiler.receiver(scope) : null;
+        if (said != null) return said;
         if (scope instanceof NameExpr name) {
             try {
                 name.resolve();
@@ -548,7 +715,7 @@ public final class Reader {
     /** The local a declarator is, by its callable, its name, and which of that name it is; null if it is none. */
     public ElementId local(VariableDeclarator declarator) {
         var callable = declarator.findAncestor(CallableDeclaration.class).orElse(null);
-        var ordinal = callable == null ? -1 : Bodies.ordinal(Bodies.locals(callable), declarator);
+        var ordinal = callable == null ? -1 : ordinal(callable, declarator);
         if (ordinal < 0) return null;
         var type = callable.findAncestor(TypeDeclaration.class).orElse(null);
         if (!(type instanceof TypeDeclaration<?> declared) || declared.getFullyQualifiedName().isEmpty()) return null;
@@ -556,6 +723,23 @@ public final class Reader {
         var method = owner == null ? null : ids.get(new Address.Callable(owner, nameOf(callable), keys.of(callable)));
         return method == null ? null : ids.get(new Address.Local(method, declarator.getNameAsString(), ordinal));
     }
+
+    /**
+     * Which of its name a local is among its method's: while a file's uses are bound, each method's are numbered once
+     * (a generated one has thousands), and forgotten after, not to keep the file's tree.
+     */
+    private int ordinal(CallableDeclaration<?> callable, VariableDeclarator declarator) {
+        if (ordinals == null) return Bodies.ordinal(Bodies.locals(callable), declarator);
+        var numbered = ordinals.computeIfAbsent(callable, c -> {
+            var seen = new HashMap<String, Integer>();
+            var each = new IdentityHashMap<VariableDeclarator, Integer>();
+            for (var local : Bodies.locals(c)) each.put(local, seen.merge(local.getNameAsString(), 1, Integer::sum) - 1);
+            return each;
+        });
+        return numbered.getOrDefault(declarator, -1);
+    }
+
+    private IdentityHashMap<CallableDeclaration<?>, Map<VariableDeclarator, Integer>> ordinals; // while a file is bound
 
     /** The parameter of a method or constructor a declaration is (not a lambda's), or null. */
     public ElementId param(com.github.javaparser.ast.body.Parameter parameter) {

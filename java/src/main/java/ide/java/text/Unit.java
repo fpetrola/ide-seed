@@ -144,6 +144,11 @@ public final class Unit {
         return new Position(position.line, position.column + 1);
     }
 
+    /** Where a position is in the text, from 0: as a compiler counts characters. */
+    public int offsetOf(Position position) {
+        return offset(position);
+    }
+
     int offset(Position position) {
         return lineStart(position.line) + position.column - 1;
     }

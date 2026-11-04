@@ -6,6 +6,7 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.internal.compiler.CompilationResult;
 import org.eclipse.jdt.internal.compiler.Compiler;
 import org.eclipse.jdt.internal.compiler.DefaultErrorHandlingPolicies;
+import org.eclipse.jdt.internal.compiler.ast.CompilationUnitDeclaration;
 import org.eclipse.jdt.internal.compiler.batch.CompilationUnit;
 import org.eclipse.jdt.internal.compiler.batch.FileSystem;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileReader;
@@ -62,6 +63,26 @@ public final class EcjCheck {
 
     /** The problems of the sources, by path: compiled again where they changed, and where that matters. */
     public List<Diagnostic> check(Map<String, String> sources) {
+        return check(sources, null);
+    }
+
+    /**
+     * What the names of some files bind, as compiling them says, each file's apart: they are compiled as a check would
+     * (so what their change makes others say is said too), and those the check did not need compiled again as well.
+     */
+    public Map<String, EcjBindings.File> bindings(Map<String, String> sources, Set<String> paths) {
+        var collected = new java.util.concurrent.ConcurrentHashMap<String, EcjBindings.File>();
+        check(sources, collected);
+        var missing = new TreeSet<>(paths);
+        missing.removeAll(collected.keySet());
+        missing.retainAll(sources.keySet());
+        if (!missing.isEmpty()) compile(missing, sources, collected);
+        var asked = new HashMap<String, EcjBindings.File>();
+        for (var path : paths) asked.put(path, collected.getOrDefault(path, EcjBindings.File.NONE));
+        return asked;
+    }
+
+    private List<Diagnostic> check(Map<String, String> sources, Map<String, EcjBindings.File> collecting) {
         var removed = new HashSet<String>();
         typesByFile().forEach((path, types) -> {
             if (!sources.containsKey(path)) removed.addAll(types);
@@ -81,7 +102,7 @@ public final class EcjCheck {
             pending.clear();
             var old = new HashMap<String, Map<String, byte[]>>();
             for (var path : round) old.put(path, compiled.containsKey(path) ? compiled.get(path).classes() : Map.of());
-            compile(round, sources);
+            compile(round, sources, collecting);
             done.addAll(round);
             for (var path : round) changedTypes.addAll(changed(old.get(path), compiled.get(path).classes()));
             for (var path : sources.keySet()) {
@@ -93,15 +114,29 @@ public final class EcjCheck {
         return sources.keySet().stream().sorted().flatMap(path -> compiled.get(path).problems().stream()).toList();
     }
 
-    /** Compiles some files, reading the others from their class files, or from their text if they have none yet. */
-    private void compile(Set<String> paths, Map<String, String> sources) {
+    /**
+     * Compiles some files, reading the others from their class files, or from their text if they have none yet; with
+     * {@code collecting}, what each one's names bind too, taken once it is resolved.
+     */
+    private void compile(Set<String> paths, Map<String, String> sources, Map<String, EcjBindings.File> collecting) {
         var units = paths.stream().map(path -> new CompilationUnit(sources.get(path).toCharArray(), path, "UTF-8")).toArray(CompilationUnit[]::new);
         var environment = new Environment(paths, sources);
         var options = new CompilerOptions(Map.of(
                 CompilerOptions.OPTION_Compliance, "21", CompilerOptions.OPTION_Source, "21", CompilerOptions.OPTION_TargetPlatform, "21",
                 CompilerOptions.OPTION_ReportUnusedImport, CompilerOptions.WARNING));
         var compiler = new Compiler(environment, DefaultErrorHandlingPolicies.proceedWithAllProblems(), options,
-                result -> accept(result, sources), new DefaultProblemFactory(Locale.ENGLISH));
+                result -> accept(result, sources), new DefaultProblemFactory(Locale.ENGLISH)) {
+            @Override
+            public void process(CompilationUnitDeclaration unit, int i) {
+                super.process(unit, i);
+                if (collecting == null || unit.compilationResult == null) return;
+                try {
+                    collecting.put(new String(unit.getFileName()), EcjBindings.of(unit));
+                } catch (RuntimeException | StackOverflowError unreadable) {
+                    // what this unit binds is left to whoever asks
+                }
+            }
+        };
         compiler.compile(units);
     }
 
