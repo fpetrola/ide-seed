@@ -2307,7 +2307,8 @@ Los pasos, cada uno medido:
 
 1. *Los árboles sin tokens.* Cada nodo y cada comentario guarda su rango y suelta sus tokens al parsear. Hecho:
    abierto, 62 MB; leído y compilado, 133 MB.
-2. *Restaurar parsea solo lo que cambió.* Un archivo con el mismo texto conserva su árbol.
+2. *Restaurar parsea solo lo que cambió.* Un archivo con el mismo texto conserva su árbol. Hecho: después del rename
+   rechazado, 128 MB.
 3. *Ubicadores en vez de nodos.* La lectura guarda dónde está cada uso y cada declaración (archivo y rango), no el
    nodo; `use` y `declaration` lo buscan en el árbol de su archivo. Es lo que hoy retiene todos los árboles, junto
    con el índice de tipos de `WorkspaceTypeSolver`, que pasa a ser nombre → archivo.

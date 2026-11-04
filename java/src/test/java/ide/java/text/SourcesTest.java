@@ -149,6 +149,24 @@ class SourcesTest {
         assertThat(sources.texts()).isEqualTo(Map.of("a/A.java", A));
     }
 
+    /** Coming back parses only the files whose text differs: a rollback would otherwise hold two trees of each. */
+    @Test
+    void restoringKeepsTheTreesOfTheFilesThatDidNotChange() {
+        sources.put(Map.of("a/A.java", A, "a/B.java", B));
+        var saved = sources.texts();
+        var b = sources.unit("a/B.java");
+        var a = sources.unit("a/A.java");
+        sources.apply(new EditSet().replace(a, type(a).getName(), "C"));
+        sources.put(Map.of("a/D.java", "package a;\n\nclass D {\n}\n"));
+        changes.clear();
+
+        sources.restore(saved);
+
+        assertThat(sources.texts()).isEqualTo(saved);
+        assertThat(sources.unit("a/B.java")).isSameAs(b);
+        assertThat(changes).containsExactly("changed [a/A.java, a/D.java]");
+    }
+
     /** A tree keeps where each node and comment is, not the tokens it was read from: they would double its memory. */
     @Test
     void treesKeepTheirRangesButNotTheirTokens() {

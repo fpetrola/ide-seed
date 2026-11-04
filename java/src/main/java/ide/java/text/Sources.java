@@ -105,14 +105,19 @@ public final class Sources {
         changed.accept(Set.of(from, to));
     }
 
-    /** Back to exactly these files. */
+    /** Back to exactly these files; one whose text is the same keeps its tree. */
     public void restore(Map<String, String> texts) {
-        var parsed = parse(texts);
-        var paths = new TreeSet<>(units.keySet());
-        paths.addAll(texts.keySet());
-        units.clear();
-        byTree.clear();
+        var differ = new TreeMap<String, String>();
+        texts.forEach((path, text) -> {
+            if (!units.containsKey(path) || !units.get(path).text().equals(text)) differ.put(path, text);
+        });
+        var gone = new TreeSet<>(units.keySet());
+        gone.removeAll(texts.keySet());
+        var parsed = parse(differ);
+        gone.forEach(this::forget);
         parsed.values().forEach(this::keep);
+        var paths = new TreeSet<>(differ.keySet());
+        paths.addAll(gone);
         changed.accept(paths);
     }
 
