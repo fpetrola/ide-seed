@@ -134,9 +134,20 @@ public final class Sources {
             if (!result.isSuccessful()) {
                 throw new PrimitiveRejected("projection.unparsable", path + ": " + result.getProblems().getFirst().getVerboseMessage());
             }
-            parsed.put(path, new Unit(path, text, result.getResult().orElseThrow()));
+            parsed.put(path, new Unit(path, text, withoutTokens(result.getResult().orElseThrow())));
         });
         return parsed;
+    }
+
+    /** Each node and comment keeps its range; the tokens, kept by any of them, would hold as much memory as the tree. */
+    private static CompilationUnit withoutTokens(CompilationUnit tree) {
+        tree.walk(Sources::forgetTokens);
+        tree.getAllComments().forEach(Sources::forgetTokens);
+        return tree;
+    }
+
+    private static void forgetTokens(Node node) {
+        node.getRange().ifPresent(range -> node.setTokenRange(null).setRange(range));
     }
 
     private void keep(Unit unit) {

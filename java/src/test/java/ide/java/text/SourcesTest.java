@@ -149,6 +149,27 @@ class SourcesTest {
         assertThat(sources.texts()).isEqualTo(Map.of("a/A.java", A));
     }
 
+    /** A tree keeps where each node and comment is, not the tokens it was read from: they would double its memory. */
+    @Test
+    void treesKeepTheirRangesButNotTheirTokens() {
+        sources.put(Map.of("a/A.java", """
+                package a;
+
+                /** A. */
+                class A {
+                    int x; // x
+                }
+                """));
+        var tree = sources.unit("a/A.java").tree();
+
+        assertThat(tree.findAll(com.github.javaparser.ast.Node.class))
+                .allSatisfy(node -> assertThat(node.getTokenRange()).isEmpty())
+                .allSatisfy(node -> assertThat(node.getRange()).isPresent());
+        assertThat(tree.getAllComments()).hasSize(2)
+                .allSatisfy(comment -> assertThat(comment.getTokenRange()).isEmpty())
+                .allSatisfy(comment -> assertThat(comment.getRange()).isPresent());
+    }
+
     @Test
     void positionsAreFoundInTheText() {
         sources.put(Map.of("a/A.java", A));

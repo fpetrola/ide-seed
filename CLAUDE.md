@@ -65,7 +65,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,
   refactoring and knowledge).
 - `java` (projection, JavaParser) — the Java driver, in layers that only know the ones below (LayersTest):
-  `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses),
+  `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses; a tree
+  keeps each node's range, not the tokens it was read from),
   `ide.java.syntax` (Decl, Members, Modifiers, Lists, Imports, Render: Java constructs written as text),
   `ide.java.semantics` (Reader: program + declarations + use nodes; Resolution, Keys, WorkspaceTypeSolver,
   EcjCheck: Eclipse's compiler, incremental, errors and warnings with their range; Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a

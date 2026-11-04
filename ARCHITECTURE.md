@@ -2290,6 +2290,33 @@ refactoring compuesto (extract-superclass), apertura en frío y apertura con el 
    los archivos tocados. La búsqueda de reparaciones trabaja sobre estados del grafo.
 5. *Grafo persistente.* El grafo en `.ide`, con relectura solo de lo que cambió, y AST transitorios.
 
+**Primero, la memoria (pedido del 2026-11-03).** Lo que más urge es que el IDE use poca memoria sin perder nada de lo
+que hace. Medido sobre una copia del propio IdeSeed (158 archivos, 25 mil líneas, con el classpath de Maven), con
+`jcmd GC.class_histogram` después de cada paso:
+
+| Paso | Heap vivo | Grafo (`ide.program`) |
+|---|---|---|
+| Abierto (textos y árboles) | 123 MB | |
+| Leído y compilado | 193 MB | 3,4 MB |
+| Después de un rename rechazado y deshecho | 296 MB | 3,4 MB |
+
+El grafo es el 2 % y los textos otro tanto. El resto es JavaParser: los árboles y, en ellos, los tokens de cada
+archivo (medio millón, con su texto y su rango), que el driver no usa porque edita por rango. Un rollback volvía a
+parsear todos los archivos, y la lectura anterior retenía los árboles viejos hasta la siguiente: dos copias a la vez.
+Los pasos, cada uno medido:
+
+1. *Los árboles sin tokens.* Cada nodo y cada comentario guarda su rango y suelta sus tokens al parsear. Hecho:
+   abierto, 62 MB; leído y compilado, 133 MB.
+2. *Restaurar parsea solo lo que cambió.* Un archivo con el mismo texto conserva su árbol.
+3. *Ubicadores en vez de nodos.* La lectura guarda dónde está cada uso y cada declaración (archivo y rango), no el
+   nodo; `use` y `declaration` lo buscan en el árbol de su archivo. Es lo que hoy retiene todos los árboles, junto
+   con el índice de tipos de `WorkspaceTypeSolver`, que pasa a ser nombre → archivo.
+4. *Árboles a demanda.* Un caché acotado, más los archivos que una transacción toca (un primitivo tiene que ver
+   siempre el mismo árbol de un archivo) y los abiertos en un editor. La apertura lee y suelta archivo por archivo.
+
+El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
+que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.
+
 ## 10. Glosario
 
 - **Elemento**: algo con identidad en el programa: paquete, tipo, campo, constructor, método, parámetro.
