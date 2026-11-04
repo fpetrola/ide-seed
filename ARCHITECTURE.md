@@ -2379,7 +2379,9 @@ Los pasos, cada uno medido:
    resolver todos los archivos. Ahora, los que escriben su nombre (o el de un tipo debajo de él) y los que usaban lo
    que declaraba; todos, solo si cambió lo que un tipo que sigue estando extiende o implementa. Y la identidad olvida
    lo que una edición quitó en una pasada (era una por elemento, cada una sobre el millón de direcciones). Unos 2,5 s
-   por edición; lo que queda es armar el programa (`new Program`, ~1 s con 800 mil elementos).
+   por edición. Después, guardar la identidad para la transacción de cada edición no la copia otra vez mientras nada
+   cambió (y restaurar ese mismo estado no hace nada), y `Program` arma cuando se los pide los índices que pocos piden
+   (los usos de cada sentencia, por dirección): 1,5 s por edición; lo que queda es volver a leer.
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

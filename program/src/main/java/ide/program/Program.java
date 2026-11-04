@@ -29,9 +29,9 @@ public final class Program {
     private final Map<ElementId, List<Element>> children = new HashMap<>();
     private final Map<ElementId, List<Reference>> from = new HashMap<>();
     private final Map<ElementId, List<Reference>> to = new HashMap<>();
-    private final Map<ElementId, List<Reference>> in = new HashMap<>();
+    private Map<ElementId, List<Reference>> in; // asked for by few: made when first asked
     private final Map<String, Reference> byReferenceId = new HashMap<>();
-    private final Map<String, Element> byQualified = new HashMap<>();
+    private Map<String, Element> byQualified; // the same
     private final List<Element> types = new ArrayList<>();
     private final List<Element> methods = new ArrayList<>();
     private Map<ElementId, List<Element>> overriders;
@@ -43,7 +43,6 @@ public final class Program {
     public Program(Collection<Element> elements, List<Reference> references, List<Unresolved> unresolved) {
         for (var e : elements) {
             this.elements.put(e.id(), e);
-            if (!e.kind().inBody()) byQualified.putIfAbsent(e.qualified(), e); // a body's are found in its method's
             if (e.parent() != null) children.computeIfAbsent(e.parent(), k -> new ArrayList<>()).add(e);
             if (e.kind().isType()) types.add(e);
             if (e.kind() == Kind.METHOD) methods.add(e);
@@ -52,15 +51,37 @@ public final class Program {
         for (var r : this.references) {
             from.computeIfAbsent(r.site(), k -> new ArrayList<>()).add(r);
             to.computeIfAbsent(r.target(), k -> new ArrayList<>()).add(r);
-            for (var s = r.statement(); s != null && this.elements.containsKey(s) && this.elements.get(s).kind() == Kind.STATEMENT; s = this.elements.get(s).parent()) {
-                in.computeIfAbsent(s, k -> new ArrayList<>()).add(r); // in the statements that hold its own too
-            }
             byReferenceId.putIfAbsent(r.id(), r);
         }
         this.unresolved = List.copyOf(unresolved);
         for (var u : this.unresolved) byUnresolvedId.putIfAbsent(u.id(), u);
-        for (var index : List.of(from, to, in)) index.replaceAll((k, list) -> List.copyOf(list)); // most hold one or two
+        for (var index : List.of(from, to)) index.replaceAll((k, list) -> List.copyOf(list)); // most hold one or two
         children.replaceAll((k, list) -> List.copyOf(list));
+    }
+
+    /** By address, but what a body is made of (found in its method's). */
+    private synchronized Map<String, Element> byQualified() {
+        if (byQualified == null) {
+            var index = new HashMap<String, Element>();
+            for (var e : elements.values()) if (!e.kind().inBody()) index.putIfAbsent(e.qualified(), e);
+            byQualified = index;
+        }
+        return byQualified;
+    }
+
+    /** The uses in each statement, those in the statements it holds too. */
+    private synchronized Map<ElementId, List<Reference>> in() {
+        if (in == null) {
+            var index = new HashMap<ElementId, List<Reference>>();
+            for (var r : references) {
+                for (var s = r.statement(); s != null && elements.containsKey(s) && elements.get(s).kind() == Kind.STATEMENT; s = elements.get(s).parent()) {
+                    index.computeIfAbsent(s, k -> new ArrayList<>()).add(r);
+                }
+            }
+            index.replaceAll((k, list) -> List.copyOf(list));
+            in = index;
+        }
+        return in;
     }
 
     // ---- elements
@@ -81,10 +102,10 @@ public final class Program {
 
     /** The element at an address ({@code a.B}, {@code a.B#x}, {@code a.B#m(int)/p}). */
     public Optional<Element> find(String qualified) {
-        var found = byQualified.get(qualified);
+        var found = byQualified().get(qualified);
         if (found != null || qualified == null) return Optional.ofNullable(found);
         var end = qualified.indexOf(')'); // a statement or a local: among what its callable holds
-        var callable = end < 0 ? null : byQualified.get(qualified.substring(0, end + 1));
+        var callable = end < 0 ? null : byQualified().get(qualified.substring(0, end + 1));
         if (callable == null) return Optional.empty();
         var pending = new ArrayDeque<>(children(callable.id()));
         while (!pending.isEmpty()) {
@@ -169,7 +190,7 @@ public final class Program {
 
     /** The uses made in a statement of a body, in order, those of the statements nested in it too. */
     public List<Reference> referencesIn(ElementId statement) {
-        return in.getOrDefault(statement, List.of());
+        return in().getOrDefault(statement, List.of());
     }
 
     // ---- links: the hierarchy and declared types are references too; the hierarchy is the workspace's

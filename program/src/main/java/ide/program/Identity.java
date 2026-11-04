@@ -28,6 +28,7 @@ public final class Identity {
     private final Map<ElementId, Address> addresses = new HashMap<>();
     private final Map<String, ElementId> types = new HashMap<>();
     private int next;
+    private State saved; // the last state saved, while nothing changed since: saving again copies nothing
 
     /** The id at {@code address}, created if the address is new. */
     public ElementId of(Address address, Kind kind) {
@@ -188,16 +189,20 @@ public final class Identity {
         });
     }
 
+    /** What the identity is now; the same state again while nothing changed (a program may have a million addresses). */
     public State save() {
-        return new State(Map.copyOf(ids), next);
+        if (saved == null) saved = new State(Map.copyOf(ids), next);
+        return saved;
     }
 
     public void restore(State state) {
+        if (state == saved) return; // nothing changed since it was saved
         ids.clear();
         addresses.clear();
         types.clear();
         state.ids().forEach(this::put);
         next = state.next();
+        saved = state;
     }
 
     private void rebind(Address from, Address to) {
@@ -209,12 +214,14 @@ public final class Identity {
     }
 
     private void put(Address address, ElementId id) {
+        saved = null;
         ids.put(address, id);
         addresses.put(id, address);
         if (address instanceof Address.Type type) types.put(type.qualified(), id);
     }
 
     private void remove(ElementId id) {
+        saved = null;
         var address = addresses.remove(id);
         if (address == null) return;
         ids.remove(address);
