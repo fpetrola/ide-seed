@@ -1,6 +1,7 @@
 package ide.java.semantics;
 
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.DataKey;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
@@ -16,6 +17,7 @@ import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParse
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import ide.java.text.Unit;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,16 +31,21 @@ import java.util.function.Supplier;
 
 /**
  * Resolves types declared in the in-memory workspace, falling back to its libraries: the JDK and the jars of its
- * classpath. The index of workspace types is dropped whenever units are replaced, so it never points into stale ASTs.
+ * classpath. The index of workspace types says which unit declares each, never a node: a declaration is made from the
+ * unit's tree when asked, and kept with that tree, so the index keeps no tree from being let go. It is dropped
+ * whenever units are replaced.
  */
 public final class WorkspaceTypeSolver implements TypeSolver {
 
-    private final Supplier<Collection<CompilationUnit>> units;
+    private static final DataKey<Map<String, ResolvedReferenceTypeDeclaration>> DECLARED = new DataKey<>() {
+    };
+
+    private final Supplier<Collection<Unit>> units;
     private final TypeSolver libraries;
     private TypeSolver parent;
-    private Map<String, ResolvedReferenceTypeDeclaration> index;
+    private Map<String, Unit> index;
 
-    public WorkspaceTypeSolver(Supplier<Collection<CompilationUnit>> units, TypeSolver libraries) {
+    public WorkspaceTypeSolver(Supplier<Collection<Unit>> units, TypeSolver libraries) {
         this.units = units;
         this.libraries = libraries;
         libraries.setParent(this);
@@ -72,38 +79,49 @@ public final class WorkspaceTypeSolver implements TypeSolver {
         this.parent = parent;
     }
 
-    /** Forgets the index; called whenever units are replaced. */
+    /** Forgets the index and the declarations made from the trees; called whenever units are replaced. */
     public void reset() {
         index = null;
+        units.get().forEach(unit -> unit.tree().removeData(DECLARED));
     }
 
     @Override
     public SymbolReference<ResolvedReferenceTypeDeclaration> tryToSolveType(String name) {
         if (index == null) index = buildIndex();
-        var type = index.get(name);
-        if (type != null) return SymbolReference.solved(type);
+        var unit = index.get(name);
+        if (unit != null) {
+            var type = declared(unit.tree()).get(name);
+            if (type != null) return SymbolReference.solved(type);
+        }
         return libraries.tryToSolveType(name);
     }
 
-    /** Qualified name → declaration for every type in the workspace: classes, interfaces, enums, records, annotations. */
-    private Map<String, ResolvedReferenceTypeDeclaration> buildIndex() {
+    /** Qualified name → the unit that declares it, for every type in the workspace. */
+    private Map<String, Unit> buildIndex() {
+        var built = new HashMap<String, Unit>();
+        for (var unit : units.get()) declared(unit.tree()).keySet().forEach(name -> built.put(name, unit));
+        return built;
+    }
+
+    /** Qualified name → declaration for every type of a tree: classes, interfaces, enums, records, annotations. */
+    private Map<String, ResolvedReferenceTypeDeclaration> declared(CompilationUnit cu) {
+        if (cu.containsData(DECLARED)) return cu.getData(DECLARED);
         var built = new HashMap<String, ResolvedReferenceTypeDeclaration>();
-        for (var cu : units.get()) {
-            for (var type : cu.findAll(ClassOrInterfaceDeclaration.class)) {
-                type.getFullyQualifiedName().ifPresent(name -> built.put(name, type.isInterface()
-                        ? new JavaParserInterfaceDeclaration(type, getRoot())
-                        : new JavaParserClassDeclaration(type, getRoot())));
-            }
-            for (var type : cu.findAll(EnumDeclaration.class)) {
-                type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserEnumDeclaration(type, getRoot())));
-            }
-            for (var type : cu.findAll(RecordDeclaration.class)) {
-                type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserRecordDeclaration(type, getRoot())));
-            }
-            for (var type : cu.findAll(AnnotationDeclaration.class)) {
-                type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserAnnotationDeclaration(type, getRoot())));
-            }
+        for (var type : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+            type.getFullyQualifiedName().ifPresent(name -> built.put(name, type.isInterface()
+                    ? new JavaParserInterfaceDeclaration(type, getRoot())
+                    : new JavaParserClassDeclaration(type, getRoot())));
         }
+        for (var type : cu.findAll(EnumDeclaration.class)) {
+            type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserEnumDeclaration(type, getRoot())));
+        }
+        for (var type : cu.findAll(RecordDeclaration.class)) {
+            type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserRecordDeclaration(type, getRoot())));
+        }
+        for (var type : cu.findAll(AnnotationDeclaration.class)) {
+            type.getFullyQualifiedName().ifPresent(name -> built.put(name, new JavaParserAnnotationDeclaration(type, getRoot())));
+        }
+        cu.setData(DECLARED, built);
         return built;
     }
 }

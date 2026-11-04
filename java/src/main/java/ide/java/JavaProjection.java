@@ -18,6 +18,7 @@ import ide.java.semantics.UseNeeds;
 import ide.java.semantics.WorkspaceTypeSolver;
 import ide.java.syntax.Decl;
 import ide.java.text.Sources;
+import ide.java.text.Unit;
 import ide.program.Change;
 import ide.program.Element;
 import ide.program.ElementId;
@@ -74,7 +75,7 @@ public final class JavaProjection implements Projection {
     private JavaProjection(List<Path> classpath) {
         this.classpath = List.copyOf(classpath);
         this.compiler = new EcjCheck(classpath);
-        typeSolver = new WorkspaceTypeSolver(this::trees, WorkspaceTypeSolver.libraries(classpath));
+        typeSolver = new WorkspaceTypeSolver(this::units, WorkspaceTypeSolver.libraries(classpath));
         reader = new Reader(ids, keys, typeSolver);
         sources = new Sources(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
                 .setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
@@ -388,8 +389,8 @@ public final class JavaProjection implements Projection {
         return reading;
     }
 
-    private Collection<CompilationUnit> trees() {
-        return sources.trees();
+    private Collection<Unit> units() {
+        return sources.units();
     }
 
     /** After any change: what was resolved before describes another program, and the files at {@code paths} changed. */
