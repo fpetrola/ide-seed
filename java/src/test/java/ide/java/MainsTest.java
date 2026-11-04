@@ -70,4 +70,40 @@ class MainsTest {
         assertThat(projection.mains()).extracting(m -> m.type() + " " + m.path() + ":" + m.line() + ":" + m.methodLine())
                 .containsExactly("a.App a/App.java:3:4", "a.Script a/Script.java:3:4", "a.Varargs a/Varargs.java:3:4");
     }
+
+    /** What is found in a file is remembered while its text is the same: a window asks again and again. */
+    @Test
+    void aFileEditedToHaveAMainIsFoundAndOneEditedToLoseItIsNot() {
+        var projection = JavaProjection.of(Map.of("a/App.java", """
+                package a;
+
+                class App {
+                }
+                """, "a/Tool.java", """
+                package a;
+
+                class Tool {
+                    public static void main(String[] args) {
+                    }
+                }
+                """));
+        assertThat(projection.mains()).extracting(JavaProjection.Main::type).containsExactly("a.Tool");
+
+        projection.edit("a/App.java", """
+                package a;
+
+                class App {
+                    public static void main(String[] args) {
+                    }
+                }
+                """);
+        projection.edit("a/Tool.java", """
+                package a;
+
+                class Tool {
+                }
+                """);
+
+        assertThat(projection.mains()).extracting(JavaProjection.Main::type).containsExactly("a.App");
+    }
 }

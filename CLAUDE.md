@@ -99,7 +99,8 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   the one block a statement holds (a block, a loop's, an if's with no else), the same way; the
   primitives that change a body's list keep their ids (extract takes its own along), and an edit by hand pairs them by order and text.
   `inside` answers the innermost element, a statement or a local too. `mains` are the classes a program runs from: the first
-  top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument). An edit by hand reconciles identity (types, members,
+  top-level class of a file with a main Java launches (static with `String[]`, or Java 25's instance or no-argument;
+  remembered for each file while its text is the same, and a file whose text does not say main is not read). An edit by hand reconciles identity (types, members,
   parameters, reading again between rounds) and forgets what it removed. A new parameter's argument may be said in no language over the method's parameters (each call passes
   what it passed them); a read of a parameter or local retargeted to a getter is made on the one variable of the
   getter's type there, and so is a call on the object itself retargeted to a method of another type; a call

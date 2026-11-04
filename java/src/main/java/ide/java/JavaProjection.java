@@ -71,6 +71,7 @@ public final class JavaProjection implements Projection {
     private Reader.Reading reading;
     private List<Diagnostic> diagnostics;
     private final EcjCheck compiler;
+    private final Map<Unit, List<Main>> mains = new java.util.WeakHashMap<>(); // what each file has, while it is the same
 
     private JavaProjection(List<Path> classpath) {
         this.classpath = List.copyOf(classpath);
@@ -159,18 +160,26 @@ public final class JavaProjection implements Projection {
     public List<Main> mains() {
         var found = new ArrayList<Main>();
         for (var path : sources.paths().stream().sorted().toList()) {
-            var unit = sources.unit(path).tree();
-            unit.getTypes().stream().findFirst()
-                    .filter(type -> type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declared && !declared.isInterface()
-                            || type instanceof com.github.javaparser.ast.body.RecordDeclaration || type instanceof com.github.javaparser.ast.body.EnumDeclaration)
-                    .ifPresent(type -> type.getMethodsByName("main").stream()
-                            .filter(method -> method.getType().isVoidType() && !method.isPrivate() && runsWith(method))
-                            .findFirst()
-                            .ifPresent(method -> found.add(new Main(unit.getPackageDeclaration().map(p -> p.getNameAsString() + ".").orElse("")
-                                    + type.getNameAsString(), path, type.getName().getBegin().map(b -> b.line).orElse(1),
-                                    method.getName().getBegin().map(b -> b.line).orElse(1)))));
+            var file = sources.unit(path);
+            found.addAll(mains.computeIfAbsent(file, JavaProjection::mainsOf)); // a unit is new when its text changes
         }
         return found;
+    }
+
+    /** The main a file has, if any: read from its tree only when its text says main at all. */
+    private static List<Main> mainsOf(Unit file) {
+        if (!file.text().contains("main")) return List.of();
+        var unit = file.tree();
+        return unit.getTypes().stream().findFirst()
+                .filter(type -> type instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declared && !declared.isInterface()
+                        || type instanceof com.github.javaparser.ast.body.RecordDeclaration || type instanceof com.github.javaparser.ast.body.EnumDeclaration)
+                .flatMap(type -> type.getMethodsByName("main").stream()
+                        .filter(method -> method.getType().isVoidType() && !method.isPrivate() && runsWith(method))
+                        .findFirst()
+                        .map(method -> new Main(unit.getPackageDeclaration().map(p -> p.getNameAsString() + ".").orElse("")
+                                + type.getNameAsString(), file.path(), type.getName().getBegin().map(b -> b.line).orElse(1),
+                                method.getName().getBegin().map(b -> b.line).orElse(1))))
+                .map(List::of).orElse(List.of());
     }
 
     private static boolean runsWith(com.github.javaparser.ast.body.MethodDeclaration method) {
