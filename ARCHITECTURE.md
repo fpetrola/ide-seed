@@ -2355,6 +2355,11 @@ Los pasos, cada uno medido:
    (`translator`). `-Dmdep.appendOutput` no existe para `build-classpath` (el parámetro no tiene propiedad), así que
    cada módulo pisaba el archivo; ahora cada uno escribe el suyo (`${project.artifactId}` en la ruta, que Maven
    evalúa), y un classpath recordado antes se vuelve a pedir.
+6. *Leer más rápido.* Con los nombres ligados por ECJ (decisión 38) leer oozx pasó de 288 s a 132 s; el ordinal de
+   cada local se cuenta una vez por método (era una vez por uso: cuadrático en los métodos generados). Después, cada
+   archivo se parseaba hasta cinco veces por lectura; ahora tres (tipos y paquete en una pasada, y el índice de tipos
+   del solver sale de esa pasada, no de leer los árboles otra vez), y al recorrer los archivos los siguientes se parsean
+   en otros hilos, de a pocos: 99 s con 1,5 GB de heap, 90 s con 2 GB (con 1,5 GB, 59 s de GC: lo vivo pesa).
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

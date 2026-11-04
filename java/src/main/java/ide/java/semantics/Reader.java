@@ -128,7 +128,7 @@ public final class Reader {
     }
 
     /** What the last reading knew of a file, to keep what a change cannot have affected. */
-    private record Part(Unit unit, String pkg, Declared declared, Bound bound) {
+    private record Part(Unit unit, String pkg, List<String> types, Declared declared, Bound bound) {
     }
 
     private final Identity ids;
@@ -141,6 +141,17 @@ public final class Reader {
 
     /** What compiling some files says their names bind (none, until told how to compile). */
     private Function<Set<String>, Map<String, EcjBindings.File>> compiled = paths -> Map.of();
+
+    /** How to go over units in turn, their trees parsed ahead (each unit's, when asked for, by default). */
+    private InTurn inTurn = (units, parsed, each) -> units.forEach(each);
+
+    public interface InTurn {
+        void over(List<Unit> units, java.util.function.Predicate<Unit> parsed, java.util.function.Consumer<Unit> each);
+    }
+
+    public void inTurn(InTurn inTurn) {
+        this.inTurn = inTurn;
+    }
 
     /** How to learn what the names of some files bind from compiling them. */
     public void compiledBy(Function<Set<String>, Map<String, EcjBindings.File>> compiled) {
@@ -165,31 +176,37 @@ public final class Reader {
             var part = previous.get(unit.path());
             if (part == null || part.unit() != unit || changed.contains(unit.path())) fresh.add(unit.path());
         }
-        for (var unit : units) { // types first: members key their parameter types by type id
-            if (fresh.contains(unit.path())) for (var type : types(unit.tree())) ids.of(new Address.Type(qualifiedOf(type)), Kind.CLASS);
-        }
         var elements = new ArrayList<Element>();
         var packages = new LinkedHashMap<String, ElementId>();
-        var packageOf = new HashMap<String, String>(); // a file read before keeps its package: its tree may be gone
-        for (var unit : units) {
-            var pkg = fresh.contains(unit.path()) ? unit.tree().getPackageDeclaration().map(p -> p.getNameAsString()).orElse("")
-                    : previous.get(unit.path()).pkg();
-            packageOf.put(unit.path(), pkg);
+        var packageOf = new HashMap<String, String>(); // a file read before keeps its package and types: its tree may be gone
+        var typesOf = new HashMap<String, List<String>>();
+        var declaring = new HashMap<String, Unit>();
+        var all = List.copyOf(units);
+        inTurn.over(all, unit -> fresh.contains(unit.path()), unit -> { // types first: members key their parameter types by type id
+            if (fresh.contains(unit.path())) {
+                var tree = unit.tree();
+                packageOf.put(unit.path(), tree.getPackageDeclaration().map(p -> p.getNameAsString()).orElse(""));
+                typesOf.put(unit.path(), types(tree).stream().map(Reader::qualifiedOf).toList());
+                for (var type : typesOf.get(unit.path())) ids.of(new Address.Type(type), Kind.CLASS);
+            } else {
+                packageOf.put(unit.path(), previous.get(unit.path()).pkg());
+                typesOf.put(unit.path(), previous.get(unit.path()).types());
+            }
+            var pkg = packageOf.get(unit.path());
             if (!pkg.isEmpty()) packages.computeIfAbsent(pkg, n -> addPackage(elements, n));
-        }
+            for (var type : typesOf.get(unit.path())) declaring.put(type, unit);
+        });
+        typeSolver.declaredIn(declaring); // what the solver looks types up in, without reading every tree again
         for (var name : emptyPackages) packages.computeIfAbsent(name, n -> addPackage(elements, n));
         var declared = new LinkedHashMap<String, Declared>();
-        for (var unit : units) {
-            declared.put(unit.path(), fresh.contains(unit.path()) ? declare(unit, packages) : previous.get(unit.path()).declared());
-        }
+        inTurn.over(all, unit -> fresh.contains(unit.path()), unit ->
+                declared.put(unit.path(), fresh.contains(unit.path()) ? declare(unit, packages) : previous.get(unit.path()).declared()));
         // uses only once every element has its id: a use may point into a file read later
         var resolve = affected(units, fresh, previous, declared);
         var bound = new LinkedHashMap<String, Bound>();
         var bindings = resolve.isEmpty() ? Map.<String, EcjBindings.File>of() : compiled.apply(resolve);
-        for (var unit : units) {
-            bound.put(unit.path(), resolve.contains(unit.path())
-                    ? bind(unit, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE)) : previous.get(unit.path()).bound());
-        }
+        inTurn.over(all, unit -> resolve.contains(unit.path()), unit -> bound.put(unit.path(), resolve.contains(unit.path())
+                ? bind(unit, bindings.getOrDefault(unit.path(), EcjBindings.File.NONE)) : previous.get(unit.path()).bound()));
         Compare.report();
         var declarations = new HashMap<String, Map<ElementId, Decl>>();
         declared.forEach((path, d) -> {
@@ -215,7 +232,7 @@ public final class Reader {
         }
         elements.addAll(named.values());
         var next = new HashMap<String, Part>();
-        for (var unit : units) next.put(unit.path(), new Part(unit, packageOf.get(unit.path()), declared.get(unit.path()), bound.get(unit.path())));
+        for (var unit : units) next.put(unit.path(), new Part(unit, packageOf.get(unit.path()), typesOf.get(unit.path()), declared.get(unit.path()), bound.get(unit.path())));
         parts = next;
         last = new Program(elements, references, unresolved);
         return new Reading(last, nodes, declarations, Collections.unmodifiableSet(new TreeSet<>(resolve)));

@@ -79,6 +79,11 @@ public final class WorkspaceTypeSolver implements TypeSolver {
         this.parent = parent;
     }
 
+    /** Which unit declares each type, as a reading found it: the index, with no tree read again for it. */
+    public void declaredIn(Map<String, Unit> declaring) {
+        index = Map.copyOf(declaring);
+    }
+
     /** Forgets the index and the declarations made from the trees; called whenever units are replaced. */
     public void reset() {
         index = null;

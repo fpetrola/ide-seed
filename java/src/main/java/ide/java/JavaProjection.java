@@ -81,6 +81,7 @@ public final class JavaProjection implements Projection {
         sources = new Sources(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
                 .setSymbolResolver(new JavaSymbolSolver(typeSolver)), this::invalidate);
         reader.compiledBy(paths -> compiler.bindings(sources.texts(), paths)); // what the compiler binds, then the solver
+        reader.inTurn(sources::inTurn);
         context = new Context() {
             @Override
             public Program program() {

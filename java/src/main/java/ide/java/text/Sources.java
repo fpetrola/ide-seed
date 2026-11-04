@@ -135,6 +135,43 @@ public final class Sources {
         return parse(Map.of(path, text)).get(path);
     }
 
+    /**
+     * Each unit in turn, the trees of the next ones (those {@code parsed} asks for) parsed meanwhile on other threads, a
+     * few at a time: a project read whole is parsed again for each pass over it, and a tree may be tens of megabytes.
+     */
+    public void inTurn(List<Unit> units, java.util.function.Predicate<Unit> parsed, Consumer<Unit> each) {
+        var ahead = new java.util.ArrayDeque<java.util.concurrent.Future<CompilationUnit>>();
+        var next = 0;
+        for (var unit : units) {
+            while (next < units.size() && ahead.size() < AHEAD) {
+                var coming = units.get(next++);
+                ahead.add(parsed.test(coming) && coming.parsed().isEmpty()
+                        ? PARSING.submit(() -> trees.parse(coming.text()).getResult().orElse(null))
+                        : java.util.concurrent.CompletableFuture.completedFuture(null));
+            }
+            CompilationUnit tree = null;
+            try {
+                tree = ahead.poll().get();
+                if (tree != null) unit.adopt(tree);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (java.util.concurrent.ExecutionException failed) {
+                // parsed again when asked for
+            }
+            each.accept(unit);
+            java.lang.ref.Reference.reachabilityFence(tree); // a tree bigger than what is kept lives through its turn
+        }
+    }
+
+    private static final int AHEAD = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
+
+    private static final java.util.concurrent.ExecutorService PARSING = java.util.concurrent.Executors.newFixedThreadPool(AHEAD, work -> {
+        var thread = new Thread(work, "parsing ahead");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     /** Parses a text that is not one of the sources (an editor's copy, a text in the making). */
     public Optional<CompilationUnit> parseDetached(String text) {
         var result = new JavaParser(configuration).parse(text);

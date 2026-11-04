@@ -54,6 +54,11 @@ public final class Unit {
         return held;
     }
 
+    /** A tree parsed ahead of being asked for: taken unless the unit has one in memory (that one stays). */
+    void adopt(CompilationUnit parsed) {
+        if (tree.get() == null) hold(parsed);
+    }
+
     /** The tree if it is in memory: what was cached in it is there only. */
     public Optional<CompilationUnit> parsed() {
         return Optional.ofNullable(tree.get());
