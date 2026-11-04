@@ -195,6 +195,11 @@ public final class Identity {
         return saved;
     }
 
+    /** Whether the identity is that state, saved and not changed since. */
+    public boolean is(State state) {
+        return state == saved;
+    }
+
     public void restore(State state) {
         if (state == saved) return; // nothing changed since it was saved
         ids.clear();

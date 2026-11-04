@@ -102,6 +102,20 @@ class InvalidationTest {
                 .contains("a.T#m(int)");
     }
 
+    /** A change refused before it changed anything (a text that does not parse) leaves nothing to read again. */
+    @Test
+    void comingBackFromAChangeThatChangedNothingResolvesNothing() {
+        var projection = JavaProjection.of(SOURCES);
+        projection.program();
+        var before = projection.snapshot();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> projection.edit("a/A.java", "package a;\n\nclass A { sdf sdf }\n"));
+        projection.restore(before);
+        projection.program();
+
+        assertThat(projection.resolvedLastTime()).isEmpty();
+    }
+
     /** A project of hundreds of files is not resolved again whole: only where the old name or the new one is written. */
     @Test
     void renamingATypeResolvesTheFilesThatNameIt() {

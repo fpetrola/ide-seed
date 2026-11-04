@@ -319,10 +319,11 @@ public final class JavaProjection implements Projection {
     @Override
     public void restore(Projection.Snapshot saved) {
         var snapshot = (Snapshot) saved;
-        sources.restore(snapshot.sources());
+        var same = ids.is(snapshot.identity()); // a change refused before it changed any id, as a text that does not parse
+        sources.restore(snapshot.sources()); // the files whose text differs are read again
         ids.restore(snapshot.identity());
         emptyPackages = new TreeSet<>(snapshot.emptyPackages());
-        afresh = true;
+        if (!same) afresh = true; // ids came back: what was read names ids that are not those
         invalidate(Set.of());
     }
 
