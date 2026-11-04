@@ -1,5 +1,6 @@
 package ide.java.syntax;
 
+import com.github.javaparser.Position;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import ide.java.text.Located;
@@ -24,6 +25,10 @@ public final class Decl {
     /** Where the declaration is written, without finding its node. */
     public Range range() {
         return at.range();
+    }
+
+    public boolean contains(Position position) {
+        return at.contains(position);
     }
 
     public Node node() {

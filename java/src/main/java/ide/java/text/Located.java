@@ -1,5 +1,6 @@
 package ide.java.text;
 
+import com.github.javaparser.Position;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 
@@ -10,12 +11,16 @@ import com.github.javaparser.ast.Node;
 public final class Located {
 
     private final Unit unit;
-    private final Range range;
+    private final int beginLine, beginColumn, endLine, endColumn; // a program has millions: no Range of two Positions each
     private final Class<? extends Node> kind;
 
     public Located(Unit unit, Node node) {
+        var range = node.getRange().orElseThrow();
         this.unit = unit;
-        this.range = node.getRange().orElseThrow();
+        this.beginLine = range.begin.line;
+        this.beginColumn = range.begin.column;
+        this.endLine = range.end.line;
+        this.endColumn = range.end.column;
         this.kind = node.getClass();
     }
 
@@ -24,11 +29,17 @@ public final class Located {
     }
 
     public Range range() {
-        return range;
+        return Range.range(beginLine, beginColumn, endLine, endColumn);
+    }
+
+    /** Whether the range holds a place, without making it. */
+    public boolean contains(Position position) {
+        return (position.line > beginLine || position.line == beginLine && position.column >= beginColumn)
+                && (position.line < endLine || position.line == endLine && position.column <= endColumn);
     }
 
     /** The node, in the unit's tree as it is now. */
     public Node node() {
-        return unit.find(range, kind);
+        return unit.find(range(), kind);
     }
 }
