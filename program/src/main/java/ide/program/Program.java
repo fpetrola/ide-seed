@@ -43,7 +43,7 @@ public final class Program {
     public Program(Collection<Element> elements, List<Reference> references, List<Unresolved> unresolved) {
         for (var e : elements) {
             this.elements.put(e.id(), e);
-            byQualified.putIfAbsent(e.qualified(), e);
+            if (!e.kind().inBody()) byQualified.putIfAbsent(e.qualified(), e); // a body's are found in its method's
             if (e.parent() != null) children.computeIfAbsent(e.parent(), k -> new ArrayList<>()).add(e);
             if (e.kind().isType()) types.add(e);
             if (e.kind() == Kind.METHOD) methods.add(e);
@@ -81,7 +81,18 @@ public final class Program {
 
     /** The element at an address ({@code a.B}, {@code a.B#x}, {@code a.B#m(int)/p}). */
     public Optional<Element> find(String qualified) {
-        return Optional.ofNullable(byQualified.get(qualified));
+        var found = byQualified.get(qualified);
+        if (found != null || qualified == null) return Optional.ofNullable(found);
+        var end = qualified.indexOf(')'); // a statement or a local: among what its callable holds
+        var callable = end < 0 ? null : byQualified.get(qualified.substring(0, end + 1));
+        if (callable == null) return Optional.empty();
+        var pending = new ArrayDeque<>(children(callable.id()));
+        while (!pending.isEmpty()) {
+            var e = pending.pop();
+            if (e.qualified().equals(qualified)) return Optional.of(e);
+            if (e.kind().inBody()) pending.addAll(children(e.id()));
+        }
+        return Optional.empty();
     }
 
     /** Direct children of an element, in declaration order. */

@@ -155,6 +155,24 @@ class ProgramTest {
         assertThat(p.children(B)).extracting(Element::name).containsExactly("x", "name");
     }
 
+    /** What a body is made of is found by its address too, among what its method holds: there are millions of them. */
+    @Test
+    void aStatementOrALocalIsFoundByItsAddress() {
+        var first = new ElementId("statement:20");
+        var nested = new ElementId("statement:21");
+        var local = new ElementId("local:22");
+        var elements = new java.util.ArrayList<>(program().elements());
+        elements.add(element(first, Kind.STATEMENT, "", B_NAME, "a.B#name()[1]"));
+        elements.add(element(nested, Kind.STATEMENT, "", first, "a.B#name()[1][1]"));
+        elements.add(element(local, Kind.LOCAL, "i", B_NAME, "a.B#name()/i"));
+        var p = new Program(elements, program().references());
+
+        assertThat(p.find("a.B#name()[1][1]")).map(Element::id).contains(nested);
+        assertThat(p.find("a.B#name()/i")).map(Element::id).contains(local);
+        assertThat(p.find("a.B#name()[2]")).isEmpty();
+        assertThat(p.find("a.B#other()[1]")).isEmpty();
+    }
+
     @Test
     void diffTellsWhatWasLostGainedBornAndGone() {
         var before = program();
