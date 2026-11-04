@@ -2311,7 +2311,10 @@ Los pasos, cada uno medido:
    rechazado, 128 MB.
 3. *Ubicadores en vez de nodos.* La lectura guarda dónde está cada uso y cada declaración (archivo y rango), no el
    nodo; `use` y `declaration` lo buscan en el árbol de su archivo. Es lo que hoy retiene todos los árboles, junto
-   con el índice de tipos de `WorkspaceTypeSolver`, que pasa a ser nombre → archivo.
+   con el índice de tipos de `WorkspaceTypeSolver`, que pasa a ser nombre → archivo. Hecho: un árbol sabe de qué `Unit` es,
+   el índice dice qué `Unit` declara cada tipo (la declaración de JavaParser queda con su árbol) y la lectura guarda
+   `Located`. Un hijo puede quedar fuera del rango de su padre (el tipo de `C c;` es hijo del declarador, que cubre
+   solo `c`): se busca podando por rango y, si no aparece, en todo el árbol.
 4. *Árboles a demanda.* Un caché acotado, más los archivos que una transacción toca (un primitivo tiene que ver
    siempre el mismo árbol de un archivo) y los abiertos en un editor. La apertura lee y suelta archivo por archivo.
 

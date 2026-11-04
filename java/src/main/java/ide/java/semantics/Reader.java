@@ -28,6 +28,7 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory;
 import ide.java.syntax.Decl;
 import ide.java.syntax.Shape;
+import ide.java.text.Located;
 import ide.java.text.Unit;
 import ide.program.Address;
 import ide.program.Element;
@@ -73,7 +74,7 @@ public final class Reader {
      * What a reading gives: the program, the node behind each reference, where each element is declared, and the files
      * whose uses this reading resolved.
      */
-    public record Reading(Program program, Map<String, Node> uses, Map<ElementId, Decl> declarations, Set<String> resolved) {
+    public record Reading(Program program, Map<String, Located> uses, Map<ElementId, Decl> declarations, Set<String> resolved) {
 
         public Decl declaration(ElementId element) {
             var declaration = declarations.get(element);
@@ -84,7 +85,7 @@ public final class Reader {
         public Node use(String reference) {
             var use = uses.get(reference);
             if (use == null) throw new IllegalArgumentException("no use " + reference);
-            return use;
+            return use.node();
         }
     }
 
@@ -96,7 +97,7 @@ public final class Reader {
      * What the uses of one file bind: references, uses that bind nothing, their nodes, the library types named, and
      * the names of the uses the program does not follow (members of libraries, locals, calls that do not compile).
      */
-    private record Bound(List<Reference> references, List<Unresolved> unresolved, Map<String, Node> nodes, List<String> library,
+    private record Bound(List<Reference> references, List<Unresolved> unresolved, Map<String, Located> nodes, List<String> library,
                          Set<String> untracked) {
     }
 
@@ -154,7 +155,7 @@ public final class Reader {
         });
         var references = new ArrayList<Reference>();
         var unresolved = new ArrayList<Unresolved>();
-        var nodes = new HashMap<String, Node>();
+        var nodes = new HashMap<String, Located>();
         var named = new LinkedHashMap<String, Element>(); // the library types named, with their packages, in order
         for (var b : bound.values()) {
             references.addAll(b.references());
@@ -307,7 +308,7 @@ public final class Reader {
     private Bound bind(Unit unit) {
         var references = new ArrayList<Reference>();
         var unresolved = new ArrayList<Unresolved>();
-        var nodes = new HashMap<String, Node>();
+        var nodes = new HashMap<String, Located>();
         var named = new LinkedHashSet<String>();
         var untracked = new HashSet<String>();
         var ordinals = new HashMap<ElementId, Integer>();
@@ -361,7 +362,7 @@ public final class Reader {
                 continue;
             }
             var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
-            nodes.put(id, use);
+            nodes.put(id, new Located(unit, use));
             var mode = typeName ? Mode.TYPE : modeOf(use);
             var receiver = target != null && (target.value().startsWith(Kind.LOCAL.prefix()) || target.value().startsWith(Kind.PARAM.prefix()))
                     ? Reference.Receiver.NONE : receiver(use, mode);

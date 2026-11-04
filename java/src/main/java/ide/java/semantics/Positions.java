@@ -28,7 +28,7 @@ public final class Positions {
     /** The whole stretch of an element's declaration (its comment left out); nowhere for what the sources do not declare. */
     public static Optional<Range> declared(Reader.Reading reading, ElementId element) {
         if (!reading.program().contains(element) || !reading.declarations().containsKey(element)) return Optional.empty();
-        return reading.declaration(element).node().getRange();
+        return Optional.of(reading.declaration(element).range());
     }
 
     /** Where the name of an element's declaration starts; nowhere for what the sources do not declare. */
@@ -43,7 +43,8 @@ public final class Positions {
     public static Optional<ElementId> at(Reader.Reading reading, Sources sources, String path, int line, int column) {
         var position = new Position(line, column);
         var use = reading.uses().entrySet().stream()
-                .filter(entry -> sources.unitOf(entry.getValue()).path().equals(path))
+                .filter(entry -> entry.getValue().unit().path().equals(path) && entry.getValue().range().contains(position))
+                .map(entry -> Map.entry(entry.getKey(), entry.getValue().node()))
                 .filter(entry -> name(entry.getValue(), null).filter(range -> range.contains(position)).isPresent())
                 .min(Comparator.comparing((Map.Entry<String, Node> entry) -> size(name(entry.getValue(), null).orElseThrow())));
         if (use.isPresent()) { // a use that binds nothing means nothing yet
@@ -51,7 +52,7 @@ public final class Positions {
             return reading.program().unresolved(id).isPresent() ? Optional.empty() : Optional.of(reading.program().reference(id).target());
         }
         return reading.declarations().entrySet().stream()
-                .filter(entry -> entry.getValue().unit().path().equals(path))
+                .filter(entry -> entry.getValue().unit().path().equals(path) && entry.getValue().range().contains(position))
                 .filter(entry -> name(entry.getValue().node(), reading.program().element(entry.getKey()).name())
                         .filter(range -> range.contains(position)).isPresent())
                 .map(Map.Entry::getKey).findFirst();
@@ -62,8 +63,8 @@ public final class Positions {
         var position = new Position(line, column);
         return reading.declarations().entrySet().stream()
                 .filter(entry -> entry.getValue().unit().path().equals(path))
-                .filter(entry -> entry.getValue().node().getRange().filter(range -> range.contains(position)).isPresent())
-                .min(Comparator.comparing((Map.Entry<ElementId, ide.java.syntax.Decl> entry) -> size(entry.getValue().node().getRange().orElseThrow())))
+                .filter(entry -> entry.getValue().range().contains(position))
+                .min(Comparator.comparing((Map.Entry<ElementId, ide.java.syntax.Decl> entry) -> size(entry.getValue().range())))
                 .map(Map.Entry::getKey);
     }
 

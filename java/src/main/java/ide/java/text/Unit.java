@@ -1,6 +1,7 @@
 package ide.java.text;
 
 import com.github.javaparser.Position;
+import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.DataKey;
 import com.github.javaparser.ast.Node;
@@ -43,6 +44,28 @@ public final class Unit {
 
     public CompilationUnit tree() {
         return tree;
+    }
+
+    /**
+     * The outermost node of a kind with exactly this range: what a {@link Located} names. Looked for down the nodes whose
+     * range holds it; a node may lie outside its parent's (the type of a variable is its declarator's child), so failing
+     * that, in the whole tree.
+     */
+    Node find(Range range, Class<? extends Node> kind) {
+        var found = find(tree(), range, kind);
+        if (found != null) return found;
+        return tree().findFirst(Node.class, node -> node.getClass() == kind && node.getRange().filter(range::equals).isPresent())
+                .orElseThrow(() -> new IllegalStateException("no " + kind.getSimpleName() + " at " + range + " in " + path));
+    }
+
+    private static Node find(Node at, Range range, Class<? extends Node> kind) {
+        if (at.getClass() == kind && at.getRange().filter(range::equals).isPresent()) return at;
+        for (var child : at.getChildNodes()) {
+            if (child.getRange().filter(r -> r.contains(range)).isEmpty()) continue;
+            var found = find(child, range, kind);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     /** The text of a node, as written. */

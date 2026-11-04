@@ -243,7 +243,7 @@ public final class JavaProjection implements Projection {
     }
 
     private static String text(Decl declaration) {
-        return declaration.unit().textOf(declaration.node()).replaceAll("\\s+", " ");
+        return declaration.unit().textBetween(declaration.range().begin, declaration.range().end).replaceAll("\\s+", " ");
     }
 
     /**
