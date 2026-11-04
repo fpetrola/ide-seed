@@ -110,7 +110,7 @@ public final class Sources {
     /** A file moves to another path; its text and tree stay. */
     public void rename(String from, String to) {
         var unit = forget(from);
-        keep(new Unit(to, unit.text(), unit.tree(), trees));
+        keep(new Unit(to, unit.text(), unit.dom(), trees));
         changed.accept(Set.of(from, to));
     }
 
@@ -164,6 +164,17 @@ public final class Sources {
         }
     }
 
+    private static org.eclipse.jdt.core.dom.CompilationUnit done(java.util.concurrent.Future<org.eclipse.jdt.core.dom.CompilationUnit> parsing) {
+        try {
+            return parsing.get();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while parsing", interrupted);
+        } catch (java.util.concurrent.ExecutionException failed) {
+            throw new IllegalStateException(failed.getCause());
+        }
+    }
+
     private static final int AHEAD = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
 
     private static final java.util.concurrent.ExecutorService PARSING = java.util.concurrent.Executors.newFixedThreadPool(AHEAD, work -> {
@@ -180,12 +191,16 @@ public final class Sources {
 
     private Map<String, Unit> parse(Map<String, String> texts) {
         var parsed = new LinkedHashMap<String, Unit>();
+        var doms = new java.util.HashMap<String, java.util.concurrent.Future<org.eclipse.jdt.core.dom.CompilationUnit>>();
+        if (texts.size() > 1) texts.forEach((path, text) -> doms.put(path, PARSING.submit(() -> Trees.dom(text)))); // a project, on every core
         texts.forEach((path, text) -> {
-            var result = trees.parse(text);
-            if (!result.isSuccessful()) {
-                throw new PrimitiveRejected("projection.unparsable", path + ": " + result.getProblems().getFirst().getVerboseMessage());
+            var dom = doms.containsKey(path) ? done(doms.get(path)) : Trees.dom(text); // the compiler's parser says whether it parses
+            for (var problem : dom.getProblems()) {
+                if (problem.isError() && (problem.getID() & org.eclipse.jdt.core.compiler.IProblem.Syntax) != 0) {
+                    throw new PrimitiveRejected("projection.unparsable", path + ": line " + problem.getSourceLineNumber() + ": " + problem.getMessage());
+                }
             }
-            parsed.put(path, new Unit(path, text, result.getResult().orElseThrow(), trees));
+            parsed.put(path, new Unit(path, text, dom, trees));
         });
         return parsed;
     }

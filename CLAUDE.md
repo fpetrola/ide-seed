@@ -65,7 +65,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   with a Builder and the rules OPEN and PRIVATE_TO_TOP_LEVEL; the stand-in for a driver in the tests of engine,
   refactoring and knowledge).
 - `java` (projection, JavaParser, Eclipse's compiler and DOM) — the Java driver, in layers that only know the ones below (LayersTest):
-  `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses; a tree
+  `ide.java.text` (Unit, EditSet, Sources: files change only as text, all or nothing; the only place that parses; whether a text
+  parses is what Eclipse's parser says, a project's files parsed on every core; JavaParser reads a unit only when its tree
+  is asked for; a tree
   keeps each node's range, not the tokens it was read from; restoring parses only the files whose text differs; a
   unit holds its tree weakly and Trees keeps those used last while their texts add up to 1 MB: another is parsed again from the text, the same one while
   anything holds a node of it; going over units in turn, the next ones' trees are parsed ahead on other threads; a unit is also read as Eclipse's

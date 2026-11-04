@@ -34,6 +34,16 @@ public final class Unit {
         hold(tree);
     }
 
+    /** A unit read as Eclipse's DOM: JavaParser's tree is parsed when first asked for. */
+    Unit(String path, String text, org.eclipse.jdt.core.dom.CompilationUnit dom, Trees trees) {
+        this.path = path;
+        this.text = text;
+        this.trees = trees;
+        this.tree = new WeakReference<>(null);
+        this.dom = new WeakReference<>(dom);
+        trees.usedDom(this, dom);
+    }
+
     /** The unit a tree was read for, if any. */
     static Unit of(CompilationUnit tree) {
         return tree.containsData(UNIT) ? tree.getData(UNIT) : null;

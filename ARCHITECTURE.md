@@ -2371,7 +2371,10 @@ Los pasos, cada uno medido:
    el solver no resolvía). La suite pasa con los dos. Lo que hizo falta: ECJ liga lo que no aplica al método que casi
    llama (solo esos errores se descartan: los de código inalcanzable o de un `return` que falta no), inventa un tipo
    para el que falta, guarda lo no visible como su candidato más cercano, y resuelve una lambda pasada donde se infiere
-   un tipo como copias, una por tipo probado. Leer oozx: 27 s (con JavaParser, 90 a 100); abrirlo, 16 s más.
+   un tipo como copias, una por tipo probado. Leer oozx: 27 s (con JavaParser, 90 a 100); abrirlo, 16 s más. Después
+   abrir dejó de parsear con JavaParser: si un texto parsea lo dice el parser de Eclipse, cada archivo en un núcleo, y
+   el árbol de JavaParser se lee cuando alguien lo pide. Abrir oozx: 3 s; abrirlo, leerlo y compilarlo: 26 s (eran más
+   de 5 minutos).
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

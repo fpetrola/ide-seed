@@ -149,6 +149,17 @@ class SourcesTest {
         assertThat(sources.texts()).isEqualTo(Map.of("a/A.java", A));
     }
 
+    /** Whether a text parses is Eclipse's parser's to say; JavaParser reads a unit only when its tree is asked for. */
+    @Test
+    void javaParserReadsAUnitOnlyWhenItsTreeIsAskedFor() {
+        sources.put(Map.of("a/A.java", A));
+        var unit = sources.unit("a/A.java");
+
+        assertThat(unit.parsed()).isEmpty();
+        assertThat(type(unit).getNameAsString()).isEqualTo("A");
+        assertThat(unit.parsed()).isPresent();
+    }
+
     /**
      * A unit is also read as Eclipse's DOM, with its comments: what is where, in the same text. It is the same tree while
      * anything holds a node of it, and parsed again when asked for after it was let go.
