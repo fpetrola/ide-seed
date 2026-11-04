@@ -20,6 +20,9 @@ public interface Context {
     /** Where an element is declared, as last read. */
     Decl declaration(Element element);
 
+    /** The node of a reference in Eclipse's DOM, as last read. */
+    org.eclipse.jdt.core.dom.ASTNode useDom(String reference);
+
     /** The node of a reference, as last read. */
     Node use(String reference);
 

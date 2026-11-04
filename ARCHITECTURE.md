@@ -2384,6 +2384,11 @@ Los pasos, cada uno medido:
    (los usos de cada sentencia, por dirección): 1,5 s por edición; lo que queda es volver a leer. Y volver de un
    cambio rechazado sin que hubiera cambiado ningún id (un texto que no parsea) ya no hace leer todo de nuevo: volver al
    texto bueno después de uno a medio escribir tardaba 34 s.
+9. *Los primitivos al DOM (decisión 39, fase B).* Cada ubicador guarda también la clase del nodo del DOM que lo
+   leyó, y el contexto de los primitivos da ese nodo (`useDom`, `Decl.dom`); `EditSet` edita nodos del DOM. Los
+   primitivos pasan uno por uno, cada uno con la suite verde: `RenameElement` primero (los imports de un tipo se buscan
+   solo en los archivos que escriben su nombre). Con el lector anterior (`-Dide.java.reader=javaparser`) los
+   ubicadores no tienen DOM: queda para comparar programas, no para cambiarlos.
 
 El costo es tiempo: lo que hoy se re-resuelve en todos los archivos (cuando cambia un tipo) los vuelve a parsear, así
 que el paso 4 va con el alcance de la fase 2. La resolución sigue siendo la de JavaParser, por archivo.

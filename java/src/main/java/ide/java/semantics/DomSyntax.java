@@ -215,6 +215,11 @@ public final class DomSyntax {
 
     /** A local the program counts: declared by a statement or an expression of a body, or as a loop's variable. */
     public record Local(ASTNode declaration, String name, String type, int nameStart, int start, int end) {
+
+        /** What of the DOM is where the program has the local: a declarator, or a loop variable's name. */
+        public Class<? extends ASTNode> domKind() {
+            return declaration instanceof SingleVariableDeclaration ? org.eclipse.jdt.core.dom.SimpleName.class : declaration.getClass();
+        }
     }
 
     /**
@@ -501,7 +506,7 @@ public final class DomSyntax {
     }
 
     /** The name a written type is named by, or null. */
-    static org.eclipse.jdt.core.dom.Name typeName(Type type) {
+    public static org.eclipse.jdt.core.dom.Name typeName(Type type) {
         return switch (type) {
             case SimpleType simple -> simple.getName();
             case ParameterizedType parameterized -> typeName(parameterized.getType());
@@ -509,12 +514,12 @@ public final class DomSyntax {
         };
     }
 
-    static String simple(ASTNode name) {
+    public static String simple(ASTNode name) {
         return name instanceof org.eclipse.jdt.core.dom.QualifiedName q ? q.getName().getIdentifier()
                 : name instanceof org.eclipse.jdt.core.dom.SimpleName n ? n.getIdentifier() : name.toString();
     }
 
-    static ASTNode last(ASTNode name) {
+    public static ASTNode last(ASTNode name) {
         return name instanceof org.eclipse.jdt.core.dom.QualifiedName q ? q.getName() : name;
     }
 

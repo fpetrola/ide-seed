@@ -99,6 +99,11 @@ public final class JavaProjection implements Projection {
             }
 
             @Override
+            public org.eclipse.jdt.core.dom.ASTNode useDom(String reference) {
+                return reading().useDom(reference);
+            }
+
+            @Override
             public Sources sources() {
                 return sources;
             }

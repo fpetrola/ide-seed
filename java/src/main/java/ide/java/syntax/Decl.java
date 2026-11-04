@@ -35,6 +35,16 @@ public final class Decl {
         return at.contains(position);
     }
 
+    /** The declaration's node in Eclipse's DOM. */
+    public org.eclipse.jdt.core.dom.ASTNode dom() {
+        return at.dom();
+    }
+
+    /** The declaration's node, as the kind of the DOM it is known to be. */
+    public <T extends org.eclipse.jdt.core.dom.ASTNode> T domAs(Class<T> type) {
+        return type.cast(dom());
+    }
+
     public Node node() {
         return at.node();
     }

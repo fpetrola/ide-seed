@@ -26,6 +26,25 @@ public final class EditSet {
         return replace(unit, range.begin, range.end, text);
     }
 
+    /** Replaces a node of Eclipse's DOM. */
+    public EditSet replace(Unit unit, org.eclipse.jdt.core.dom.ASTNode node, String text) {
+        return add(unit, node.getStartPosition(), node.getStartPosition() + node.getLength(), text);
+    }
+
+    public EditSet insertBefore(Unit unit, org.eclipse.jdt.core.dom.ASTNode node, String text) {
+        return add(unit, node.getStartPosition(), node.getStartPosition(), text);
+    }
+
+    public EditSet insertAfter(Unit unit, org.eclipse.jdt.core.dom.ASTNode node, String text) {
+        var at = node.getStartPosition() + node.getLength();
+        return add(unit, at, at, text);
+    }
+
+    /** Replaces the text from offset {@code start} (included) to {@code end} (excluded). */
+    public EditSet replace(Unit unit, int start, int end, String text) {
+        return add(unit, start, end, text);
+    }
+
     /** Replaces the text from {@code from} to {@code to}, both included. */
     public EditSet replace(Unit unit, Position from, Position to, String text) {
         return add(unit, unit.offset(from), unit.offset(to) + 1, text);

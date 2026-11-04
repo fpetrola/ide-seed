@@ -90,11 +90,20 @@ public final class Reader {
             return declaration;
         }
 
+        /** The use's node in Eclipse's DOM. */
+        public org.eclipse.jdt.core.dom.ASTNode useDom(String reference) {
+            return located(reference).dom();
+        }
+
         public Node use(String reference) {
+            return located(reference).node();
+        }
+
+        private Located located(String reference) {
             var site = program.unresolved(reference).map(Unresolved::site).orElseGet(() -> program.reference(reference).site());
             var use = fileOf(site).map(uses::get).map(in -> in.get(reference)).orElse(null);
             if (use == null) throw new IllegalArgumentException("no use " + reference);
-            return use.node();
+            return use;
         }
 
         public Map<ElementId, Decl> declarationsIn(String path) {
@@ -429,6 +438,10 @@ public final class Reader {
         return new Located(unit, start, end, kind);
     }
 
+    private static Located at(Unit unit, int start, int end, Class<? extends Node> kind, org.eclipse.jdt.core.dom.ASTNode dom) {
+        return new Located(unit, start, end, kind, dom.getClass());
+    }
+
     /** The JavaParser kind of a type declaration. */
     private static Class<? extends Node> javaParserKind(org.eclipse.jdt.core.dom.AbstractTypeDeclaration type) {
         return switch (type) {
@@ -469,7 +482,7 @@ public final class Reader {
             var kind = DomSyntax.kindOf(type);
             elements.add(new Element(typeId, kind, type.getName().getIdentifier(), parent, new Address.Type(typeName), typeName,
                     Map.copyOf(typeFacts)));
-            declarations.put(typeId, new Decl(at(unit, DomSyntax.start(type, text), DomSyntax.end(type), javaParserKind(type))));
+            declarations.put(typeId, new Decl(at(unit, DomSyntax.start(type, text), DomSyntax.end(type), javaParserKind(type), type)));
             for (var field : DomSyntax.fields(type)) {
                 for (var fragment : field.fragments()) {
                     var variable = (org.eclipse.jdt.core.dom.VariableDeclarationFragment) fragment;
@@ -478,14 +491,14 @@ public final class Reader {
                     facts.put(Fact.INITIALIZED, String.valueOf(variable.getInitializer() != null));
                     var name = variable.getName().getIdentifier();
                     var id = add(elements, new Address.Field(typeId, name), Kind.FIELD, name, typeId, facts);
-                    declarations.put(id, new Decl(at(unit, DomSyntax.start(field, text), DomSyntax.end(field), FieldDeclaration.class)));
+                    declarations.put(id, new Decl(at(unit, DomSyntax.start(field, text), DomSyntax.end(field), FieldDeclaration.class, field)));
                 }
             }
             for (var constructor : DomSyntax.constructors(type)) {
                 var id = add(elements, new Address.Callable(typeId, "new", keysOf(constructor, file)), Kind.CONSTRUCTOR,
                         type.getName().getIdentifier(), typeId, thrownDom(constructor, new HashMap<>(DomSyntax.attributes(constructor, text))));
                 declarations.put(id, new Decl(at(unit, DomSyntax.start(constructor, text), DomSyntax.end(constructor),
-                        com.github.javaparser.ast.body.ConstructorDeclaration.class)));
+                        com.github.javaparser.ast.body.ConstructorDeclaration.class, constructor)));
                 addBodyDom(elements, declarations, variables, unit, constructor, id);
             }
             for (var method : DomSyntax.methods(type)) {
@@ -501,7 +514,7 @@ public final class Reader {
                 }
                 var name = method.getName().getIdentifier();
                 var id = add(elements, new Address.Callable(typeId, name, keysOf(method, file)), Kind.METHOD, name, typeId, facts);
-                declarations.put(id, new Decl(at(unit, DomSyntax.start(method, text), DomSyntax.end(method), com.github.javaparser.ast.body.MethodDeclaration.class)));
+                declarations.put(id, new Decl(at(unit, DomSyntax.start(method, text), DomSyntax.end(method), com.github.javaparser.ast.body.MethodDeclaration.class, method)));
                 addBodyDom(elements, declarations, variables, unit, method, id);
             }
         }
@@ -516,14 +529,14 @@ public final class Reader {
             var parameter = (org.eclipse.jdt.core.dom.SingleVariableDeclaration) each;
             var name = parameter.getName().getIdentifier();
             var id = add(elements, new Address.Param(owner, name), Kind.PARAM, name, owner, Map.of(Fact.TYPE, DomSyntax.written(parameter)));
-            declarations.put(id, new Decl(at(unit, parameter.getStartPosition(), DomSyntax.end(parameter), com.github.javaparser.ast.body.Parameter.class)));
+            declarations.put(id, new Decl(at(unit, parameter.getStartPosition(), DomSyntax.end(parameter), com.github.javaparser.ast.body.Parameter.class, parameter)));
             variables.put(parameter.getName().getStartPosition(), id);
         }
         var seen = new HashMap<String, Integer>();
         for (var local : DomSyntax.locals(callable, text)) {
             var ordinal = seen.merge(local.name(), 1, Integer::sum) - 1;
             var id = add(elements, new Address.Local(owner, local.name(), ordinal), Kind.LOCAL, local.name(), owner, Map.of(Fact.TYPE, local.type()));
-            declarations.put(id, new Decl(at(unit, local.start(), local.end(), VariableDeclarator.class)));
+            declarations.put(id, new Decl(new Located(unit, local.start(), local.end(), VariableDeclarator.class, local.domKind())));
             variables.put(local.nameStart(), id);
         }
         addStatementsDom(elements, declarations, unit, DomSyntax.statements(callable), owner);
@@ -534,7 +547,7 @@ public final class Reader {
         for (var i = 0; i < statements.size(); i++) {
             var statement = statements.get(i);
             var id = add(elements, new Address.Statement(owner, i), Kind.STATEMENT, "", owner, Map.of());
-            declarations.put(id, new Decl(at(unit, statement.getStartPosition(), DomSyntax.end(statement), Statement.class)));
+            declarations.put(id, new Decl(at(unit, statement.getStartPosition(), DomSyntax.end(statement), Statement.class, statement)));
             addStatementsDom(elements, declarations, unit, DomSyntax.nested(statement), id);
         }
     }
@@ -592,7 +605,7 @@ public final class Reader {
                 continue;
             }
             var id = site + "@" + (ordinals.merge(site, 1, Integer::sum) - 1);
-            nodes.put(id, at(unit, use.start(), use.end(), javaParserKind(use)));
+            nodes.put(id, at(unit, use.start(), use.end(), javaParserKind(use), use.node()));
             var mode = typeName ? Mode.TYPE : modeDom(use);
             var receiver = target != null && (target.value().startsWith(Kind.LOCAL.prefix()) || target.value().startsWith(Kind.PARAM.prefix()))
                     ? Reference.Receiver.NONE : receiverDom(use, mode, file);

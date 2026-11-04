@@ -13,6 +13,7 @@ public final class Located {
     private final Unit unit;
     private final int beginLine, beginColumn, endLine, endColumn; // a program has millions: no Range of two Positions each
     private final Class<? extends Node> kind;
+    private final Class<? extends org.eclipse.jdt.core.dom.ASTNode> domKind; // the DOM's, when read from the DOM
 
     public Located(Unit unit, Node node) {
         var range = node.getRange().orElseThrow();
@@ -22,10 +23,16 @@ public final class Located {
         this.endLine = range.end.line;
         this.endColumn = range.end.column;
         this.kind = node.getClass();
+        this.domKind = null;
     }
 
     /** A node of a kind (or of a kind's kinds) from its first character to its last, as offsets of the unit's text. */
     public Located(Unit unit, int start, int end, Class<? extends Node> kind) {
+        this(unit, start, end, kind, null);
+    }
+
+    /** The same, with the DOM's kind of the node too. */
+    public Located(Unit unit, int start, int end, Class<? extends Node> kind, Class<? extends org.eclipse.jdt.core.dom.ASTNode> domKind) {
         var begin = unit.position(start);
         var last = unit.position(end);
         this.unit = unit;
@@ -34,6 +41,7 @@ public final class Located {
         this.endLine = last.line;
         this.endColumn = last.column;
         this.kind = kind;
+        this.domKind = domKind;
     }
 
     public Unit unit() {
@@ -48,6 +56,12 @@ public final class Located {
     public boolean contains(Position position) {
         return (position.line > beginLine || position.line == beginLine && position.column >= beginColumn)
                 && (position.line < endLine || position.line == endLine && position.column <= endColumn);
+    }
+
+    /** The node, in the unit's DOM as it is now. */
+    public org.eclipse.jdt.core.dom.ASTNode dom() {
+        if (domKind == null) throw new IllegalStateException("read with no DOM: " + kind.getSimpleName() + " in " + unit.path());
+        return unit.findDom(unit.offset(new Position(beginLine, beginColumn)), unit.offset(new Position(endLine, endColumn)), domKind);
     }
 
     /** The node, in the unit's tree as it is now. */

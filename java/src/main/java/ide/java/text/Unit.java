@@ -40,8 +40,60 @@ public final class Unit {
         this.text = text;
         this.trees = trees;
         this.tree = new WeakReference<>(null);
+        dom.setProperty(UNIT_PROPERTY, this);
         this.dom = new WeakReference<>(dom);
         trees.usedDom(this, dom);
+    }
+
+    private static final String UNIT_PROPERTY = "ide.unit";
+
+    /** The unit a DOM was read for, if any. */
+    static Unit of(org.eclipse.jdt.core.dom.ASTNode node) {
+        return node.getRoot().getProperty(UNIT_PROPERTY) instanceof Unit unit ? unit : null;
+    }
+
+    /** Where an offset is: its line and column, from 1. */
+    public Position positionOf(int offset) {
+        return position(offset);
+    }
+
+    /**
+     * The outermost node of the DOM of a kind (or of its kinds) from {@code start} to {@code end} (offsets, both
+     * included); a declaration's may start after its doc comment, as JavaParser has it.
+     */
+    org.eclipse.jdt.core.dom.ASTNode findDom(int start, int end, Class<? extends org.eclipse.jdt.core.dom.ASTNode> kind) {
+        var found = new org.eclipse.jdt.core.dom.ASTNode[1];
+        dom().accept(new org.eclipse.jdt.core.dom.ASTVisitor(true) {
+            @Override
+            public boolean preVisit2(org.eclipse.jdt.core.dom.ASTNode node) {
+                if (found[0] != null) return false;
+                var from = node.getStartPosition();
+                var to = from + node.getLength() - 1;
+                if (to < end || from > start && !(node instanceof org.eclipse.jdt.core.dom.BodyDeclaration)) return false;
+                if (kind.isInstance(node) && to == end && (from == start || afterDoc(node) == start)) {
+                    found[0] = node;
+                    return false;
+                }
+                return true;
+            }
+        });
+        if (found[0] == null) throw new IllegalStateException("no " + kind.getSimpleName() + " at " + start + "-" + end + " in " + path);
+        return found[0];
+    }
+
+    /** Where a declaration starts after its doc comment, at its first token. */
+    private int afterDoc(org.eclipse.jdt.core.dom.ASTNode node) {
+        var doc = node instanceof org.eclipse.jdt.core.dom.BodyDeclaration declaration ? declaration.getJavadoc() : null;
+        if (doc == null) return node.getStartPosition();
+        var at = doc.getStartPosition() + doc.getLength();
+        while (at < text.length()) {
+            var c = text.charAt(at);
+            if (Character.isWhitespace(c)) at++;
+            else if (text.startsWith("//", at)) at = Math.max(text.indexOf('\n', at), text.length() - 1) + 1;
+            else if (text.startsWith("/*", at)) at = text.indexOf("*/", at + 2) < 0 ? text.length() : text.indexOf("*/", at + 2) + 2;
+            else return at;
+        }
+        return at;
     }
 
     /** The unit a tree was read for, if any. */
@@ -70,6 +122,7 @@ public final class Unit {
         var held = dom.get();
         if (held == null) {
             held = Trees.dom(text);
+            held.setProperty(UNIT_PROPERTY, this);
             dom = new WeakReference<>(held);
         }
         trees.usedDom(this, held);

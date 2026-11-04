@@ -66,6 +66,13 @@ public final class Sources {
         return List.copyOf(units.values());
     }
 
+    /** The unit a node of one of the DOMs belongs to. */
+    public Unit unitOf(org.eclipse.jdt.core.dom.ASTNode node) {
+        var unit = Unit.of(node);
+        if (unit == null || units.get(unit.path()) != unit) throw new IllegalArgumentException("not in the sources: " + node);
+        return unit;
+    }
+
     /** The unit a node of one of the trees belongs to. */
     public Unit unitOf(Node node) {
         var unit = Unit.of(node.findCompilationUnit().orElseThrow());

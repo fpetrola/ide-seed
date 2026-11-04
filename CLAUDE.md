@@ -82,7 +82,9 @@ the compiler enforces it. Folder `<product>/`, artifact `ide-<product>`, package
   compiled it (EcjBindings: by where the name is written, the parameter keys of what each file declares, what surely binds
   nothing; not what a call that does not apply is bound to, nor what is missing, the closest match of what is not visible;
   a lambda resolved as copies, through the copy for its type): the reader takes that first and the
-  JavaParser solver only for what the compiler leaves unbound (`-Dide.java.names=solver|compare` to use or compare it alone); Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; WriteBody writes a
+  JavaParser solver only for what the compiler leaves unbound (`-Dide.java.names=solver|compare` to use or compare it alone); Bodies, Completion), `ide.java.primitives` (Context and one class per primitive; Context gives each use's and declaration's node in
+  Eclipse's DOM too (`useDom`, `Decl.dom`: text.Located keeps the DOM's kind, EditSet edits DOM nodes, Sources.unitOf finds
+  a DOM node's unit), and the primitives move to it one by one, leaving JavaParser (RenameElement has); WriteBody writes a
   statement in Java: names, a field qualified where a parameter hides it, a new object's type imported), and the facade
   `ide.java.JavaProjection` (sources, identity, reading, invalidation). The reader adds the library types the code
   names and keeps written types that bind nothing as unresolved uses, with the JDK types they may mean (JdkTypes);

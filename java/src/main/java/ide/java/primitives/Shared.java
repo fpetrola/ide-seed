@@ -96,6 +96,24 @@ final class Shared {
     }
 
     /** A use now names {@code name}: the name of a field access, a call, a bare name or a method reference. */
+    /** Writes a use of the DOM with another name: a call's, a field's, a variable's, a method reference's. */
+    static void renameUse(Context c, EditSet edits, org.eclipse.jdt.core.dom.ASTNode use, String name) {
+        var unit = c.sources().unitOf(use);
+        var named = switch (use) {
+            case org.eclipse.jdt.core.dom.MethodInvocation call -> call.getName();
+            case org.eclipse.jdt.core.dom.SuperMethodInvocation call -> call.getName();
+            case org.eclipse.jdt.core.dom.SimpleName simple -> simple;
+            case org.eclipse.jdt.core.dom.QualifiedName qualified -> qualified.getName();
+            case org.eclipse.jdt.core.dom.FieldAccess access -> access.getName();
+            case org.eclipse.jdt.core.dom.SuperFieldAccess access -> access.getName();
+            case org.eclipse.jdt.core.dom.ExpressionMethodReference reference -> reference.getName();
+            case org.eclipse.jdt.core.dom.TypeMethodReference reference -> reference.getName();
+            case org.eclipse.jdt.core.dom.SuperMethodReference reference -> reference.getName();
+            default -> throw new IllegalStateException("cannot rename the use " + use);
+        };
+        edits.replace(unit, named, name);
+    }
+
     static void renameUse(Context c, EditSet edits, Node use, String name) {
         var unit = c.sources().unitOf(use);
         switch (use) {
